@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图库工具原型</title>
+<style>
+/* 工具并入图库原型：页面即主窗口。深色优先，跟随系统；配色沿用 design/main-window.html。 */
+:root {
+  --page: #171b21; --side: #13171c; --card: #20262e; --raised: #2a313a; --line: #2f3741; --track: #191d23;
+  --nav-hover: #1f252c; --nav-sel: #27303a; --fg: #d9e2e9; --muted: #8997a6; --faint: #5d6977; --border: #3d4651;
+  --hover: #2a323c; --accent: #40ce9d; --accent-soft: rgba(64,206,157,.16); --on-accent: #0d1f18;
+  --warn: #e6b450; --danger: #ef6b6b; --menu: #252c35; --screen: #0e1115; --scrim: rgba(0,0,0,.62);
+  --shadow: 0 12px 32px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3);
+  --ui: "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --page: #f3f6f9; --side: #eaeff3; --card: #ffffff; --raised: #ffffff; --line: #e3e8ed; --track: #eef2f5;
+  --nav-hover: #e1e8ee; --nav-sel: #d8e1e8; --fg: #374351; --muted: #667482; --faint: #9aa6b2; --border: #dce3e9;
+  --hover: #eaf0f3; --accent: #126d4e; --accent-soft: rgba(18,109,78,.1); --on-accent: #ffffff;
+  --warn: #a8740c; --danger: #c43d3d; --menu: #ffffff; --screen: #dfe5ea; --scrim: rgba(20,30,40,.45);
+  --shadow: 0 12px 32px rgba(30,45,60,.16), 0 2px 6px rgba(30,45,60,.1); color-scheme: light; } }
+:root[data-theme="light"] {
+  --page: #f3f6f9; --side: #eaeff3; --card: #ffffff; --raised: #ffffff; --line: #e3e8ed; --track: #eef2f5;
+  --nav-hover: #e1e8ee; --nav-sel: #d8e1e8; --fg: #374351; --muted: #667482; --faint: #9aa6b2; --border: #dce3e9;
+  --hover: #eaf0f3; --accent: #126d4e; --accent-soft: rgba(18,109,78,.1); --on-accent: #ffffff;
+  --warn: #a8740c; --danger: #c43d3d; --menu: #ffffff; --screen: #dfe5ea; --scrim: rgba(20,30,40,.45);
+  --shadow: 0 12px 32px rgba(30,45,60,.16), 0 2px 6px rgba(30,45,60,.1); color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--fg); font: 14px/1.45 var(--ui); overflow: hidden; user-select: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+input, select { font: inherit; color: inherit; }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+.app { display: grid; grid-template-columns: 200px 1fr; grid-template-rows: 40px 1fr; height: 100vh; }
+.titlebar { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding-left: 16px; border-bottom: 1px solid var(--line); background: var(--side); }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; width: 184px; flex: none; }
+.brand .logo { width: 18px; height: 18px; border-radius: 5px; background: linear-gradient(135deg, var(--accent), #2a8bd6); }
+.titlebar .spacer { flex: 1; }
+.proto-tag { font-size: 11px; color: var(--faint); }
+.theme-switch { display: flex; gap: 2px; padding: 2px; background: var(--track); border-radius: 6px; border: 1px solid var(--line); }
+.theme-switch button { font-size: 12px; padding: 1px 8px; border-radius: 4px; color: var(--muted); }
+.theme-switch button.on { background: var(--nav-sel); color: var(--fg); }
+.winbtns { display: flex; height: 100%; }
+.winbtns span { width: 46px; display: grid; place-items: center; color: var(--muted); }
+
+.side { background: var(--side); border-right: 1px solid var(--line); padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.nav { height: 36px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 6px; font-weight: 600; width: 100%; text-align: left; }
+.nav:hover { background: var(--nav-hover); }
+.nav.on { background: var(--nav-sel); }
+.nav.on::before { content: ""; position: absolute; margin-left: -12px; width: 3px; height: 16px; border-radius: 2px; background: var(--accent); }
+.nav .n { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 400; }
+.side .sub { font-size: 12px; color: var(--faint); padding: 14px 12px 4px; }
+.nav.small { height: 32px; font-weight: 400; color: var(--muted); }
+.nav.gone { text-decoration: line-through; color: var(--faint); font-weight: 400; cursor: default; }
+.nav.gone:hover { background: none; }
+.nav.gone .n { font-size: 11px; text-decoration: none; }
+
+.main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 20px 10px; }
+.chips { display: flex; gap: 2px; padding: 2px; background: var(--track); border: 1px solid var(--line); border-radius: 7px; }
+.chips button { padding: 3px 12px; border-radius: 5px; font-size: 13px; color: var(--muted); }
+.chips button .c { font-size: 11px; color: var(--faint); margin-left: 4px; }
+.chips button.on { background: var(--nav-sel); color: var(--fg); }
+.search { width: 220px; height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 7px; background: var(--track); border: 1px solid var(--line); color: var(--muted); }
+.search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 13px; }
+.toolbar .spacer { flex: 1; }
+.btn { height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--card); font-size: 13px; white-space: nowrap; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { border-color: transparent; background: none; }
+.btn.ghost:hover { background: var(--hover); }
+.btn.icon { width: 30px; padding: 0; justify-content: center; }
+.btn[disabled] { opacity: .45; pointer-events: none; }
+.btn .chev { width: 12px; height: 12px; opacity: .7; }
+
+.banner { margin: 0 20px 10px; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; border-radius: 10px; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.banner .bi { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); }
+.banner .bt { font-weight: 600; }
+.banner .bs { color: var(--muted); font-size: 13px; }
+.banner .count { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--fg); font-size: 13px; }
+.banner .count b { color: var(--accent); }
+
+.body { flex: 1; display: flex; min-height: 0; }
+.scroll { flex: 1; overflow-y: auto; padding: 0 20px 90px; min-width: 0; }
+.day { font-size: 12px; color: var(--muted); font-weight: 600; padding: 10px 0 8px; position: sticky; top: 0; background: var(--page); z-index: 2; display: flex; gap: 8px; align-items: center; }
+.day .tag { font-weight: 400; color: var(--faint); }
+.day .tag button { color: var(--accent); }
+.grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.card { position: relative; height: 128px; border-radius: 8px; overflow: hidden; background: var(--screen); outline: 2px solid transparent; outline-offset: 2px; cursor: default; flex: none; transition: opacity .15s, transform .1s; }
+.card:hover { outline-color: var(--border); }
+.card.sel { outline-color: var(--accent); }
+.card.dim { opacity: .28; pointer-events: none; }
+.card .badge { position: absolute; left: 6px; bottom: 6px; font-size: 11px; padding: 0 6px; border-radius: 4px; background: rgba(0,0,0,.6); color: #fff; display: flex; gap: 4px; align-items: center; }
+.card .badge .dot { width: 6px; height: 6px; border-radius: 3px; background: #40ce9d; }
+.card .order { position: absolute; right: 6px; top: 6px; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+.card .check { position: absolute; right: 6px; top: 6px; width: 20px; height: 20px; border-radius: 10px; border: 2px solid rgba(255,255,255,.85); background: rgba(0,0,0,.35); }
+.card .hoverbar { position: absolute; right: 6px; bottom: 6px; display: none; gap: 4px; }
+.card:hover .hoverbar { display: flex; }
+.card .hoverbar button { width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; background: rgba(15,18,22,.78); color: #fff; }
+.card .hoverbar button:hover { background: rgba(15,18,22,.95); }
+
+/* 假截图：像素内容不随主题变化 */
+.fx { position: absolute; inset: 0; background: hsl(var(--h) 18% 15%); }
+.fx i { position: absolute; display: block; border-radius: 2px; }
+.fx.win .bar { left: 0; right: 0; top: 0; height: 9%; background: hsl(var(--h) 16% 22%); }
+.fx.win .sb { left: 0; top: 9%; bottom: 0; width: 22%; background: hsl(var(--h) 16% 19%); }
+.fx.win .l { left: 28%; height: 5%; background: hsl(var(--h) 12% 40%); }
+.fx.win .l1 { top: 18%; width: 46%; } .fx.win .l2 { top: 28%; width: 60%; background: hsl(var(--h) 10% 32%); } .fx.win .l3 { top: 38%; width: 38%; background: hsl(var(--h) 10% 32%); }
+.fx.win .blk { left: 28%; right: 6%; top: 52%; bottom: 8%; background: hsl(var(--h) 55% 45% / .55); }
+.fx.code { background: #1b1f27; }
+.fx.code i { height: 5%; left: 8%; }
+.fx.chart { background: #f0f2f4; }
+.fx.chart i { bottom: 12%; width: 10%; background: hsl(var(--h) 60% 50%); }
+.fx.chart .ax { left: 8%; right: 6%; bottom: 12%; height: 1px; width: auto; background: #b9c0c7; }
+.fx.doc { background: #dfe3e7; }
+.fx.doc i { left: 12%; height: 4%; background: #9aa3ad; }
+.fx.doc .h { height: 7%; background: hsl(var(--h) 45% 40%); }
+.fx.vid { background: linear-gradient(160deg, hsl(var(--h) 35% 22%), #0d1014); }
+.fx.vid .play { left: 50%; top: 50%; width: 30%; aspect-ratio: 1; max-width: 46px; transform: translate(-50%,-50%); border-radius: 50%; background: rgba(255,255,255,.18); }
+.fx.vid .play::after { content: ""; position: absolute; left: 40%; top: 30%; border-left: 12px solid rgba(255,255,255,.9); border-top: 8px solid transparent; border-bottom: 8px solid transparent; }
+.fx.bar { background: #fbfbfb; }
+.fx.bar i { top: 22%; bottom: 30%; background: #111; }
+.fx img, .card > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+.detail { width: 290px; flex: none; border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.detail .pv { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: var(--screen); }
+.detail h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.facts { font-size: 12px; display: grid; grid-template-columns: 56px 1fr; gap: 4px 10px; }
+.facts span:nth-child(odd) { color: var(--muted); }
+.actions { display: flex; flex-direction: column; gap: 6px; }
+.actions .row { display: flex; flex-wrap: wrap; gap: 6px; }
+.actions .row .btn { flex: 1; justify-content: center; }
+.empty { color: var(--muted); font-size: 13px; display: flex; flex-direction: column; gap: 10px; }
+.empty .tip { display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); }
+.empty .tip .ic { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+.empty .tip b { color: var(--fg); font-weight: 600; }
+.stack { position: relative; height: 150px; }
+.stack .card { position: absolute; width: 170px; height: 110px; left: 50%; top: 18px; box-shadow: var(--shadow); }
+
+.actionbar { position: absolute; left: 50%; bottom: 18px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 7px 8px 7px 14px; border-radius: 12px; background: var(--menu); border: 1px solid var(--border); box-shadow: var(--shadow); transition: .18s; z-index: 5; white-space: nowrap; }
+.actionbar.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.actionbar .cnt { font-weight: 600; margin-right: 6px; }
+.actionbar .cnt small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+.actionbar .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+
+.menu { position: fixed; z-index: 30; min-width: 280px; padding: 6px; border-radius: 10px; background: var(--menu); border: 1px solid var(--border); box-shadow: var(--shadow); display: none; }
+.menu.show { display: block; }
+.menu .mh { font-size: 11px; color: var(--faint); padding: 6px 10px 4px; }
+.menu .mi { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 6px; text-align: left; }
+.menu .mi:hover { background: var(--hover); }
+.menu .mi .nm { flex: 1; }
+.menu .mi .st { font-size: 12px; color: var(--faint); }
+.menu .mi.ready .st { color: var(--accent); }
+.menu .mi.need { color: var(--muted); }
+.menu .mi.need svg { opacity: .6; }
+.menu .msep { height: 1px; background: var(--line); margin: 6px 4px; }
+.menu kbd { font: 11px var(--ui); color: var(--faint); }
+
+/* 工具弹层 */
+.overlay { position: absolute; inset: 0; z-index: 20; background: var(--page); display: none; flex-direction: column; }
+.overlay.show { display: flex; animation: rise .16s ease-out; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+.ohead { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.ohead .title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; padding: 4px 8px; border-radius: 6px; }
+.ohead .title.switch:hover { background: var(--hover); }
+.ohead .spacer { flex: 1; }
+.strip { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); overflow-x: auto; min-height: 76px; }
+.strip .lbl { font-size: 12px; color: var(--muted); margin-right: 4px; flex: none; }
+.chip { position: relative; width: 84px; height: 54px; border-radius: 6px; overflow: hidden; flex: none; background: var(--screen); outline: 1px solid var(--line); cursor: grab; }
+.chip.drag { opacity: .4; }
+.chip.over { outline: 2px solid var(--accent); }
+.chip .no { position: absolute; left: 4px; top: 4px; font-size: 11px; font-weight: 700; min-width: 16px; height: 16px; border-radius: 8px; background: rgba(0,0,0,.65); color: #fff; display: grid; place-items: center; padding: 0 4px; }
+.chip .rm { position: absolute; right: 3px; top: 3px; width: 18px; height: 18px; border-radius: 9px; background: rgba(0,0,0,.65); color: #fff; display: none; place-items: center; }
+.chip:hover .rm { display: grid; }
+.chip .rm svg { width: 11px; height: 11px; }
+.addchip { width: 84px; height: 54px; border-radius: 6px; border: 1px dashed var(--border); color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; flex: none; }
+.addchip:hover { border-color: var(--accent); color: var(--accent); }
+.obody { flex: 1; display: flex; min-height: 0; }
+.stage { flex: 1; min-width: 0; display: grid; place-items: center; padding: 24px; background: var(--screen); overflow: auto; position: relative; }
+.opts { width: 260px; flex: none; border-left: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+.opt label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.seg { display: flex; gap: 2px; padding: 2px; background: var(--track); border: 1px solid var(--line); border-radius: 7px; }
+.seg button { flex: 1; padding: 4px 0; border-radius: 5px; font-size: 13px; color: var(--muted); }
+.seg button.on { background: var(--nav-sel); color: var(--fg); }
+.opt input[type=range] { width: 100%; accent-color: var(--accent); }
+.opt input[type=text], .opt input[type=number], .opt select, .opt textarea { width: 100%; height: 30px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--track); outline: 0; }
+.opt textarea { height: 80px; padding: 6px 8px; resize: none; font: inherit; }
+.opt .hint { font-size: 12px; color: var(--faint); margin-top: 6px; }
+.box { position: relative; background: var(--screen); border-radius: 4px; overflow: hidden; }
+.shot { position: relative; overflow: hidden; border-radius: 3px; flex: none; }
+
+/* 各工具预览 */
+.collage { display: flex; background: var(--bg, #fff); padding: var(--gap); gap: var(--gap); box-shadow: var(--shadow); }
+.collage.col { flex-direction: column; }
+.collage.grid { display: grid; grid-template-columns: repeat(2, auto); }
+.pages { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+.page { width: 150px; aspect-ratio: 210/297; background: #f4f5f6; box-shadow: var(--shadow); display: grid; place-items: center; padding: 14px; position: relative; }
+.page .shot { width: 100%; }
+.page .pn { position: absolute; bottom: -20px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--muted); }
+.cmp { position: relative; width: min(760px, 90%); aspect-ratio: 16/10; border-radius: 6px; overflow: hidden; box-shadow: var(--shadow); }
+.cmp .layer { position: absolute; inset: 0; }
+.cmp .rhs { clip-path: inset(0 0 0 var(--cut)); }
+.cmp .knob { position: absolute; top: 0; bottom: 0; left: var(--cut); width: 2px; background: var(--accent); }
+.cmp .knob::after { content: "⇆"; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 28px; height: 28px; border-radius: 14px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-size: 14px; }
+.cmp .lab { position: absolute; top: 8px; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,.6); color: #fff; }
+.splitgrid { position: absolute; inset: 0; display: grid; }
+.splitgrid div { border: 1px dashed rgba(64,206,157,.95); display: grid; place-items: center; color: #fff; font-size: 12px; text-shadow: 0 1px 2px #000; }
+.measure-line { position: absolute; left: 22%; top: 30%; width: 48%; height: 2px; background: var(--warn); transform-origin: left center; transform: rotate(18deg); }
+.measure-line::before, .measure-line::after { content: ""; position: absolute; top: -4px; width: 10px; height: 10px; border-radius: 5px; border: 2px solid var(--warn); background: rgba(0,0,0,.4); }
+.measure-line::before { left: -6px; } .measure-line::after { right: -6px; }
+.measure-tag { position: absolute; left: 44%; top: 34%; font-size: 12px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,.75); color: #fff; }
+.swatch { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); font-size: 13px; }
+.swatch i { width: 28px; height: 28px; border-radius: 6px; flex: none; }
+.found { position: absolute; border: 2px solid var(--accent); border-radius: 3px; box-shadow: 0 0 0 9999px rgba(0,0,0,.35); }
+.result { padding: 10px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); font-size: 13px; }
+.result code { font-size: 14px; color: var(--accent); }
+.qr { width: 220px; height: 220px; display: grid; grid-template-columns: repeat(21, 1fr); background: #fff; padding: 12px; box-shadow: var(--shadow); }
+.qr i { background: #fff; } .qr i.k { background: #111; }
+.trim { position: absolute; left: 24px; right: 24px; bottom: 18px; height: 34px; border-radius: 6px; background: rgba(255,255,255,.08); }
+.trim .sel { position: absolute; top: 0; bottom: 0; left: 18%; right: 34%; border: 2px solid var(--accent); border-radius: 6px; background: var(--accent-soft); }
+.batch-list { width: min(620px, 95%); display: flex; flex-direction: column; gap: 6px; }
+.batch-row { display: flex; align-items: center; gap: 12px; padding: 6px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); font-size: 13px; }
+.batch-row .shot { width: 72px; height: 44px; }
+.batch-row .arrow { color: var(--faint); }
+.batch-row .out { color: var(--muted); }
+
+.toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--menu); border: 1px solid var(--border); box-shadow: var(--shadow); padding: 8px 14px; border-radius: 8px; font-size: 13px; display: none; z-index: 40; }
+.toast.show { display: block; animation: rise .16s ease-out; }
+.dropzone { position: absolute; inset: 8px; z-index: 25; border: 2px dashed var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--page) 80%, transparent); display: none; place-items: center; font-size: 15px; color: var(--accent); font-weight: 600; }
+.dropzone.show { display: grid; }
+.notes { position: fixed; right: 16px; bottom: 16px; width: 300px; padding: 12px 14px; border-radius: 10px; background: var(--menu); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12px; color: var(--muted); z-index: 50; }
+.notes b { color: var(--fg); }
+.notes ol { margin: 6px 0 0; padding-left: 18px; }
+.notes .x { position: absolute; right: 8px; top: 6px; color: var(--faint); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z"/><path d="M12 14v6"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/></symbol>
+  <symbol id="i-ocr" viewBox="0 0 24 24"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3"/><path d="M9 9h6M12 9v7"/></symbol>
+  <symbol id="i-compare" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 3v18"/></symbol>
+  <symbol id="i-collage" viewBox="0 0 24 24"><rect x="3" y="4" width="8" height="7" rx="1.5"/><rect x="13" y="4" width="8" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/></symbol>
+  <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h4"/></symbol>
+  <symbol id="i-batch" viewBox="0 0 24 24"><rect x="7" y="7" width="13" height="13" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/></symbol>
+  <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16M3 12h18" stroke-dasharray="2 2"/></symbol>
+  <symbol id="i-measure" viewBox="0 0 24 24"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></symbol>
+  <symbol id="i-barcode" viewBox="0 0 24 24"><path d="M4 5v14M7 5v14M11 5v14M13 5v14M17 5v14M20 5v14"/></symbol>
+  <symbol id="i-gif" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
+  <symbol id="i-view" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-4M14 18v3"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></symbol>
+  <symbol id="i-tools" viewBox="0 0 24 24"><path d="M14 6a4 4 0 0 0 5 5l-8 8a2 2 0 0 1-3-3z"/><path d="M5 3l3 3-2 2-3-3"/></symbol>
+  <symbol id="i-new" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3h6v2"/></symbol>
+</svg>
+
+<div class="app">
+  <div class="titlebar">
+    <div class="brand"><span class="logo"></span>RaiShot</div>
+    <span class="proto-tag">原型 · 工具并入图库 · 可点击；也可把真实图片拖进窗口</span>
+    <div class="spacer"></div>
+    <div class="theme-switch" id="theme">
+      <button data-t="system" class="on">跟随系统</button><button data-t="dark">深色</button><button data-t="light">浅色</button>
+    </div>
+    <div class="winbtns"><span>—</span><span>☐</span><span>✕</span></div>
+  </div>
+  <nav class="side">
+    <button class="nav"><svg class="i"><use href="#i-pin"/></svg>贴图<span class="n">4</span></button>
+    <button class="nav on"><svg class="i"><use href="#i-history"/></svg>图库</button>
+    <button class="nav gone" title="原“工具”页已删除：工具改为对选中内容的动作"><svg class="i"><use href="#i-tools"/></svg>工具<span class="n">已并入图库</span></button>
+    <div class="sub">设置</div>
+    <button class="nav small"><svg class="i"><use href="#i-gear"/></svg>常规</button>
+    <button class="nav small">截图</button>
+    <button class="nav small">贴图</button>
+    <button class="nav small">录屏</button>
+    <button class="nav small">快捷键</button>
+  </nav>
+  <section class="main" id="main">
+    <div class="toolbar">
+      <div class="chips" id="chips"></div>
+      <div class="search"><svg class="i"><use href="#i-search"/></svg><input placeholder="搜索标题、应用、日期、文字"></div>
+      <div class="spacer"></div>
+      <button class="btn" id="btn-new" data-menu="new"><svg class="i"><use href="#i-new"/></svg>新建<svg class="i chev"><use href="#i-chev"/></svg></button>
+      <button class="btn" id="btn-tools" data-menu="tools"><svg class="i"><use href="#i-tools"/></svg>工具<svg class="i chev"><use href="#i-chev"/></svg></button>
+    </div>
+    <div id="banner"></div>
+    <div class="body">
+      <div class="scroll" id="scroll"></div>
+      <aside class="detail" id="detail"></aside>
+    </div>
+    <div class="actionbar" id="actionbar"></div>
+    <div class="overlay" id="overlay"></div>
+    <div class="dropzone" id="dropzone">松开即加入图库，并选中这些文件</div>
+  </section>
+</div>
+<div class="menu" id="menu"></div>
+<div class="toast" id="toast"></div>
+<div class="notes" id="notes">
+  <button class="x" onclick="this.parentNode.remove()">✕</button>
+  <b>试试这几条路径</b>
+  <ol>
+    <li>单击一张截图 → 右侧直接给出贴出／编辑／识别文字和“工具”。</li>
+    <li>Ctrl 再点一张 → 底部操作条变成“对照 · 拼接”，角标是顺序。</li>
+    <li>什么都不选，点右上“工具 ▸ 拼接” → 进入选择模式，选好按 Enter。</li>
+    <li>弹层里拖来源条排序，“+ 添加”回图库挑图，不弹文件框。</li>
+    <li>从资源管理器拖图片进窗口 → 成为“外部文件”并被选中。</li>
+  </ol>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const ic = (n, cls = 'i') => `<svg class="${cls}"><use href="#i-${n}"/></svg>`;
+
+// —— 假数据：今天 / 昨天，截图、贴图、录屏混排 ——
+const ITEMS = [
+  { id: 'a', kind: 'shot', day: '今天', t: '11:42', title: '订单后台 · Edge', app: 'msedge.exe', w: 1600, h: 900, v: 'win', hue: 210 },
+  { id: 'b', kind: 'shot', day: '今天', t: '11:40', title: '订单后台 · Edge', app: 'msedge.exe', w: 1600, h: 900, v: 'win', hue: 200 },
+  { id: 'c', kind: 'pin', day: '今天', t: '11:21', title: 'main.rs 片段', app: 'Code.exe', w: 820, h: 620, v: 'code', hue: 0, live: true },
+  { id: 'd', kind: 'rec', day: '今天', t: '10:58', title: '复现步骤录屏', app: '录屏', w: 1920, h: 1080, v: 'vid', hue: 260, dur: '0:42' },
+  { id: 'e', kind: 'shot', day: '今天', t: '10:30', title: '周报图表', app: 'EXCEL.EXE', w: 1200, h: 800, v: 'chart', hue: 150 },
+  { id: 'f', kind: 'shot', day: '今天', t: '10:12', title: '发票条码', app: 'Acrobat.exe', w: 900, h: 420, v: 'bar', hue: 0 },
+  { id: 'g', kind: 'shot', day: '今天', t: '09:47', title: '需求文档第 3 页', app: 'WINWORD.EXE', w: 700, h: 980, v: 'doc', hue: 220 },
+  { id: 'h', kind: 'shot', day: '今天', t: '09:46', title: '需求文档第 4 页', app: 'WINWORD.EXE', w: 700, h: 980, v: 'doc', hue: 12 },
+  { id: 'i', kind: 'pin', day: '昨天', t: '18:05', title: '配色参考', app: 'Figma.exe', w: 1000, h: 700, v: 'win', hue: 330 },
+  { id: 'j', kind: 'shot', day: '昨天', t: '17:33', title: '错误弹窗', app: 'explorer.exe', w: 640, h: 360, v: 'win', hue: 0 },
+  { id: 'k', kind: 'rec', day: '昨天', t: '16:20', title: '演示 GIF 素材', app: '录屏', w: 1280, h: 720, v: 'vid', hue: 170, dur: '0:12' },
+  { id: 'l', kind: 'shot', day: '昨天', t: '15:02', title: '终端输出', app: 'WindowsTerminal.exe', w: 1100, h: 700, v: 'code', hue: 0 },
+  { id: 'm', kind: 'shot', day: '昨天', t: '14:41', title: '设计稿 A', app: 'Figma.exe', w: 1440, h: 900, v: 'win', hue: 40 },
+  { id: 'n', kind: 'shot', day: '昨天', t: '14:40', title: '设计稿 B', app: 'Figma.exe', w: 1440, h: 900, v: 'win', hue: 48 },
+];
+const KIND_NAME = { shot: '截图', pin: '贴图', rec: '录屏', ext: '外部文件' };
+const isImg = it => it.kind !== 'rec';
+
+// —— 工具注册表：一处声明，图库操作条、菜单、详情栏、弹层共用 ——
+const TOOLS = [
+  { id: 'view', name: '查看', icon: 'view', acc: 'any', min: 1, max: 1, mode: 'popup' },
+  { id: 'pin', name: '贴出', icon: 'pin', acc: 'img', min: 1, max: 99, mode: 'direct' },
+  { id: 'edit', name: '编辑', icon: 'edit', acc: 'img', min: 1, max: 1, mode: 'direct' },
+  { id: 'ocr', name: '识别文字', icon: 'ocr', acc: 'img', min: 1, max: 1, mode: 'direct' },
+  { id: 'compare', name: '对照', icon: 'compare', acc: 'img', min: 2, max: 2, mode: 'popup', group: 'multi' },
+  { id: 'collage', name: '拼接', icon: 'collage', acc: 'img', min: 2, max: 99, mode: 'popup', group: 'multi' },
+  { id: 'pdf', name: '转 PDF', icon: 'pdf', acc: 'img', min: 1, max: 99, mode: 'popup', group: 'multi' },
+  { id: 'batch', name: '批量导出', icon: 'batch', acc: 'img', min: 1, max: 99, mode: 'popup', group: 'multi', sub: '格式、尺寸、水印' },
+  { id: 'split', name: '分割', icon: 'split', acc: 'img', min: 1, max: 1, mode: 'popup', group: 'single' },
+  { id: 'measure', name: '取色与测量', icon: 'measure', acc: 'img', min: 1, max: 1, mode: 'popup', group: 'single' },
+  { id: 'barcode', name: '识别条码', icon: 'barcode', acc: 'img', min: 1, max: 1, mode: 'popup', group: 'single' },
+  { id: 'gif', name: '转 GIF', icon: 'gif', acc: 'vid', min: 1, max: 1, mode: 'popup', group: 'video' },
+  { id: 'qr', name: '生成二维码', icon: 'qr', acc: 'none', min: 0, max: 0, mode: 'popup' },
+];
+const T = Object.fromEntries(TOOLS.map(t => [t.id, t]));
+
+const S = {
+  filter: 'all', sel: [], anchor: null, pick: null, // pick: { tool, sel, add: bool }
+  popup: null, // { tool, src: [ids], opts: {} }
+  external: [],
+};
+
+const all = () => [...S.external, ...ITEMS];
+const byId = id => all().find(x => x.id === id);
+function summary(ids) {
+  const items = ids.map(byId).filter(Boolean);
+  return { items, img: items.filter(isImg).length, vid: items.filter(x => !isImg(x)).length, n: items.length };
+}
+function availability(tool, sm) {
+  if (tool.acc === 'none') return { ok: true };
+  if (tool.acc === 'vid') return sm.vid === 1 && sm.img === 0 ? { ok: true } : { ok: false, need: '选 1 段录屏' };
+  if (tool.acc === 'any') return sm.n === 1 ? { ok: true } : { ok: false, need: '选 1 项' };
+  const n = sm.img;
+  if (n < tool.min) return { ok: false, need: tool.min === tool.max ? `选 ${tool.min} 张图片` : `至少 ${tool.min} 张图片` };
+  if (n > tool.max) return { ok: false, need: tool.max === 1 ? '只用 1 张图片' : `只用 ${tool.max} 张图片` };
+  return { ok: true, partial: sm.vid > 0 ? `${n} 张图片` : '' };
+}
+function recommended(sm) {
+  if (sm.n === 0) return [];
+  if (sm.vid === 1 && sm.img === 0) return ['view', 'gif'];
+  if (sm.vid > 0 && sm.img === 0) return [];
+  if (sm.img === 1 && sm.vid === 0) return ['pin', 'edit', 'ocr'];
+  if (sm.img === 2) return ['compare', 'collage'];
+  return ['collage', 'pdf', 'batch'];
+}
+const accepts = (tool, it) => tool.acc === 'any' || (tool.acc === 'vid' ? !isImg(it) : isImg(it));
+
+// —— 渲染：假截图 ——
+function thumb(it) {
+  if (it.url) return `<img src="${it.url}" alt="">`;
+  const h = it.hue;
+  const inner = {
+    win: '<i class="bar"></i><i class="sb"></i><i class="l l1"></i><i class="l l2"></i><i class="l l3"></i><i class="blk"></i>',
+    code: [14, 22, 30, 38, 46, 54, 62, 70, 78].map((y, k) => `<i style="top:${y}%;left:${8 + (k % 3) * 6}%;width:${30 + (k * 17) % 45}%;background:${['#c678dd', '#61afef', '#98c379', '#e5c07b', '#abb2bf'][k % 5]}"></i>`).join(''),
+    chart: '<i class="ax"></i>' + [30, 55, 42, 70, 62, 84].map((v, k) => `<i style="left:${12 + k * 14}%;height:${v * .7}%"></i>`).join(''),
+    doc: '<i class="h" style="top:10%;width:50%"></i>' + [22, 28, 34, 40, 50, 56, 62, 68, 78, 84].map((y, k) => `<i style="top:${y}%;width:${60 + (k * 13) % 18}%"></i>`).join(''),
+    vid: '<i class="play"></i>',
+    bar: [10, 13, 15, 19, 22, 23, 27, 31, 33, 36, 40, 43, 44, 48, 52, 55, 57, 61, 64, 66, 70, 74, 77, 79, 83, 86, 88].map((x, k) => `<i style="left:${x}%;width:${k % 3 ? 1 : 2}%"></i>`).join(''),
+  }[it.v] || '';
+  return `<div class="fx ${it.v}" style="--h:${h}">${inner}</div>`;
+}
+function shot(it, w, h) {
+  const style = h ? `width:${w}px;height:${h}px` : `width:${w}px;aspect-ratio:${it.w}/${it.h}`;
+  return `<div class="shot" style="${style}">${thumb(it)}</div>`;
+}
+
+// —— 渲染：图库 ——
+function renderChips() {
+  const c = k => all().filter(x => k === 'all' || x.kind === k).length;
+  $('#chips').innerHTML = [['all', '全部'], ['shot', '截图'], ['pin', '贴图'], ['rec', '录屏']]
+    .map(([k, n]) => `<button data-f="${k}" class="${S.filter === k ? 'on' : ''}">${n}<span class="c">${c(k)}</span></button>`).join('');
+}
+function visible() {
+  return all().filter(x => S.filter === 'all' || x.kind === S.filter || x.kind === 'ext');
+}
+function renderGrid() {
+  const sel = S.pick ? S.pick.sel : S.sel;
+  const days = [];
+  for (const it of visible()) {
+    const d = it.kind === 'ext' ? '外部文件' : it.day;
+    let g = days.find(x => x.d === d);
+    if (!g) days.push(g = { d, items: [] });
+    g.items.push(it);
+  }
+  $('#scroll').innerHTML = days.map(g => `
+    <div class="day">${g.d}${g.d === '外部文件' ? '<span class="tag">仅本次窗口，不写入历史 · <button onclick="clearExternal()">移除</button></span>' : ''}</div>
+    <div class="grid">${g.items.map(it => {
+      const w = Math.round(128 * Math.min(2.2, Math.max(.6, it.w / it.h)));
+      const k = sel.indexOf(it.id);
+      const dim = S.pick && S.pick.tool.acc !== 'none' && !accepts(S.pick.tool, it);
+      const mark = S.pick ? (k >= 0 ? `<span class="order">${k + 1}</span>` : '<span class="check"></span>')
+        : (k >= 0 && sel.length > 1 ? `<span class="order">${k + 1}</span>` : '');
+      const badge = it.kind === 'rec' ? `<span class="badge">▶ ${it.dur}</span>`
+        : it.kind === 'pin' ? `<span class="badge">${it.live ? '<span class="dot"></span>屏幕上' : '已关闭'}</span>`
+        : it.kind === 'ext' ? `<span class="badge">${it.title}</span>` : '';
+      const hover = S.pick ? '' : `<div class="hoverbar">${isImg(it)
+        ? `<button title="贴出" data-q="pin">${ic('pin')}</button><button title="复制" data-q="copy">${ic('copy')}</button>`
+        : `<button title="播放" data-q="view">${ic('view')}</button>`}</div>`;
+      return `<div class="card ${k >= 0 ? 'sel' : ''} ${dim ? 'dim' : ''}" data-id="${it.id}" style="width:${w}px">${thumb(it)}${badge}${mark}${hover}</div>`;
+    }).join('')}</div>`).join('');
+}
+function renderDetail() {
+  const el = $('#detail');
+  if (S.pick) {
+    const t = S.pick.tool, sm = summary(S.pick.sel);
+    el.innerHTML = `<div class="empty"><div class="tip"><span class="ic">${ic(t.icon)}</span><div><b>${t.name}</b><br>${needText(t)}</div></div>
+      ${S.pick.sel.length ? `<div>${t.id === 'compare' ? '1 在左、2 在右' : t.id === 'pdf' ? '已选顺序就是页序' : '已选顺序就是排列顺序'}，进入后还能拖动调整。</div>` : '<div>按住 Ctrl 不需要：选择模式下单击即可加入或移出。</div>'}
+      ${sm.items.map((it, k) => `<div style="display:flex;gap:8px;align-items:center">${shot(it, 64, 40)}<span>${k + 1}. ${it.title}</span></div>`).join('')}</div>`;
+    return;
+  }
+  const sm = summary(S.sel);
+  if (sm.n === 0) {
+    el.innerHTML = `<div class="empty">
+      <div style="font-weight:600;color:var(--fg)">选中截图，工具就在手边</div>
+      ${[['collage', '选 2 张以上', '拼接、转 PDF、批量导出'], ['compare', '选 2 张', '同步缩放对照差异'], ['measure', '选 1 张', '分割、取色测量、识别条码'], ['gif', '选 1 段录屏', '播放、转 GIF']]
+        .map(([i, a, b]) => `<div class="tip"><span class="ic">${ic(i)}</span><div><b>${a}</b><br>${b}</div></div>`).join('')}
+      <div>或者点右上“工具”，先选工具再挑图。外部图片直接拖进窗口。</div></div>`;
+    return;
+  }
+  if (sm.n > 1) {
+    el.innerHTML = `<div class="stack">${sm.items.slice(0, 3).reverse().map((it, k, a) => `<div class="card" style="transform:translateX(-50%) rotate(${(a.length - 1 - k) * -4 + 4}deg) translateY(${k * -4}px)">${thumb(it)}</div>`).join('')}</div>
+      <h3>已选 ${sm.n} 项</h3><div class="facts"><span>图片</span><span>${sm.img} 张</span><span>录屏</span><span>${sm.vid} 段</span></div>
+      <div class="empty">角标是选择顺序，拼接与 PDF 默认按它排列。动作在底部操作条。</div>`;
+    return;
+  }
+  const it = sm.items[0];
+  el.innerHTML = `<div class="pv" style="aspect-ratio:${it.w}/${it.h}">${thumb(it)}</div>
+    <h3>${it.title}</h3>
+    <div class="facts"><span>类型</span><span>${KIND_NAME[it.kind]}</span><span>时间</span><span>${it.day || '本次'} ${it.t || ''}</span><span>尺寸</span><span>${it.w} × ${it.h}</span><span>来源</span><span>${it.app || '拖入的文件'}</span></div>
+    <div class="actions">${actionButtons(sm, true)}</div>`;
+}
+function actionButtons(sm, vertical) {
+  const rec = recommended(sm);
+  const btns = rec.map((id, k) => toolBtn(T[id], sm, k === 0 ? 'primary' : '')).join('');
+  const more = `<button class="btn ${vertical ? '' : 'ghost'}" data-menu="tools">${ic('tools')}${rec.length ? '更多工具' : '工具'}${ic('chev', 'i chev')}</button>`;
+  if (!vertical) return btns + more;
+  return `<div class="row">${btns}</div><div class="row">${more}</div>
+    <div class="row"><button class="btn ghost" data-act="copy">${ic('copy')}复制</button><button class="btn ghost" data-act="del">${ic('trash')}删除</button></div>`;
+}
+function toolBtn(t, sm, cls) {
+  const a = availability(t, sm);
+  const label = t.id === 'view' && sm.vid ? '播放' : t.name;
+  return `<button class="btn ${cls}" data-tool="${t.id}" ${a.ok ? '' : 'disabled'}>${ic(t.icon)}${label}${a.partial ? `<span style="opacity:.7;font-weight:400">· ${a.partial}</span>` : ''}</button>`;
+}
+function renderActionbar() {
+  const bar = $('#actionbar'), sm = summary(S.sel);
+  const show = !S.pick && !S.popup && sm.n > 1;
+  bar.classList.toggle('show', show);
+  if (!show) return;
+  bar.innerHTML = `<span class="cnt">已选 ${sm.n} 项<small>${sm.vid ? `${sm.img} 图 · ${sm.vid} 录屏` : '按选择顺序'}</small></span>
+    ${actionButtons(sm, false)}<span class="sep"></span>
+    <button class="btn icon ghost" title="复制文件" data-act="copy">${ic('copy')}</button>
+    <button class="btn icon ghost" title="删除（可撤销）" data-act="del">${ic('trash')}</button>
+    <button class="btn icon ghost" title="取消选择 · Esc" data-act="clear">${ic('x')}</button>`;
+}
+function needText(t) {
+  return { compare: '选择 2 张图片', collage: '选择要拼接的图片，至少 2 张', pdf: '选择图片，每张一页', batch: '选择要导出的图片', split: '选择 1 张图片', measure: '选择 1 张图片', barcode: '选择含条码的图片', gif: '选择 1 段录屏', view: '选择 1 项', pin: '选择要贴出的图片', edit: '选择 1 张图片', ocr: '选择 1 张图片' }[t.id];
+}
+function renderBanner() {
+  const b = $('#banner');
+  if (!S.pick) { b.innerHTML = ''; return; }
+  const t = S.pick.tool, sm = summary(S.pick.sel), a = availability(t, sm);
+  const goal = t.min === t.max ? `${sm.n}/${t.min}` : `${sm.n}`;
+  b.innerHTML = `<div class="banner"><span class="bi">${ic(t.icon)}</span>
+    <div><div class="bt">${S.pick.add ? `${t.name} · 添加图片` : t.name}</div><div class="bs">${S.pick.add ? '单击图库中的图片加入来源，完成后回到工具' : needText(t)}</div></div>
+    <span class="count">已选 <b>${goal}</b></span>
+    <button class="btn" data-act="pick-cancel">取消 <span style="color:var(--faint);font-size:11px">Esc</span></button>
+    <button class="btn ${a.ok ? 'primary' : ''}" data-act="pick-go" ${a.ok ? '' : 'disabled'}>${S.pick.add ? '完成' : '开始'} <span style="opacity:.7;font-size:11px">Enter</span></button></div>`;
+}
+function render() { renderChips(); renderBanner(); renderGrid(); renderDetail(); renderActionbar(); renderOverlay(); }
+
+// —— 菜单 ——
+function openMenu(kind, anchor) {
+  const m = $('#menu'), r = anchor.getBoundingClientRect();
+  if (kind === 'new') {
+    m.innerHTML = `<div class="mh">新建</div>
+      ${[['cam', '截图', 'Alt+A'], ['rec', '录屏', 'Alt+R'], ['clip', '从剪贴板贴图', 'F3']].map(([i, n, k]) => `<button class="mi" data-act="toast" data-msg="${n}：沿用现有入口">${ic(i)}<span class="nm">${n}</span><kbd>${k}</kbd></button>`).join('')}
+      <div class="msep"></div><button class="mi" data-tool="qr">${ic('qr')}<span class="nm">二维码</span><span class="st">文字或链接</span></button>`;
+  } else {
+    const sm = summary(S.sel);
+    const row = t => { const a = availability(t, sm); return `<button class="mi ${a.ok ? 'ready' : 'need'}" data-tool="${t.id}" data-from="menu">${ic(t.icon)}<span class="nm">${t.name}${t.sub ? `<span style="color:var(--faint);font-size:12px"> · ${t.sub}</span>` : ''}</span><span class="st">${a.ok ? (a.partial || (sm.n ? '可用' : '')) : a.need}</span></button>`; };
+    m.innerHTML = `<div class="mh">${sm.n ? `对已选 ${sm.n} 项` : '先选工具，再到图库挑图'}</div>
+      ${['multi', 'single', 'video'].map(g => TOOLS.filter(t => t.group === g).map(row).join('')).join('<div class="msep"></div>')}
+      <div class="msep"></div><button class="mi" data-act="open-file">${ic('file')}<span class="nm">打开文件…</span><kbd>Ctrl+O</kbd></button>`;
+  }
+  m.classList.add('show');
+  const w = m.offsetWidth, h = m.offsetHeight;
+  let x = Math.min(r.right - w, innerWidth - w - 8), y = r.bottom + 6;
+  if (y + h > innerHeight - 8) y = r.top - h - 6;
+  m.style.left = Math.max(8, x) + 'px'; m.style.top = y + 'px';
+}
+const closeMenu = () => $('#menu').classList.remove('show');
+
+// —— 动作 ——
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2200); }
+function runTool(id, ids, fromMenu) {
+  const t = T[id], sm = summary(ids), a = availability(t, sm);
+  if (t.acc === 'none') { S.popup = { tool: t, src: [], opts: {} }; render(); return; }
+  if (!a.ok) { // 工具先行：进入选择模式，保留已选中且被接受的项
+    S.pick = { tool: t, sel: ids.filter(i => accepts(t, byId(i))).slice(0, t.max), add: false, restore: [...S.sel] };
+    render(); return;
+  }
+  const src = ids.filter(i => accepts(t, byId(i)));
+  if (t.mode === 'direct') {
+    toast({ pin: `已贴出 ${src.length} 张`, edit: '打开编辑器（沿用现有入口）', ocr: '识别结果显示在详情栏，可复制' }[id]);
+    return;
+  }
+  S.popup = { tool: t, src, opts: { dir: 'row', gap: 8, rows: 2, cols: 2, cut: 50, fmt: 'PNG' } };
+  S.pick = null; render();
+}
+function pickToggle(id) {
+  const p = S.pick, t = p.tool, k = p.sel.indexOf(id);
+  if (k >= 0) p.sel.splice(k, 1);
+  else { if (t.max === 1 && !p.add) p.sel = []; if (p.sel.length < t.max || p.add) p.sel.push(id); }
+  render();
+}
+function pickGo() {
+  const p = S.pick; if (!p) return;
+  if (p.add) { S.popup.src = [...new Set([...S.popup.src, ...p.sel])]; S.pick = null; render(); return; }
+  if (!availability(p.tool, summary(p.sel)).ok) return;
+  S.sel = [...p.sel]; runTool(p.tool.id, p.sel);
+}
+function pickCancel() {
+  const p = S.pick; S.pick = null;
+  if (!p.add) S.sel = p.restore || [];
+  render();
+}
+function select(id, e) {
+  if (S.pick) return pickToggle(id);
+  if (e.shiftKey && S.anchor) {
+    const v = visible().map(x => x.id), a = v.indexOf(S.anchor), b = v.indexOf(id);
+    S.sel = v.slice(Math.min(a, b), Math.max(a, b) + 1);
+  } else if (e.ctrlKey || e.metaKey) {
+    const k = S.sel.indexOf(id); k >= 0 ? S.sel.splice(k, 1) : S.sel.push(id); S.anchor = id;
+  } else { S.sel = [id]; S.anchor = id; }
+  render();
+}
+
+// —— 工具弹层 ——
+function renderOverlay() {
+  const o = $('#overlay');
+  if (!S.popup || S.pick) { o.classList.remove('show'); return; }
+  const p = S.popup, t = p.tool, src = p.src.map(byId);
+  const multi = t.group === 'multi', single = t.group === 'single';
+  const outs = { collage: ['copy', 'pin', 'save'], split: ['save'], pdf: ['save'], batch: ['save'], qr: ['copy', 'pin', 'save'], gif: ['save'], measure: [], barcode: [], compare: [], view: ['pin', 'copy'] }[t.id];
+  const outBtn = { copy: `<button class="btn" data-act="toast" data-msg="已复制到剪贴板">${ic('copy')}复制</button>`, pin: `<button class="btn" data-act="toast" data-msg="已贴到屏幕">${ic('pin')}贴出</button>`, save: `<button class="btn primary" data-act="toast" data-msg="已保存 · 在文件夹中显示">${ic('save')}${t.id === 'batch' ? '导出到…' : '另存为…'}</button>` };
+  o.innerHTML = `
+    <div class="ohead">
+      <button class="btn ghost" data-act="close-popup">${ic('back')}图库</button>
+      <span style="color:var(--faint)">/</span>
+      <button class="title ${single ? 'switch' : ''}" ${single ? 'data-menu="switch"' : ''}>${ic(t.icon)}${t.name}${single ? ic('chev', 'i chev') : ''}</button>
+      <div class="spacer"></div>${outs.map(k => outBtn[k]).join('')}
+    </div>
+    ${t.acc === 'none' ? '' : `<div class="strip"><span class="lbl">${multi ? '来源（拖动排序）' : '来源'}</span>
+      ${src.map((it, k) => `<div class="chip" draggable="${multi}" data-k="${k}">${thumb(it)}${multi ? `<span class="no">${k + 1}</span><button class="rm" data-rm="${k}" title="移出">${ic('x')}</button>` : ''}</div>`).join('')}
+      ${multi && src.length < t.max ? `<button class="addchip" data-act="add">${ic('plus')}从图库添加</button>` : ''}
+      ${single ? '<span class="lbl" style="margin-left:8px">标题处可切换到其它单图工具，源图不重读</span>' : ''}</div>`}
+    <div class="obody"><div class="stage">${stage(t, src, p.opts)}</div><div class="opts">${options(t, p.opts, src)}</div></div>`;
+  o.classList.add('show');
+  bindStrip();
+}
+function stage(t, src, o) {
+  const a = src[0], b = src[1];
+  switch (t.id) {
+    case 'collage': {
+      const cls = o.dir === 'col' ? 'col' : o.dir === 'grid' ? 'grid' : '';
+      const size = o.dir === 'col' ? 260 : o.dir === 'grid' ? 200 : Math.max(120, 620 / Math.max(1, src.length));
+      return src.length ? `<div class="collage ${cls}" style="--gap:${o.gap}px">${src.map(it => o.dir === 'row' ? shot(it, Math.round(size * it.w / it.h * .55), Math.round(size * .55)) : shot(it, size)).join('')}</div>` : '<div style="color:var(--muted)">还没有来源</div>';
+    }
+    case 'pdf': return `<div class="pages">${src.map((it, k) => `<div class="page">${shot(it, 122)}<span class="pn">第 ${k + 1} 页</span></div>`).join('')}</div>`;
+    case 'compare': return `<div class="cmp" style="--cut:${o.cut}%"><div class="layer">${thumb(a)}</div><div class="layer rhs">${thumb(b)}</div><span class="lab" style="left:8px">1 · ${a.title}</span><span class="lab" style="right:8px">2 · ${b.title}</span><span class="knob"></span></div>`;
+    case 'batch': return `<div class="batch-list">${src.map(it => `<div class="batch-row">${shot(it, 72, 44)}<span style="flex:1">${it.title}<br><span class="out">${it.w} × ${it.h}</span></span><span class="arrow">→</span><span class="out">${it.title.replace(/\s.*/, '')}.${o.fmt.toLowerCase()} · ${Math.min(1280, it.w)} 宽</span></div>`).join('')}</div>`;
+    case 'split': return `<div class="box" style="width:min(640px,90%);aspect-ratio:${a.w}/${a.h}">${thumb(a)}<div class="splitgrid" style="grid-template-rows:repeat(${o.rows},1fr);grid-template-columns:repeat(${o.cols},1fr)">${Array.from({ length: o.rows * o.cols }, (_, k) => `<div>${k + 1}</div>`).join('')}</div></div>`;
+    case 'measure': return `<div class="box" style="width:min(680px,90%);aspect-ratio:${a.w}/${a.h};cursor:crosshair">${thumb(a)}<span class="measure-line"></span><span class="measure-tag">412 px · 18°</span></div>`;
+    case 'barcode': return `<div class="box" style="width:min(640px,90%);aspect-ratio:${a.w}/${a.h}">${thumb(a)}<span class="found" style="left:8%;top:18%;right:10%;bottom:26%"></span></div>`;
+    case 'gif': case 'view': return `<div class="box" style="width:min(720px,92%);aspect-ratio:${a.w}/${a.h}">${thumb(a)}${t.id === 'gif' ? '<div class="trim"><div class="sel"></div></div>' : ''}</div>`;
+    case 'qr': {
+      let seed = [...(o.text || 'https://raishot.app')].reduce((s, c) => s * 31 + c.charCodeAt(0) >>> 0, 7);
+      const fin = (r, c) => [[0, 0], [0, 14], [14, 0]].some(([y, x]) => r >= y && r < y + 7 && c >= x && c < x + 7 && (r === y || r === y + 6 || c === x || c === x + 6 || (r > y + 1 && r < y + 5 && c > x + 1 && c < x + 5)));
+      const inFinderZone = (r, c) => [[0, 0], [0, 13], [13, 0]].some(([y, x]) => r >= y && r < y + 8 && c >= x && c < x + 8);
+      return `<div class="qr">${Array.from({ length: 441 }, (_, k) => { const r = k / 21 | 0, c = k % 21; seed = seed * 1103515245 + 12345 >>> 0; const on = inFinderZone(r, c) ? fin(r, c) : (seed >> 16) % 2; return `<i class="${on ? 'k' : ''}"></i>`; }).join('')}</div>`;
+    }
+  }
+  return '';
+}
+function seg(key, opts, cur) { return `<div class="seg">${opts.map(([v, n]) => `<button data-opt="${key}" data-v="${v}" class="${cur === v ? 'on' : ''}">${n}</button>`).join('')}</div>`; }
+function options(t, o, src) {
+  switch (t.id) {
+    case 'collage': return `<div class="opt"><label>排列</label>${seg('dir', [['row', '横排'], ['col', '竖排'], ['grid', '网格']], o.dir)}</div>
+      <div class="opt"><label>间距 ${o.gap}px</label><input type="range" min="0" max="32" value="${o.gap}" data-range="gap"></div>
+      <div class="opt"><label>对齐</label>${seg('fit', [['h', '等高'], ['w', '等宽'], ['o', '原尺寸']], o.fit || 'h')}</div>
+      <div class="opt"><label>背景</label>${seg('bg', [['w', '白'], ['t', '透明'], ['k', '黑']], o.bg || 'w')}</div>`;
+    case 'pdf': return `<div class="opt"><label>纸张</label>${seg('paper', [['a4', 'A4'], ['fit', '适应图片']], o.paper || 'a4')}</div>
+      <div class="opt"><label>方向</label>${seg('ori', [['auto', '自动'], ['p', '纵向'], ['l', '横向']], o.ori || 'auto')}</div>
+      <div class="opt"><label>边距</label>${seg('margin', [['0', '无'], ['s', '窄'], ['m', '标准']], o.margin || 's')}</div><div class="opt"><div class="hint">页序 = 来源条顺序，拖动即可调整。</div></div>`;
+    case 'compare': return `<div class="opt"><label>方式</label>${seg('cmode', [['wipe', '划像'], ['side', '并排'], ['diff', '差异']], o.cmode || 'wipe')}</div>
+      <div class="opt"><label>分界 ${o.cut}%</label><input type="range" min="0" max="100" value="${o.cut}" data-range="cut"></div>
+      <div class="opt"><div class="hint">两侧同步缩放平移。来源条点一下可交换左右。</div></div>`;
+    case 'batch': return `<div class="opt"><label>格式</label>${seg('fmt', [['PNG', 'PNG'], ['JPG', 'JPG'], ['WEBP', 'WebP']], o.fmt)}</div>
+      <div class="opt"><label>最大宽度</label><input type="number" value="1280"></div>
+      <div class="opt"><label>水印</label><input type="text" placeholder="留空则不加"></div>
+      <div class="opt"><label>命名</label><input type="text" value="{标题}"><div class="hint">同名自动加序号，不覆盖。</div></div>`;
+    case 'split': return `<div class="opt"><label>行 ${o.rows}</label><input type="range" min="1" max="6" value="${o.rows}" data-range="rows"></div>
+      <div class="opt"><label>列 ${o.cols}</label><input type="range" min="1" max="6" value="${o.cols}" data-range="cols"></div>
+      <div class="opt"><label>按</label>${seg('by', [['eq', '均分'], ['px', '像素'], ['pct', '比例']], o.by || 'eq')}</div>
+      <div class="opt"><div class="hint">共 ${o.rows * o.cols} 张，不能整除时最后一行／列补足原图。</div></div>`;
+    case 'measure': return `<div class="swatch"><i style="background:#3d7bd9"></i><div>#3D7BD9<br><span style="color:var(--muted)">rgb(61, 123, 217)</span></div></div>
+      <div class="opt"><label>测量</label><div class="facts"><span>距离</span><span>412 px</span><span>角度</span><span>18.0°</span><span>Δx / Δy</span><span>392 / 127</span></div></div>
+      <div class="opt"><div class="hint">按 C 复制颜色；数值按源像素计算，与缩放无关。</div></div>`;
+    case 'barcode': return `<div class="result">找到 1 个条码<br><span style="color:var(--muted)">EAN-13</span><br><code>6 901234 567892</code></div>
+      <div class="opt"><button class="btn" data-act="toast" data-msg="已复制条码内容">${ic('copy')}复制内容</button></div>`;
+    case 'gif': return `<div class="opt"><label>片段</label><div class="facts"><span>起点</span><span>0:07.6</span><span>终点</span><span>0:27.7</span></div></div>
+      <div class="opt"><label>帧率</label>${seg('fps', [['10', '10'], ['15', '15'], ['24', '24']], o.fps || '15')}</div>
+      <div class="opt"><label>宽度</label>${seg('gw', [['480', '480'], ['720', '720'], ['src', '原始']], o.gw || '720')}</div>`;
+    case 'view': return `<div class="opt"><div class="hint">查看器沿用现有实现；顶部“工具”菜单从同一注册表列出分割、测量、条码，打开后在本弹层内切换。</div></div>`;
+    case 'qr': return `<div class="opt"><label>内容</label><textarea data-text>${o.text || 'https://raishot.app'}</textarea></div>
+      <div class="opt"><label>容错</label>${seg('ecc', [['L', 'L'], ['M', 'M'], ['Q', 'Q'], ['H', 'H']], o.ecc || 'M')}</div>`;
+  }
+  return '';
+}
+function bindStrip() {
+  let from = null;
+  document.querySelectorAll('.chip[draggable=true]').forEach(c => {
+    c.addEventListener('dragstart', e => { from = +c.dataset.k; c.classList.add('drag'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'chip'); });
+    c.addEventListener('dragend', () => c.classList.remove('drag'));
+    c.addEventListener('dragover', e => { e.preventDefault(); c.classList.add('over'); });
+    c.addEventListener('dragleave', () => c.classList.remove('over'));
+    c.addEventListener('drop', e => {
+      e.preventDefault(); e.stopPropagation(); const to = +c.dataset.k; if (from === null || from === to) return;
+      const s = S.popup.src; s.splice(to, 0, s.splice(from, 1)[0]); from = null; render();
+    });
+  });
+}
+
+// —— 事件 ——
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-f],[data-id],[data-tool],[data-act],[data-menu],[data-q],[data-opt],[data-rm]');
+  const inMenu = e.target.closest('#menu');
+  if (!el) { if (!inMenu) closeMenu(); if (e.target.closest('.scroll') && !S.pick && !e.ctrlKey) { S.sel = []; render(); } return; }
+  if (el.dataset.q) { e.stopPropagation(); const id = el.closest('[data-id]').dataset.id; el.dataset.q === 'copy' ? toast('已复制图片') : runTool(el.dataset.q, [id]); return; }
+  if (el.dataset.menu) {
+    if (el.dataset.menu === 'switch') {
+      const m = $('#menu'), r = el.getBoundingClientRect();
+      m.innerHTML = `<div class="mh">同一张源图</div>${TOOLS.filter(t => t.group === 'single').map(t => `<button class="mi ${t.id === S.popup.tool.id ? 'ready' : ''}" data-act="switch" data-to="${t.id}">${ic(t.icon)}<span class="nm">${t.name}</span><span class="st">${t.id === S.popup.tool.id ? '当前' : ''}</span></button>`).join('')}`;
+      m.classList.add('show'); m.style.left = r.left + 'px'; m.style.top = r.bottom + 6 + 'px'; return;
+    }
+    openMenu(el.dataset.menu, el); return;
+  }
+  closeMenu();
+  if (el.dataset.f) { S.filter = el.dataset.f; render(); return; }
+  if (el.dataset.rm !== undefined) { S.popup.src.splice(+el.dataset.rm, 1); render(); return; }
+  if (el.dataset.opt) { S.popup.opts[el.dataset.opt] = el.dataset.v; render(); return; }
+  if (el.dataset.tool) { runTool(el.dataset.tool, S.sel, el.dataset.from === 'menu'); return; }
+  if (el.dataset.id && !el.closest('.chip')) { select(el.dataset.id, e); return; }
+  switch (el.dataset.act) {
+    case 'pick-go': pickGo(); break;
+    case 'pick-cancel': pickCancel(); break;
+    case 'close-popup': S.popup = null; render(); break;
+    case 'add': S.pick = { tool: S.popup.tool, sel: [], add: true }; render(); break;
+    case 'switch': S.popup.tool = T[el.dataset.to]; render(); break;
+    case 'clear': S.sel = []; render(); break;
+    case 'copy': toast('已复制'); break;
+    case 'del': toast(`已删除 ${S.sel.length} 项 · Ctrl+Z 撤销`); S.sel = []; render(); break;
+    case 'open-file': toast('系统文件框只在这里出现；选中的文件同样进入“外部文件”'); break;
+    case 'toast': toast(el.dataset.msg); break;
+  }
+});
+document.addEventListener('dblclick', e => { const c = e.target.closest('.card[data-id]'); if (c && !S.pick) toast(isImg(byId(c.dataset.id)) ? '双击 = 贴出（沿用现有约定）' : '播放（窗内弹层）'); });
+document.addEventListener('input', e => {
+  const k = e.target.dataset.range;
+  if (k) { S.popup.opts[k] = +e.target.value; render(); const n = document.querySelector(`[data-range="${k}"]`); n && n.focus(); }
+  if (e.target.dataset.text !== undefined) { S.popup.opts.text = e.target.value; const st = $('.stage'); st.innerHTML = stage(S.popup.tool, [], S.popup.opts); }
+});
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea')) return;
+  if (e.key === 'Escape') { if ($('#menu').classList.contains('show')) closeMenu(); else if (S.pick) pickCancel(); else if (S.popup) { S.popup = null; render(); } else { S.sel = []; render(); } }
+  if (e.key === 'Enter' && S.pick) pickGo();
+  if (e.key === 'a' && e.ctrlKey && !S.popup) { e.preventDefault(); S.sel = visible().map(x => x.id); render(); }
+  if (e.key === ' ' && !S.popup && !S.pick && S.sel.length === 1) { e.preventDefault(); runTool('view', S.sel); }
+});
+// 外部文件拖入
+let dragDepth = 0;
+const isFileDrag = e => [...(e.dataTransfer?.types || [])].includes('Files');
+addEventListener('dragenter', e => { if (!isFileDrag(e)) return; dragDepth++; $('#dropzone').classList.add('show'); });
+addEventListener('dragleave', e => { if (!isFileDrag(e)) return; if (--dragDepth <= 0) $('#dropzone').classList.remove('show'); });
+addEventListener('dragover', e => { if (isFileDrag(e)) e.preventDefault(); });
+addEventListener('drop', e => {
+  if (!isFileDrag(e)) return; e.preventDefault(); dragDepth = 0; $('#dropzone').classList.remove('show');
+  const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+  if (!files.length) { toast('原型只演示图片文件'); return; }
+  let left = files.length; const ids = [];
+  files.forEach((f, k) => {
+    const url = URL.createObjectURL(f), img = new Image(), id = 'x' + Date.now() + k;
+    img.onload = () => {
+      S.external.push({ id, kind: 'ext', title: f.name, w: img.naturalWidth, h: img.naturalHeight, url, v: 'win', hue: 0 }); ids.push(id);
+      if (--left === 0) { S.sel = ids; S.anchor = ids[0]; S.pick = null; S.popup = null; render(); toast(`已加入 ${ids.length} 个外部文件并选中`); }
+    };
+    img.src = url;
+  });
+});
+function clearExternal() { S.external.forEach(x => URL.revokeObjectURL(x.url)); S.sel = S.sel.filter(id => !S.external.some(x => x.id === id)); S.external = []; render(); }
+// 主题
+document.getElementById('theme').addEventListener('click', e => {
+  const t = e.target.dataset.t; if (!t) return;
+  document.querySelectorAll('#theme button').forEach(b => b.classList.toggle('on', b === e.target));
+  if (t === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
+});
+render();
+</script>
+</body>
+</html>

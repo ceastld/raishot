@@ -1,0 +1,927 @@
+<title>RaiShot 图片翻译</title>
+<style>
+/* 布局：1280×720 逻辑舞台复刻冻结截图；翻译面板与 OCR 面板同位停靠（选区右侧 12 DIP，上沿对齐选区、下沿对齐工具栏），译文层直接画在图上。 */
+:root {
+  /* 与 src/capture_toolbar.rs Palette、design/ocr-panel.html 一致；深色为默认 */
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --selected: #28473d; --accent: #40ce9d; --accent-fg: #0e1d17;
+  --page: #0f1317; --field: #161a20; --skeleton: #2b333d; --gold: #f2b632; --danger: #ff6b7a;
+  --shadow: 0 16px 40px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .3);
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  /* 截图像素、译文取色不随主题变化 */
+  --shot-desk: #0d1014; --shot-win: #161a1f; --shot-side: #12151a; --shot-line: #262c34;
+  --frame: #2f8cff; --ocr-box: rgba(96, 157, 255, .78);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+    --hover: #eaf0f3; --selected: #dcefe7; --accent: #126d4e; --accent-fg: #ffffff;
+    --page: #e8edf1; --field: #ffffff; --skeleton: #e2e8ed; --gold: #b07800; --danger: #c23a4a;
+    --shadow: 0 14px 36px rgba(24, 36, 48, .18), 0 2px 6px rgba(24, 36, 48, .08);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+  --hover: #eaf0f3; --selected: #dcefe7; --accent: #126d4e; --accent-fg: #ffffff;
+  --page: #e8edf1; --field: #ffffff; --skeleton: #e2e8ed; --gold: #b07800; --danger: #c23a4a;
+  --shadow: 0 14px 36px rgba(24, 36, 48, .18), 0 2px 6px rgba(24, 36, 48, .08);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); margin: 0; padding-inline: 16px; padding-block: 18px 48px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, [contenteditable]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.i.s { width: 16px; height: 16px; }
+svg.i.xs { width: 14px; height: 14px; }
+
+.wrapper { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.top h1 { font-size: 17px; font-weight: 600; margin: 0; text-wrap: balance; }
+.top h1 span { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.top .ctrls { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.btn:hover { background: var(--hover); }
+.btn input { accent-color: var(--accent); margin: 0; }
+.hint { color: var(--muted); font-size: 13px; margin: 0; max-width: 110ch; }
+kbd { font: 11px var(--mono); padding: 1px 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--bg); }
+
+/* ---------- 舞台 ---------- */
+.stage-wrap { position: relative; width: 100%; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px var(--border); }
+.stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; overflow: hidden; user-select: none; background: var(--shot-desk); }
+.shot { position: absolute; inset: 0; font-family: "Segoe UI", system-ui, sans-serif; }
+.shot .r { position: absolute; }
+.sl { position: absolute; white-space: nowrap; }
+.ph { position: absolute; height: 10px; border-radius: 5px; background: #222830; }
+
+.mask { position: absolute; box-shadow: 0 0 0 4000px rgba(0, 0, 0, .46); pointer-events: none; }
+.frame { position: absolute; border: 1.5px solid var(--frame); pointer-events: none; }
+.frame i { position: absolute; width: 9px; height: 9px; background: #fff; border: 1.5px solid var(--frame); border-radius: 50%; }
+
+.scan { position: absolute; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity .25s; }
+.scan.on { opacity: 1; }
+.scan::before { content: ""; position: absolute; inset: 0; background: rgba(106, 183, 255, .045); }
+.band { position: absolute; left: 0; right: 0; height: 140px; top: -140px;
+  background: linear-gradient(180deg, rgba(106,183,255,0) 0%, rgba(106,183,255,.10) 60%, rgba(106,183,255,.30) 96%, rgba(190,226,255,.85) 100%); }
+.scan.on .band { animation: sweep 1.1s cubic-bezier(.45, .05, .55, .95) infinite; }
+@keyframes sweep { from { transform: translateY(0); } to { transform: translateY(var(--sweep)); } }
+
+.layer { position: absolute; inset: 0; pointer-events: none; }
+.obox { position: absolute; border: 1px solid var(--ocr-box); border-radius: 2px; background: rgba(96,157,255,.06); opacity: 0; transform: scale(.96); transition: opacity .18s, transform .18s; }
+.obox.rv { opacity: 1; transform: none; }
+.layer.quiet .obox { opacity: 0; transition-duration: .4s; }
+
+/* 译文层：每块 = 取样底色 + 译文；与导出共用同一份数据 */
+.tl { pointer-events: auto; }
+.tp { position: absolute; display: flex; padding: 0 3px; border-radius: 2px; cursor: default; overflow: hidden; }
+.tp .in { width: 100%; overflow-wrap: anywhere; outline: none; }
+.tp.c { align-items: center; justify-content: center; text-align: center; }
+.tp.new { animation: land .32s ease-out; }
+@keyframes land { from { opacity: 0; filter: blur(2px); } to { opacity: 1; filter: none; } }
+.tp.over { overflow: visible; }
+.tp.edit { cursor: text; box-shadow: 0 0 0 1.5px var(--accent), 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); }
+/* 交互描边只是界面层，不进入导出 */
+.hl-box { position: absolute; border-radius: 3px; pointer-events: none; }
+.hl-box.hov { box-shadow: 0 0 0 1px rgba(156, 196, 255, .9); }
+.hl-box.sel { box-shadow: 0 0 0 1.5px var(--accent); }
+.hl-box.pend { border: 1px dashed rgba(156, 196, 255, .75); }
+.hl-box.pend::after { content: ""; position: absolute; right: -7px; top: -7px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(156,196,255,.35); border-top-color: #9cc4ff; background: var(--shot-win); animation: spin .8s linear infinite; }
+.hl-box.fail { border: 1px dashed #ff6b7a; }
+.hl-box.fail::after { content: "!"; position: absolute; right: -8px; top: -8px; width: 15px; height: 15px; border-radius: 50%; background: #ff6b7a; color: #1d0a0d; font: 700 11px/15px var(--ui); text-align: center; }
+.hit { position: absolute; pointer-events: auto; cursor: pointer; }
+
+/* 对比视图分隔线 */
+.divider { position: absolute; width: 0; pointer-events: none; }
+.divider::before { content: ""; position: absolute; left: -1px; top: 0; bottom: 0; width: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+.divider .knob { position: absolute; left: -15px; top: 50%; width: 30px; height: 30px; margin-top: -15px; border-radius: 50%; background: #fff; color: #1d222a; display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.45); pointer-events: auto; cursor: ew-resize; touch-action: none; }
+.vlabel { position: absolute; font: 600 11px var(--ui); color: #fff; background: rgba(20,24,30,.78); padding: 2px 8px; border-radius: 4px; pointer-events: none; }
+
+.pop { position: absolute; max-width: 380px; padding: 7px 10px; border-radius: 7px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12.5px; line-height: 1.5; color: var(--fg); pointer-events: none; z-index: 5; }
+.pop .pk { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+
+/* 选中块旁的块操作条（同 OCR 标记条位置规则） */
+.mini { position: absolute; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--fg); z-index: 6; }
+.mini button { min-width: 30px; height: 28px; border-radius: 5px; display: grid; place-items: center; font: 600 12px var(--ui); padding: 0 4px; }
+.mini button:hover { background: var(--hover); }
+.mini button.on { background: var(--selected); color: var(--accent); }
+.mini .dv { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
+.mini .sz { font: 12px var(--mono); color: var(--muted); min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* 截图工具栏（简化复刻） */
+.toolbar { position: absolute; display: flex; align-items: center; gap: 2px; padding: 5px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--fg); z-index: 3; }
+.toolbar .tb { width: 34px; height: 34px; border-radius: 6px; display: grid; place-items: center; color: var(--fg); position: relative; }
+.toolbar .tb:hover { background: var(--hover); }
+.toolbar .tb.on { background: var(--selected); color: var(--accent); }
+.toolbar .tb.ok { background: var(--accent); color: var(--accent-fg); }
+.toolbar .tb.new::after { content: ""; position: absolute; right: 5px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+.toolbar .dv { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+
+/* ---------- 翻译面板 ---------- */
+.panel { position: absolute; display: flex; flex-direction: column; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--fg); overflow: hidden; z-index: 4;
+  opacity: 0; transform: translateX(14px); pointer-events: none; transition: opacity .16s ease-out, transform .2s cubic-bezier(.2, .8, .2, 1); }
+.panel.open { opacity: 1; transform: none; pointer-events: auto; }
+.grip-bar { height: 12px; display: grid; place-items: center; cursor: grab; flex: none; }
+.grip-bar::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: var(--border); }
+.p-head { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; height: 36px; flex: none; }
+.p-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; }
+.p-title b { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.p-meta { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.ib { width: 30px; height: 30px; border-radius: 6px; display: grid; place-items: center; color: var(--fg); }
+.ib:hover { background: var(--hover); }
+.progress { height: 2px; flex: none; position: relative; }
+.progress i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); transition: width .15s linear, opacity .3s; }
+.langbar { margin: 6px 12px 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; flex: none; }
+.lang { height: 32px; border-radius: 7px; border: 1px solid var(--border); background: var(--field); padding: 0 10px; display: flex; align-items: center; gap: 6px; font-size: 13px; min-width: 0; }
+.lang span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lang small { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.lang.src { cursor: default; }
+.lang.tgt:hover { background: var(--hover); }
+.lang.tgt svg { margin-left: auto; color: var(--muted); }
+.langbar .arrow { color: var(--muted); }
+.seg { margin: 8px 12px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px; border-radius: 8px; background: var(--hover); flex: none; }
+.seg button { height: 26px; border-radius: 6px; font-size: 13px; color: var(--muted); }
+.seg button.on { background: var(--bg); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.seg button[disabled] { opacity: .45; pointer-events: none; }
+.banner { margin: 8px 12px 0; padding: 7px 10px; border-radius: 7px; background: var(--hover); font-size: 12px; color: var(--muted); flex: none; }
+
+.body { flex: 1; min-height: 0; overflow: auto; padding: 8px 8px 10px; scrollbar-width: thin; display: flex; flex-direction: column; gap: 2px; }
+.blk { padding: 7px 9px 8px; border-radius: 7px; position: relative; cursor: pointer; border: 1px solid transparent; }
+.blk:hover, .blk.hl { background: var(--hover); }
+.blk.sel { background: var(--selected); }
+.blk .tr { font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere; outline: none; border-radius: 4px; cursor: text; }
+.blk .tr:focus { background: var(--field); box-shadow: 0 0 0 1px var(--border); padding: 0 4px; margin: 0 -4px; }
+.blk .src { font-size: 12px; line-height: 1.5; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.blk.sel .src, .blk.hl .src { -webkit-line-clamp: unset; }
+.blk .src.mono { font-family: var(--mono); font-size: 11.5px; }
+.blk .st { display: flex; align-items: center; gap: 6px; margin-top: 5px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+.blk .st .tag { padding: 1px 6px; border-radius: 4px; background: var(--hover); color: var(--muted); }
+.blk.sel .st .tag, .blk:hover .st .tag { background: var(--bg); }
+.blk .st .tag.err { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.blk .st .tag.warn { color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
+.blk .st .tag.ok { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.blk .st .lnk { color: var(--accent); font-size: 11.5px; }
+.blk .st .lnk:hover { text-decoration: underline; }
+.blk.skip .tr { display: none; }
+.sk { display: flex; flex-direction: column; gap: 7px; padding: 4px 0 2px; }
+.sk i, .skel i { display: block; height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--skeleton) 0%, var(--hover) 50%, var(--skeleton) 100%); background-size: 200% 100%; animation: shimmer 1.1s linear infinite; }
+.skel { padding: 8px 10px; display: flex; flex-direction: column; gap: 11px; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.spin { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.body.enter .blk { animation: rise .24s ease-out both; }
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+
+.privacy { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--border); }
+.privacy b { font-weight: 500; color: var(--fg); font-family: var(--mono); font-size: 11px; }
+.p-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px 10px 12px; border-top: 1px solid var(--border); }
+.p-foot .sp { flex: 1; }
+.primary { height: 32px; padding: 0 12px 0 14px; border-radius: 7px; background: var(--accent); color: var(--accent-fg); font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.primary kbd { background: transparent; border-color: color-mix(in srgb, var(--accent-fg) 35%, transparent); color: inherit; }
+.primary:hover { filter: brightness(1.08); }
+.secondary { height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--border); font-size: 13px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.secondary:hover { background: var(--hover); }
+.primary[disabled], .secondary[disabled] { opacity: .45; pointer-events: none; }
+.menu { position: absolute; padding: 4px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); z-index: 7; min-width: 200px; }
+.menu button { width: 100%; text-align: left; height: 30px; padding: 0 10px; border-radius: 5px; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.menu button:hover { background: var(--hover); }
+.menu button.on::after { content: "✓"; color: var(--accent); }
+.menu .sep { height: 1px; background: var(--border); margin: 4px 6px; }
+.menu small { color: var(--muted); font-size: 11.5px; }
+.toast { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 6px 12px; border-radius: 7px; background: var(--fg); color: var(--bg); font-size: 12.5px; white-space: nowrap; box-shadow: var(--shadow); z-index: 8; pointer-events: none; animation: rise .18s ease-out; }
+
+/* ---------- 设计说明 ---------- */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 6px; }
+.note-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.note-card.full { grid-column: 1 / -1; }
+.note-card h2 { font-size: 14px; margin: 0 0 8px; font-weight: 600; text-wrap: balance; }
+.note-card p, .note-card li { font-size: 13px; max-width: 76ch; }
+.note-card p { margin: 0 0 6px; }
+.note-card ul, .note-card ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.note-card code { font: 12px var(--mono); background: var(--hover); padding: 1px 4px; border-radius: 4px; }
+.timeline { font-variant-numeric: tabular-nums; }
+.timeline b { font-family: var(--mono); font-weight: 500; color: var(--accent); margin-right: 6px; }
+.map-wrap { overflow-x: auto; }
+.map { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 600px; }
+.map th, .map td { border: 1px solid var(--border); padding: 6px 9px; text-align: left; vertical-align: top; }
+.map th { background: var(--hover); font-weight: 600; white-space: nowrap; }
+.map td:first-child { white-space: nowrap; }
+.q { color: var(--gold); }
+@media (prefers-reduced-motion: reduce) {
+  .band { display: none; }
+  .tp.new, .body.enter .blk, .toast { animation: none; }
+  .obox, .panel { transition-duration: .01s; }
+}
+</style>
+
+<div class="wrapper">
+  <header class="top">
+    <h1>RaiShot 图片翻译<span>可交互原型</span></h1>
+    <div class="ctrls">
+      <button class="btn" id="replay" type="button"><svg class="i s" viewBox="0 0 24 24"><path d="M20 8a8 8 0 0 0-14-2L3 9m0-5v5h5M4 16a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/></svg>重新开始</button>
+      <label class="btn" for="simFail"><input type="checkbox" id="simFail">模拟一段请求超时</label>
+      <button class="btn" id="themeBtn" type="button">主题：跟随系统</button>
+    </div>
+  </header>
+  <p class="hint">点工具栏的“翻译”按钮（或按 <kbd>Y</kbd>）开始。悬停图上译文看原文；单击选中块出现操作条，双击直接在图上改译文。面板里可切换目标语言、对比原图、复制译文或含译文的图片。<kbd>Esc</kbd> 逐级退出。</p>
+
+  <div class="stage-wrap" id="wrap">
+    <div class="stage" id="stage">
+      <div class="shot" id="shot"></div>
+      <div class="layer" id="trLayer"></div>
+      <div class="mask" id="mask"></div>
+      <div class="scan" id="scan"><div class="band"></div></div>
+      <div class="layer" id="ocrLayer"></div>
+      <div class="layer" id="uiLayer"></div>
+      <div class="frame" id="frame"><i style="left:-5px;top:-5px"></i><i style="left:calc(50% - 5px);top:-5px"></i><i style="right:-5px;top:-5px"></i><i style="left:-5px;top:calc(50% - 5px)"></i><i style="right:-5px;top:calc(50% - 5px)"></i><i style="left:-5px;bottom:-5px"></i><i style="left:calc(50% - 5px);bottom:-5px"></i><i style="right:-5px;bottom:-5px"></i></div>
+      <div class="divider" id="divider" hidden><button class="knob" id="knob" type="button" title="拖动比较原图与译文"><svg class="i xs" viewBox="0 0 24 24"><path d="m9 6-6 6 6 6M15 6l6 6-6 6"/></svg></button></div>
+      <div class="vlabel" id="vlL" hidden>原图</div>
+      <div class="vlabel" id="vlR" hidden>译文</div>
+      <div class="pop" id="pop" hidden></div>
+      <div class="mini" id="mini" hidden></div>
+      <div class="toolbar" id="toolbar"></div>
+
+      <aside class="panel" id="panel" aria-label="图片翻译">
+        <div class="grip-bar" title="拖动面板"></div>
+        <div class="p-head">
+          <div class="p-title"><b>图片翻译</b><span class="p-meta" id="meta"></span></div>
+          <button class="ib" id="btnMore" type="button" title="更多"><svg class="i s" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></g></svg></button>
+          <button class="ib" id="btnClose" type="button" title="关闭面板  Esc"><svg class="i s" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </div>
+        <div class="progress"><i id="prog"></i></div>
+        <div class="langbar">
+          <div class="lang src" title="由识别文字自动判断"><span id="srcName">英语</span><small>自动检测</small></div>
+          <svg class="i s arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+          <button class="lang tgt" id="tgtBtn" type="button"><span id="tgtName">简体中文</span><svg class="i xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
+        <div class="seg" id="seg" role="tablist">
+          <button type="button" data-v="tr" class="on" role="tab">译文</button>
+          <button type="button" data-v="orig" role="tab">原图</button>
+          <button type="button" data-v="cmp" role="tab">对比</button>
+        </div>
+        <div id="bannerSlot"></div>
+        <div class="body" id="body"></div>
+        <div class="privacy"><svg class="i xs" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>只发送识别出的文字，不上传图片 · <b>index-translate</b></div>
+        <div class="p-foot">
+          <button class="secondary" id="copyText" type="button">复制译文</button>
+          <span class="sp"></span>
+          <button class="primary" id="copyImg" type="button">复制图片<kbd>Enter</kbd></button>
+        </div>
+        <div class="menu" id="menu" style="right:8px;top:48px" hidden>
+          <button type="button" data-act="retry">重新翻译全部</button>
+          <button type="button" data-act="annot">转为普通标注</button>
+          <button type="button" data-act="pin">贴图（保留可编辑译文）<small>T</small></button>
+          <button type="button" data-act="copysrc">复制原文</button>
+          <div class="sep"></div>
+          <button type="button" data-act="settings">翻译设置…</button>
+          <button type="button" data-act="clear">清除译文层</button>
+        </div>
+        <div class="menu" id="langMenu" style="right:12px;top:92px;min-width:178px" hidden></div>
+        <div id="toastSlot"></div>
+      </aside>
+    </div>
+  </div>
+
+  <section class="notes">
+    <div class="note-card">
+      <h2>流程：本机识别 + 只发文字</h2>
+      <ol>
+        <li>复用当前来源的 OCR 结果；没有时先走现有 ppocr 识别和扫描动效，不重复识别。</li>
+        <li>按段落合并规则把识别行组成“翻译块”；标题、列表项、按钮、提示框各成一块。代码、网址、纯数字和已是目标语言的块跳过。</li>
+        <li>逐块请求现有 OpenAI 兼容接口（设置 ▸ 翻译的端点与模型），并发 3、单块超时 20 秒；按阅读顺序落图，先完成的先显示。</li>
+        <li>请求里只有文字和目标语言；图片、剪贴板不离开本机。会话内按“原文 + 目标语言”缓存，切回同一语言不再请求，不写磁盘。</li>
+      </ol>
+    </div>
+    <div class="note-card">
+      <h2>译文层：矢量、可编辑、所见即所导</h2>
+      <ul>
+        <li>译文层是文档里的一个组，每块记录原文、原文四角、取样底色、文字色、字号（自动或手动）和状态；第一次出译文时整体作为一条撤销记录加入。</li>
+        <li>预览和复制、保存、贴图共用同一份数据，导出时才渲染成像素；描边、旋转圈、操作条和面板都不进入导出。</li>
+        <li>与标注一样用全屏坐标：移动或重选选区不平移、不清除译文；选区外的块不导出。</li>
+        <li>“转为普通标注”把每块拆成填充矩形 + 文字标注，之后用普通工具编辑，一次撤销。</li>
+        <li>取样颜色来自截图像素，不随浅色／深色主题变化。</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h2>取色与排版</h2>
+      <ul>
+        <li>底色：识别行外扩 2 px 的环带取中位色；环带方差大（渐变、照片）时改用周边像素的平滑填补，面板标“复杂背景”。</li>
+        <li>文字色：块内与底色差异最大的主色簇；粗细由笔画宽度判断，对齐由各行左右边距判断（按钮居中）。</li>
+        <li>字号：从原行高推算，放不下时每次缩 0.5 px，最小 9 px；仍放不下则向下延伸并标“超出原区域”。</li>
+        <li>倾斜文字沿原四角放置；竖排文字第一版保持原样不覆盖，面板说明原因。</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h2>动效时间线</h2>
+      <ul class="timeline">
+        <li><b>0 ms</b>点“翻译”：按钮进入选中态，面板从右侧淡入并显示骨架。</li>
+        <li><b>识别</b>无现成 OCR 时扫描光带扫过，识别行框依次淡入。</li>
+        <li><b>翻译</b>每块显示虚线框与小转圈，原文保持可见；完成一块就以 320 ms 淡入译文，面板对应卡片同时出字。</li>
+        <li><b>完成</b>行框淡出，标题栏显示“段数 · 用时”，提示跳过和失败数量。</li>
+        <li>识别或翻译中按 Esc 立即取消请求，撤回本次未完成的译文层，不留残块。</li>
+      </ul>
+    </div>
+    <div class="note-card full">
+      <h2>入口、按键与面板行为</h2>
+      <div class="map-wrap">
+        <table class="map">
+          <tr><th>位置</th><th>入口</th><th>说明</th></tr>
+          <tr><td>截图工具栏</td><td>OCR 右侧新增“翻译”按钮；按 <kbd>Y</kbd></td><td><span class="q">Y 当前在“已有选区”表中未占用，待核贴图与图片编辑键位。</span>接口未配置时按钮置灰，提示“在 设置 ▸ 翻译 配置接口”。</td></tr>
+          <tr><td>OCR 结果面板</td><td>“更多” ▸ 翻译图片</td><td>直接用当前识别结果，面板原位切换为翻译面板；原“翻译所选或全文”（纯文本）保留。</td></tr>
+          <tr><td>贴图 / 图片编辑</td><td>右键菜单“图片翻译”；<kbd>Y</kbd></td><td>译文层作为贴图矢量文档的一部分，关闭恢复、工作区和副本保留；图片编辑同理。</td></tr>
+          <tr><td>面板</td><td>目标语言下拉</td><td>默认取设置中的 <code>translateTarget</code>；这里改动只作用本次，菜单里可“设为默认”。切换后只重新翻译，不重新识别；已手改的块会先在面板内确认是否覆盖。</td></tr>
+          <tr><td>面板</td><td>译文 / 原图 / 对比</td><td>只改变查看方式，不改文档；导出始终按译文层（被单块“显示原文”的除外）。</td></tr>
+          <tr><td>图上</td><td>悬停 / 单击 / 双击</td><td>悬停显示原文；单击选中并出操作条（编辑、显示原文、重译、字号、复制）；双击就地编辑，Enter 提交、Shift+Enter 换行、Esc 放弃。每次提交一条撤销记录。</td></tr>
+          <tr><td>按键</td><td><kbd>Esc</kbd></td><td>编辑中 → 放弃编辑；选中块 → 取消选中；原图／对比 → 回到译文；面板打开 → 关闭面板（译文层保留，可 Ctrl+Z 撤回）。</td></tr>
+          <tr><td>按键</td><td><kbd>Enter</kbd> / <kbd>Ctrl+C</kbd></td><td>复制含译文的图片并结束截图，与普通截图一致；“复制译文”按阅读顺序复制纯文本。</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="note-card full">
+      <h2>待定问题</h2>
+      <ul>
+        <li>中译英、德语等变长语言：缩字到 9 px 仍放不下时，是向下延伸、向右延伸还是缩行距，需要用真实截图样本决定。</li>
+        <li>接口目前一次一段文本；若改为批量请求，需要可靠的分段标记，避免模型合并或丢段。</li>
+        <li>复杂背景的填补质量（渐变按钮、照片上的字幕）是否需要单独的修复模型，还是先只提供“半透明底”选项。</li>
+        <li>局部重识别改变某行原文后，对应块标为“原文已变”并提示重译，还是自动重译。</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage'), wrap = $('wrap'), shot = $('shot');
+  const SEL = { x: 120, y: 60, w: 700, h: 500 };
+  const PANEL = { x: SEL.x + SEL.w + 12, y: SEL.y, w: 340 };
+  const LANGS = [
+    { id: 'auto', name: '自动（中英互译）', eff: 'zh' },
+    { id: 'zh', name: '简体中文' },
+    { id: 'en', name: 'English' },
+    { id: 'ja', name: '日本語' },
+  ];
+  const SHOT_FONT = '"Segoe UI", system-ui, sans-serif';
+
+  // 截图中的文字块（固定像素）。tr 为模拟译文。
+  const BLOCKS = [
+    { id: 'crumb', kind: '导航', lines: [[150, 80, 'Docs / Export / Presets']], size: 12, lh: 16, color: '#7c8895', bg: '#161a1f',
+      tr: { zh: '文档 / 导出 / 预设', ja: 'ドキュメント / エクスポート / プリセット' } },
+    { id: 'h1', kind: '标题', lines: [[150, 100, 'Working with export presets']], size: 26, lh: 36, weight: 650, color: '#e6ebf0', bg: '#161a1f',
+      tr: { zh: '使用导出预设', ja: '書き出しプリセットの使い方' } },
+    { id: 'p1', kind: '段落', lines: [[150, 150, 'Export presets let you save the size, format and color profile'], [150, 173, 'you use most often. Presets sync across devices when you are'], [150, 196, 'signed in, and can be shared with your team as a single file.']], size: 15, lh: 23, color: '#bec7d0', bg: '#161a1f',
+      tr: { zh: '导出预设可以保存你最常用的尺寸、格式和色彩配置文件。登录后，预设会在各设备间同步，也可以作为单个文件分享给团队。',
+            ja: '書き出しプリセットには、よく使うサイズ、形式、カラープロファイルを保存できます。サインイン中はデバイス間で同期され、1 つのファイルとしてチームと共有することもできます。' } },
+    { id: 'h2', kind: '标题', lines: [[150, 234, 'Create a preset']], size: 18, lh: 26, weight: 600, color: '#e6ebf0', bg: '#161a1f',
+      tr: { zh: '创建预设', ja: 'プリセットを作成する' } },
+    { id: 'li1', kind: '列表', lines: [[150, 270, '1. Open the Export panel and choose Save as preset.']], size: 15, lh: 22, color: '#bec7d0', bg: '#161a1f',
+      tr: { zh: '1. 打开“导出”面板，选择“另存为预设”。', ja: '1. 書き出しパネルを開き、「プリセットとして保存」を選びます。' } },
+    { id: 'li2', kind: '列表', lines: [[150, 296, '2. Give the preset a short name, such as Web 2x.']], size: 15, lh: 22, color: '#bec7d0', bg: '#161a1f',
+      tr: { zh: '2. 为预设起一个简短的名称，例如 Web 2x。', ja: '2. プリセットに短い名前を付けます（例：Web 2x）。' } },
+    { id: 'li3', kind: '列表', lines: [[150, 322, '3. Pick a color profile. sRGB works for most screens.']], size: 15, lh: 22, color: '#bec7d0', bg: '#161a1f',
+      tr: { zh: '3. 选择色彩配置文件。sRGB 适用于大多数屏幕。', ja: '3. カラープロファイルを選びます。ほとんどの画面には sRGB が適しています。' } },
+    { id: 'note', kind: '提示框', lines: [[168, 362, 'Note: Presets created in version 3 cannot be opened in older'], [168, 384, 'releases. Export them again after you update.']], size: 14, lh: 22, color: '#e9d8a6', bg: '#2a2415',
+      tr: { zh: '注意：在版本 3 中创建的预设无法在旧版本中打开。更新后请重新导出。', ja: '注意：バージョン 3 で作成したプリセットは旧バージョンでは開けません。アップデート後にもう一度書き出してください。' } },
+    { id: 'code', kind: '代码', lines: [[168, 441, '$ lumen export --preset "Web 2x" ./shots/*.png']], size: 13.5, lh: 18, mono: true, color: '#9fd3a8', bg: '#0f1216', skip: '代码，保持原样' },
+    { id: 'btn1', kind: '按钮', btn: { x: 150, y: 494, w: 118, h: 34 }, lines: [[0, 0, 'Save preset']], size: 14, lh: 18, weight: 600, color: '#ffffff', bg: '#2f6fed', align: 'center',
+      tr: { zh: '保存预设', ja: 'プリセットを保存' } },
+    { id: 'btn2', kind: '按钮', btn: { x: 280, y: 494, w: 86, h: 34 }, lines: [[0, 0, 'Cancel']], size: 14, lh: 18, color: '#cfd8e0', bg: '#161a1f', align: 'center',
+      tr: { zh: '取消', ja: 'キャンセル' } },
+  ];
+  const byId = Object.fromEntries(BLOCKS.map((b) => [b.id, b]));
+
+  const st = {
+    phase: 'idle', ocrDone: false, target: 'auto', view: 'tr', sel: null, hov: null, editing: null,
+    res: {}, run: 0, t0: 0, cmpX: SEL.x + SEL.w / 2, panelOpen: false, failedOnce: false,
+  };
+  const effTarget = () => (LANGS.find((l) => l.id === st.target).eff || st.target);
+
+  // ---------- 截图 ----------
+  function rect(x, y, w, h, css) { const d = document.createElement('div'); d.className = 'r'; Object.assign(d.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' }, css || {}); shot.appendChild(d); return d; }
+  function buildShot() {
+    rect(40, 24, 1200, 676, { background: 'var(--shot-win)', borderRadius: '8px', border: '1px solid var(--shot-line)' });
+    rect(40, 24, 64, 676, { background: 'var(--shot-side)', borderRight: '1px solid var(--shot-line)', borderRadius: '8px 0 0 8px' });
+    for (let i = 0; i < 6; i++) rect(60, 48 + i * 44, 24, 24, { background: '#232931', borderRadius: '6px' });
+    // 右侧目录占位（多被面板遮住）
+    for (let i = 0; i < 7; i++) { const p = rect(880, 104 + i * 26, 120 + (i * 37) % 90, 10); p.className = 'ph'; }
+    rect(150, 350, 622, 60, { background: '#2a2415', borderRadius: '6px', borderLeft: '3px solid #c99a2e' });
+    rect(150, 430, 622, 40, { background: '#0f1216', borderRadius: '6px', border: '1px solid #262c34' });
+    rect(150, 494, 118, 34, { background: '#2f6fed', borderRadius: '6px' });
+    rect(280, 494, 86, 34, { background: '#161a1f', borderRadius: '6px', border: '1px solid #3a434e' });
+    rect(150, 224, 622, 1, { background: 'var(--shot-line)' });
+    for (const b of BLOCKS) {
+      b.lineRects = [];
+      for (const [x, y, t] of b.lines) {
+        const s = document.createElement('span'); s.className = 'sl'; s.textContent = t;
+        Object.assign(s.style, { fontSize: b.size + 'px', lineHeight: b.lh + 'px', color: b.color, fontWeight: b.weight || 400, fontFamily: b.mono ? 'var(--mono)' : SHOT_FONT });
+        shot.appendChild(s);
+        const w = s.offsetWidth;
+        let lx = x, ly = y;
+        if (b.btn) { lx = Math.round(b.btn.x + (b.btn.w - w) / 2); ly = Math.round(b.btn.y + (b.btn.h - b.lh) / 2); }
+        s.style.left = lx + 'px'; s.style.top = ly + 'px';
+        b.lineRects.push({ x: lx, y: ly, w, h: b.lh });
+      }
+      if (b.btn) b.rect = { x: b.btn.x + 4, y: b.btn.y + 4, w: b.btn.w - 8, h: b.btn.h - 8 };
+      else {
+        const x0 = Math.min(...b.lineRects.map((r) => r.x)), y0 = b.lineRects[0].y;
+        const x1 = Math.max(...b.lineRects.map((r) => r.x + r.w)), y1 = b.lineRects[b.lineRects.length - 1].y + b.lh;
+        b.rect = { x: x0 - 3, y: y0, w: x1 - x0 + 6, h: y1 - y0 };
+      }
+    }
+  }
+
+  // ---------- 舞台布局 ----------
+  function place(el, r) { Object.assign(el.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' }); }
+  function layoutStatic() {
+    place($('mask'), SEL); place($('frame'), SEL);
+    place($('scan'), SEL); $('scan').style.setProperty('--sweep', SEL.h + 140 + 'px');
+    const tb = $('toolbar');
+    tb.style.top = SEL.y + SEL.h + 10 + 'px';
+    tb.style.left = SEL.x + SEL.w - tb.offsetWidth + 'px';
+    const tbBottom = SEL.y + SEL.h + 10 + tb.offsetHeight;
+    place($('panel'), { x: PANEL.x, y: PANEL.y, w: PANEL.w, h: Math.max(360, tbBottom - PANEL.y) });
+    const d = $('divider'); d.style.top = SEL.y + 'px'; d.style.height = SEL.h + 'px';
+  }
+  function fit() {
+    const s = wrap.clientWidth / 1280;
+    stage.style.transform = `scale(${s})`;
+    wrap.style.height = 720 * s + 'px';
+    st.scale = s;
+  }
+
+  // ---------- 工具栏 ----------
+  const IC = {
+    rect: '<rect x="4" y="5" width="16" height="14" rx="1.5"/>',
+    arrow: '<path d="M5 19 19 5m0 0h-8m8 0v8"/>',
+    pen: '<path d="m4 20 1.2-5L15.7 4.5a2.1 2.1 0 0 1 3 0l.8.8a2.1 2.1 0 0 1 0 3L9 18.8 4 20Z"/>',
+    text: '<path d="M5 7V5h14v2M12 5v14m-3 0h6"/>',
+    mosaic: '<path d="M4 4h5v5H4zM15 4h5v5h-5zM9.5 9.5h5v5h-5zM4 15h5v5H4zM15 15h5v5h-5z"/>',
+    ocr: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 9h8M8 12h8M8 15h5"/>',
+    tr: '<path d="M3 5h9M7.5 3v2M10 5c-.8 3.6-3.3 6.4-6.5 7.8M5.5 8.2c1.3 2 3.2 3.4 5.5 4.3"/><path d="m12 21 4.5-10 4.5 10m-7.4-3.2h5.8"/>',
+    pin: '<path d="M9 4h6l-1 5 3 3H7l3-3-1-5Zm3 8v8"/>',
+    save: '<path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/>',
+    x: '<path d="m6 6 12 12M18 6 6 18"/>',
+    ok: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+    edit: '<path d="m4 20 1.2-5L15.7 4.5a2.1 2.1 0 0 1 3 0l.8.8a2.1 2.1 0 0 1 0 3L9 18.8 4 20Zm10-13 3 3"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    retry: '<path d="M20 8a8 8 0 0 0-14-2L3 9m0-5v5h5M4 16a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  };
+  const svg = (k, c = 'i') => `<svg class="${c}" viewBox="0 0 24 24">${IC[k]}</svg>`;
+  function buildToolbar() {
+    const items = [['rect', '矩形'], ['arrow', '箭头'], ['pen', '画笔'], ['text', '文字'], ['mosaic', '马赛克'], '|', ['ocr', '文字识别  R'], ['tr', '图片翻译  Y', 'trBtn'], '|', ['pin', '贴图  T'], ['save', '保存  Ctrl+S'], ['x', '取消  Esc'], ['ok', '复制  Enter', null, 'ok']];
+    $('toolbar').innerHTML = items.map((it) => it === '|' ? '<span class="dv"></span>' :
+      `<button class="tb ${it[3] || ''} ${it[2] === 'trBtn' ? 'new' : ''}" type="button" title="${it[1]}" ${it[2] ? `id="${it[2]}"` : ''}>${svg(it[0])}</button>`).join('');
+    $('trBtn').onclick = () => (st.phase === 'idle' ? start() : togglePanel(true));
+  }
+
+  // ---------- 流程 ----------
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function start() {
+    const run = ++st.run;
+    st.phase = 'ocr'; st.t0 = performance.now(); st.elapsed = null; st.sel = null; st.editing = null; st.view = 'tr';
+    $('trBtn').classList.add('on'); $('trBtn').classList.remove('new');
+    togglePanel(true); renderAll();
+    if (!st.ocrDone) {
+      $('scan').classList.add('on');
+      const lay = $('ocrLayer'); lay.classList.remove('quiet'); lay.innerHTML = '';
+      const boxes = [];
+      for (const b of BLOCKS) for (const r of b.lineRects) {
+        const d = document.createElement('div'); d.className = 'obox'; place(d, { x: r.x - 2, y: r.y + 1, w: r.w + 4, h: r.h - 2 }); lay.appendChild(d); boxes.push(d);
+      }
+      await sleep(350);
+      for (const d of boxes) { if (run !== st.run) return; d.classList.add('rv'); await sleep(55); }
+      await sleep(250);
+      if (run !== st.run) return;
+      $('scan').classList.remove('on');
+      st.ocrDone = true;
+    }
+    translateAll(run);
+  }
+
+  async function translateAll(run, only) {
+    st.phase = 'translating';
+    const tgt = effTarget();
+    const list = BLOCKS.filter((b) => !only || only.includes(b.id));
+    for (const b of list) {
+      if (b.skip) st.res[b.id] = { status: 'skip' };
+      else if (tgt === 'en') st.res[b.id] = { status: 'same' };
+      else st.res[b.id] = { status: 'pending', prev: st.res[b.id] };
+    }
+    renderAll(true);
+    const queue = list.filter((b) => st.res[b.id].status === 'pending');
+    let i = 0;
+    const worker = async () => {
+      while (i < queue.length) {
+        const b = queue[i++];
+        await sleep(260 + Math.random() * 520 + (b.id === 'p1' || b.id === 'note' ? 350 : 0));
+        if (run !== st.run) return;
+        if ($('simFail').checked && b.id === 'li3' && !st.failedOnce) {
+          st.failedOnce = true;
+          st.res[b.id] = { status: 'fail', err: '请求超时（20 秒）' };
+        } else {
+          st.res[b.id] = { status: 'done', text: b.tr[tgt], fresh: true, size: null, hidden: false };
+        }
+        renderBlock(b.id); renderProgress();
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    if (run !== st.run) return;
+    st.phase = 'done';
+    $('ocrLayer').classList.add('quiet');
+    renderAll();
+    const done = BLOCKS.filter((b) => st.res[b.id].status === 'done').length;
+    const skip = BLOCKS.filter((b) => st.res[b.id].status === 'skip').length;
+    const fail = BLOCKS.filter((b) => st.res[b.id].status === 'fail').length;
+    if (tgt === 'en') toast('原文已是英语，没有需要翻译的段落');
+    else if (!only) toast(`已翻译 ${done} 段` + (skip ? `，跳过 ${skip} 段代码` : '') + (fail ? `，${fail} 段失败` : ''));
+  }
+
+  function cancel() {
+    st.run++; st.phase = st.ocrDone ? 'done' : 'idle';
+    for (const b of BLOCKS) { const r = st.res[b.id]; if (r && r.status === 'pending') st.res[b.id] = r.prev || undefined; }
+    $('scan').classList.remove('on'); $('ocrLayer').classList.add('quiet');
+    if (!st.ocrDone) { $('ocrLayer').innerHTML = ''; togglePanel(false); $('trBtn').classList.remove('on'); }
+    renderAll(); toast('已取消翻译');
+  }
+
+  // ---------- 译文层 ----------
+  function fitText(box, inner, b, r) {
+    const max = r.size || b.size;
+    let s = max;
+    const lhr = b.lh / b.size;
+    const apply = () => { inner.style.fontSize = s + 'px'; inner.style.lineHeight = (b.btn ? 1.2 : lhr) * s + 'px'; };
+    apply();
+    if (r.size) { r.fit = s; r.overflow = inner.scrollHeight > box.clientHeight + 1; return; }
+    while ((inner.scrollHeight > box.clientHeight + 1 || inner.scrollWidth > box.clientWidth + 1) && s > 9) { s -= 0.5; apply(); }
+    r.fit = s; r.overflow = inner.scrollHeight > box.clientHeight + 1;
+    if (r.overflow) { box.classList.add('over'); box.style.height = 'auto'; box.style.minHeight = b.rect.h + 'px'; }
+  }
+  function renderPatch(id) {
+    const b = byId[id], r = st.res[id];
+    const old = $('trLayer').querySelector(`[data-id="${id}"]`); if (old) old.remove();
+    if (!r || r.status !== 'done' || r.hidden) return;
+    const d = document.createElement('div');
+    d.className = 'tp' + (b.align === 'center' ? ' c' : '') + (r.fresh ? ' new' : '');
+    d.dataset.id = id; place(d, b.rect);
+    d.style.background = b.bg;
+    const inner = document.createElement('div'); inner.className = 'in';
+    inner.textContent = r.text;
+    Object.assign(inner.style, { color: b.color, fontWeight: b.weight || 400, fontFamily: 'var(--ui)' });
+    d.appendChild(inner); $('trLayer').appendChild(d);
+    fitText(d, inner, b, r);
+    r.fresh = false;
+    if (st.editing === id) startEditDom(d, inner);
+  }
+  function renderUi() {
+    const ui = $('uiLayer'); ui.innerHTML = '';
+    if (st.view === 'orig' || st.phase === 'idle' || st.phase === 'ocr') { renderMini(); return; }
+    for (const b of BLOCKS) {
+      const r = st.res[b.id]; if (!r) continue;
+      const cls = r.status === 'pending' ? 'pend' : r.status === 'fail' ? 'fail' : st.sel === b.id ? 'sel' : st.hov === b.id ? 'hov' : '';
+      const patch = $('trLayer').querySelector(`[data-id="${b.id}"]`);
+      const rr = patch ? { x: b.rect.x, y: b.rect.y, w: b.rect.w, h: patch.offsetHeight } : b.rect;
+      if (cls) { const d = document.createElement('div'); d.className = 'hl-box ' + cls; place(d, { x: rr.x - 2, y: rr.y - 2, w: rr.w + 4, h: rr.h + 4 }); ui.appendChild(d); }
+      if (r.status === 'skip' || r.status === 'same') continue;
+      const h = document.createElement('div'); h.className = 'hit'; place(h, rr); h.dataset.id = b.id;
+      if (st.editing === b.id) h.style.pointerEvents = 'none';
+      h.onmouseenter = () => setHov(b.id, true);
+      h.onmouseleave = () => setHov(null, true);
+      h.onclick = (e) => { e.stopPropagation(); select(b.id, true); };
+      h.ondblclick = (e) => { e.stopPropagation(); if (r.status === 'done' && !r.hidden) startEdit(b.id); };
+      ui.appendChild(h);
+    }
+    renderMini();
+  }
+  function setHov(id, fromImage) {
+    st.hov = id;
+    document.querySelectorAll('.blk').forEach((c) => c.classList.toggle('hl', c.dataset.id === id));
+    if (id && fromImage) { const c = document.querySelector(`.blk[data-id="${id}"]`); if (c) c.scrollIntoView({ block: 'nearest' }); }
+    renderUi(); renderPop();
+  }
+  function renderPop() {
+    const p = $('pop'), id = st.hov;
+    const r = id && st.res[id];
+    if (!id || !r || st.view !== 'tr' || st.editing || st.sel === id || r.status !== 'done' || r.hidden) { p.hidden = true; return; }
+    const b = byId[id];
+    p.innerHTML = `<span class="pk">原文</span>${esc(srcText(b))}`;
+    p.hidden = false;
+    const above = b.rect.y - p.offsetHeight - 8;
+    p.style.left = Math.min(b.rect.x, SEL.x + SEL.w - p.offsetWidth) + 'px';
+    p.style.top = (above > 8 ? above : b.rect.y + b.rect.h + 8) + 'px';
+  }
+  function renderMini() {
+    const m = $('mini'), id = st.sel, r = id && st.res[id];
+    if (!id || !r || st.view !== 'tr' || st.editing || !['done', 'fail'].includes(r.status)) { m.hidden = true; return; }
+    const auto = !r.size;
+    m.innerHTML = r.status === 'fail'
+      ? `<button type="button" data-m="retry" title="重试">${svg('retry', 'i s')}</button><span class="sz" style="min-width:auto;padding:0 6px;color:var(--danger)">${r.err}</span>`
+      : `<button type="button" data-m="edit" title="编辑译文  双击">${svg('edit', 'i s')}</button>
+         <button type="button" data-m="hide" title="${r.hidden ? '显示译文' : '显示原文'}" class="${r.hidden ? 'on' : ''}">${svg('eye', 'i s')}</button>
+         <button type="button" data-m="retry" title="重新翻译此段">${svg('retry', 'i s')}</button>
+         <span class="dv"></span>
+         <button type="button" data-m="dn" title="缩小字号">A−</button>
+         <span class="sz" title="${auto ? '自动适配' : '手动字号'}">${auto ? '自动' : ''}${fmt(r.fit || byId[id].size)}</span>
+         <button type="button" data-m="up" title="放大字号">A+</button>
+         ${auto ? '' : '<button type="button" data-m="auto" title="恢复自动字号" style="font-weight:400">自动</button>'}
+         <span class="dv"></span>
+         <button type="button" data-m="copy" title="复制此段译文">${svg('copy', 'i s')}</button>`;
+    m.hidden = false;
+    const b = byId[id];
+    const above = b.rect.y - m.offsetHeight - 10;
+    m.style.left = Math.max(SEL.x, Math.min(b.rect.x, SEL.x + SEL.w - m.offsetWidth)) + 'px';
+    m.style.top = (above >= SEL.y - 4 ? above : b.rect.y + b.rect.h + 10) + 'px';
+  }
+  $('mini').addEventListener('click', (e) => {
+    const k = e.target.closest('button')?.dataset.m; if (!k) return;
+    e.stopPropagation();
+    const id = st.sel, r = st.res[id];
+    if (k === 'edit') startEdit(id);
+    if (k === 'hide') { r.hidden = !r.hidden; renderBlock(id); toast(r.hidden ? '此段导出原文' : '此段显示译文'); }
+    if (k === 'retry') retryOne(id);
+    if (k === 'dn' || k === 'up') { r.size = Math.max(9, Math.min(48, Math.round((r.fit || byId[id].size) + (k === 'up' ? 1 : -1)))); renderBlock(id); }
+    if (k === 'auto') { r.size = null; renderBlock(id); }
+    if (k === 'copy') toast('已复制此段译文');
+  });
+  async function retryOne(id) {
+    const run = st.run;
+    st.res[id] = { status: 'pending' }; renderBlock(id); renderProgress();
+    await sleep(600);
+    if (run !== st.run) return;
+    st.res[id] = { status: 'done', text: byId[id].tr[effTarget()], fresh: true, size: null, hidden: false };
+    renderBlock(id); renderProgress(); renderMeta();
+  }
+
+  // ---------- 编辑 ----------
+  function startEdit(id) {
+    st.editing = id; st.sel = id; st.hov = null;
+    renderBlock(id);
+  }
+  function startEditDom(d, inner) {
+    d.classList.add('edit');
+    inner.contentEditable = 'true';
+    const r = st.res[d.dataset.id]; const before = r.text;
+    inner.focus();
+    const range = document.createRange(); range.selectNodeContents(inner);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(range);
+    inner.oninput = () => { r.text = inner.innerText; d.style.height = byId[d.dataset.id].rect.h + 'px'; d.classList.remove('over'); fitText(d, inner, byId[d.dataset.id], r); syncCardText(d.dataset.id); };
+    inner.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finishEdit(true); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); r.text = before; finishEdit(false); }
+    };
+    inner.onblur = () => { if (st.editing === d.dataset.id) finishEdit(true); };
+    inner.dataset.before = before;
+  }
+  function finishEdit(commit) {
+    const id = st.editing; if (!id) return;
+    const r = st.res[id];
+    st.editing = null;
+    if (commit && r.text !== byId[id].tr[effTarget()]) r.edited = true;
+    if (!commit) r.edited = r.text !== byId[id].tr[effTarget()];
+    renderBlock(id);
+    if (commit) toast('已更新译文 · Ctrl+Z 撤销');
+  }
+  function syncCardText(id) { const c = document.querySelector(`.blk[data-id="${id}"] .tr`); if (c && document.activeElement !== c) c.textContent = st.res[id].text; }
+
+  // ---------- 面板 ----------
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const srcText = (b) => b.lines.map((l) => l[2]).join(' ');
+  const fmt = (n) => (Math.round(n * 2) / 2).toString().replace(/\.0$/, '');
+  function togglePanel(open) {
+    st.panelOpen = open; $('panel').classList.toggle('open', open);
+    if (!open) { $('menu').hidden = true; $('langMenu').hidden = true; }
+  }
+  function renderMeta() {
+    const t = $('meta');
+    if (st.phase === 'ocr') t.textContent = '正在识别文字…';
+    else if (st.phase === 'translating') { const n = BLOCKS.filter((b) => ['done', 'fail'].includes(st.res[b.id]?.status)).length; t.textContent = `正在翻译 ${n}/${BLOCKS.filter((b) => !b.skip).length} 段`; }
+    else if (st.phase === 'done') {
+      const n = BLOCKS.filter((b) => st.res[b.id]?.status === 'done').length;
+      if (st.elapsed == null) st.elapsed = (performance.now() - st.t0) / 1000;
+      t.textContent = `${n} 段 · ${st.elapsed.toFixed(1)} s`;
+    } else t.textContent = '';
+  }
+  function renderProgress() {
+    const total = BLOCKS.filter((b) => !b.skip).length;
+    const n = BLOCKS.filter((b) => ['done', 'fail', 'same'].includes(st.res[b.id]?.status)).length;
+    const p = $('prog');
+    if (st.phase === 'ocr') { p.style.opacity = 1; p.style.width = '18%'; }
+    else if (st.phase === 'translating') { p.style.opacity = 1; p.style.width = 18 + 82 * n / total + '%'; }
+    else { p.style.width = '100%'; p.style.opacity = 0; }
+    renderMeta();
+  }
+  function cardHtml(b) {
+    const r = st.res[b.id] || {};
+    const src = `<div class="src${b.mono ? ' mono' : ''}">${esc(srcText(b))}</div>`;
+    let tr = '', stl = '';
+    if (r.status === 'pending') tr = `<div class="sk"><i style="width:${70 + (b.id.length * 7) % 25}%"></i>${b.lines.length > 1 ? '<i style="width:48%"></i>' : ''}</div>`;
+    else if (r.status === 'done') tr = `<div class="tr" contenteditable="true" spellcheck="false">${esc(r.text)}</div>`;
+    else if (r.status === 'fail') tr = '';
+    const tags = [];
+    if (r.status === 'skip') tags.push(`<span class="tag">已跳过 · ${b.skip}</span>`);
+    if (r.status === 'same') tags.push('<span class="tag">已是目标语言</span>');
+    if (r.status === 'fail') tags.push(`<span class="tag err">翻译失败：${r.err}</span><button class="lnk" type="button" data-a="retry">重试</button>`);
+    if (r.status === 'done') {
+      tags.push(`<span class="tag">${b.kind}</span>`);
+      if (r.hidden) tags.push('<span class="tag warn">导出原文</span><button class="lnk" type="button" data-a="show">显示译文</button>');
+      if (r.edited) tags.push('<span class="tag ok">已修改</span><button class="lnk" type="button" data-a="revert">还原</button>');
+      if (r.overflow) tags.push('<span class="tag warn">超出原区域</span>');
+      if (r.fit && r.fit < (b.size - 0.5) && !r.size) tags.push(`<span class="tag">字号 ${fmt(b.size)}→${fmt(r.fit)}</span>`);
+      if (r.size) tags.push(`<span class="tag">字号 ${fmt(r.size)}（手动）</span>`);
+    }
+    if (tags.length) stl = `<div class="st">${tags.join('')}</div>`;
+    const cls = ['blk', r.status === 'skip' || r.status === 'same' ? 'skip' : '', st.sel === b.id ? 'sel' : '', st.hov === b.id ? 'hl' : ''].join(' ');
+    return `<div class="${cls}" data-id="${b.id}">${tr}${src}${stl}</div>`;
+  }
+  function renderPanel(enter) {
+    const body = $('body');
+    $('tgtName').textContent = LANGS.find((l) => l.id === st.target).name;
+    $('bannerSlot').innerHTML = effTarget() === 'en' && st.phase !== 'ocr' ? '<div class="banner">识别到的原文已是英语。换一个目标语言，或在设置里把“自动”改为固定语言。</div>' : '';
+    if (st.phase === 'ocr') {
+      body.innerHTML = '<div class="skel">' + [82, 64, 91, 40, 76, 70, 58].map((w) => `<i style="width:${w}%"></i>`).join('') + '</div>';
+    } else {
+      body.innerHTML = BLOCKS.map(cardHtml).join('');
+      body.classList.toggle('enter', !!enter);
+    }
+    const busy = st.phase !== 'done';
+    $('copyText').disabled = busy; $('copyImg').disabled = st.phase === 'ocr';
+    document.querySelectorAll('#seg button').forEach((x) => { x.classList.toggle('on', x.dataset.v === st.view); x.disabled = st.phase === 'ocr'; });
+    renderProgress();
+  }
+  function renderBlock(id) {
+    renderPatch(id);
+    const c = document.querySelector(`.blk[data-id="${id}"]`);
+    if (c) { const t = document.createElement('div'); t.innerHTML = cardHtml(byId[id]); c.replaceWith(t.firstChild); }
+    renderUi(); renderPop();
+  }
+  function renderAll(enter) {
+    $('trLayer').innerHTML = '';
+    for (const b of BLOCKS) renderPatch(b.id);
+    applyView(); renderPanel(enter); renderUi(); renderPop();
+  }
+  function select(id, fromImage) {
+    if (st.editing && st.editing !== id) finishEdit(true);
+    st.sel = st.sel === id && fromImage ? null : id;
+    document.querySelectorAll('.blk').forEach((c) => c.classList.toggle('sel', c.dataset.id === st.sel));
+    if (st.sel && fromImage) document.querySelector(`.blk[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    renderUi(); renderPop();
+  }
+
+  const body = $('body');
+  body.addEventListener('mouseover', (e) => { const c = e.target.closest('.blk'); if (c && st.hov !== c.dataset.id) setHov(c.dataset.id, false); });
+  body.addEventListener('mouseleave', () => setHov(null, false));
+  body.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-a]'); const c = e.target.closest('.blk'); if (!c) return;
+    const id = c.dataset.id, r = st.res[id];
+    if (a) {
+      e.stopPropagation();
+      if (a.dataset.a === 'retry') retryOne(id);
+      if (a.dataset.a === 'show') { r.hidden = false; renderBlock(id); }
+      if (a.dataset.a === 'revert') { r.text = byId[id].tr[effTarget()]; r.edited = false; renderBlock(id); toast('已还原机器译文'); }
+      return;
+    }
+    if (!e.target.closest('.tr')) select(id, false);
+    else if (st.sel !== id) { st.sel = id; document.querySelectorAll('.blk').forEach((x) => x.classList.toggle('sel', x.dataset.id === id)); renderUi(); }
+  });
+  body.addEventListener('input', (e) => {
+    const t = e.target.closest('.tr'); if (!t) return;
+    const id = t.closest('.blk').dataset.id, r = st.res[id];
+    r.text = t.innerText; r.edited = r.text !== byId[id].tr[effTarget()];
+    renderPatch(id); renderUi();
+  });
+  body.addEventListener('focusout', (e) => { const t = e.target.closest?.('.tr'); if (t) renderBlock(t.closest('.blk').dataset.id); });
+  body.addEventListener('keydown', (e) => { const t = e.target.closest('.tr'); if (t && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); t.blur(); toast('已更新译文 · Ctrl+Z 撤销'); } if (t && e.key === 'Escape') { e.stopPropagation(); t.blur(); } });
+
+  // 视图
+  function applyView() {
+    const tl = $('trLayer');
+    tl.style.visibility = st.view === 'orig' ? 'hidden' : 'visible';
+    tl.style.clipPath = st.view === 'cmp' ? `inset(0 0 0 ${st.cmpX}px)` : 'none';
+    const cmp = st.view === 'cmp';
+    $('divider').hidden = !cmp; $('vlL').hidden = !cmp; $('vlR').hidden = !cmp;
+    if (cmp) {
+      $('divider').style.left = st.cmpX + 'px';
+      $('vlL').style.left = st.cmpX - 8 - $('vlL').offsetWidth + 'px'; $('vlL').style.top = SEL.y + 8 + 'px';
+      $('vlR').style.left = st.cmpX + 8 + 'px'; $('vlR').style.top = SEL.y + 8 + 'px';
+    }
+  }
+  $('seg').addEventListener('click', (e) => {
+    const v = e.target.closest('button')?.dataset.v; if (!v) return;
+    if (st.editing) finishEdit(true);
+    st.view = v; applyView(); renderUi(); renderPop();
+    document.querySelectorAll('#seg button').forEach((x) => x.classList.toggle('on', x.dataset.v === v));
+  });
+  $('knob').addEventListener('pointerdown', (e) => {
+    e.preventDefault(); $('knob').setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const box = stage.getBoundingClientRect();
+      st.cmpX = Math.max(SEL.x + 20, Math.min(SEL.x + SEL.w - 20, (ev.clientX - box.left) / st.scale));
+      applyView();
+    };
+    const up = () => { $('knob').removeEventListener('pointermove', move); $('knob').removeEventListener('pointerup', up); };
+    $('knob').addEventListener('pointermove', move); $('knob').addEventListener('pointerup', up);
+  });
+
+  // 语言
+  $('tgtBtn').onclick = (e) => {
+    e.stopPropagation();
+    const m = $('langMenu');
+    m.innerHTML = LANGS.map((l) => `<button type="button" data-l="${l.id}" class="${l.id === st.target ? 'on' : ''}">${l.name}</button>`).join('') +
+      '<div class="sep"></div><button type="button" data-l="default">设为默认目标语言</button>';
+    m.hidden = !m.hidden; $('menu').hidden = true;
+  };
+  $('langMenu').addEventListener('click', (e) => {
+    const l = e.target.closest('button')?.dataset.l; if (!l) return;
+    $('langMenu').hidden = true;
+    if (l === 'default') { toast('已设为默认（设置 ▸ 翻译）'); return; }
+    if (l === st.target) return;
+    st.target = l; st.sel = null; st.editing = null;
+    if (st.phase === 'idle') { renderPanel(); return; }
+    const run = ++st.run; st.t0 = performance.now(); st.elapsed = null; st.failedOnce = true;
+    toast('只重新翻译，不重新识别');
+    translateAll(run);
+  });
+
+  // 菜单与底栏
+  $('btnMore').onclick = (e) => { e.stopPropagation(); $('menu').hidden = !$('menu').hidden; $('langMenu').hidden = true; };
+  $('menu').addEventListener('click', (e) => {
+    const a = e.target.closest('button')?.dataset.act; if (!a) return;
+    $('menu').hidden = true;
+    if (a === 'retry') { const run = ++st.run; st.t0 = performance.now(); st.elapsed = null; translateAll(run); }
+    if (a === 'annot') toast('已转为 10 个填充矩形 + 10 个文字标注 · 可撤销');
+    if (a === 'pin') toast('已贴图，译文层随贴图保存');
+    if (a === 'copysrc') toast('已复制原文');
+    if (a === 'settings') toast('打开 设置 ▸ 翻译');
+    if (a === 'clear') { reset(true); toast('已清除译文层 · Ctrl+Z 恢复'); }
+  });
+  $('btnClose').onclick = () => closePanel();
+  $('copyText').onclick = () => toast(`已复制 ${BLOCKS.filter((b) => st.res[b.id]?.status === 'done').length} 段译文`);
+  $('copyImg').onclick = () => toast(st.view === 'tr' ? '已复制含译文的图片' : '已复制含译文的图片（导出不受查看方式影响）');
+  function closePanel() {
+    if (st.phase === 'ocr' || st.phase === 'translating') { cancel(); return; }
+    togglePanel(false); st.sel = null; renderUi(); renderPop();
+    $('trBtn').classList.remove('on');
+    toastStage('面板已关闭，译文层保留 · Ctrl+Z 撤回');
+  }
+
+  function toast(msg) {
+    const slot = st.panelOpen ? $('toastSlot') : null;
+    if (!slot) return toastStage(msg);
+    slot.innerHTML = `<div class="toast">${esc(msg)}</div>`;
+    clearTimeout(toast.t); toast.t = setTimeout(() => (slot.innerHTML = ''), 1800);
+  }
+  function toastStage(msg) {
+    let t = document.getElementById('stageToast');
+    if (!t) { t = document.createElement('div'); t.id = 'stageToast'; t.className = 'toast'; stage.appendChild(t); }
+    t.textContent = msg; t.style.left = SEL.x + SEL.w / 2 + 'px'; t.style.bottom = 'auto'; t.style.top = SEL.y + SEL.h - 44 + 'px'; t.hidden = false;
+    clearTimeout(toastStage.t); toastStage.t = setTimeout(() => (t.hidden = true), 1800);
+  }
+
+  // 全局
+  stage.addEventListener('click', (e) => {
+    if (!e.target.closest('.panel') && !e.target.closest('.mini')) { $('menu').hidden = true; $('langMenu').hidden = true; if (st.sel && !e.target.closest('.hit')) select(null); }
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.menu') && !e.target.closest('#btnMore') && !e.target.closest('#tgtBtn')) { $('menu').hidden = true; $('langMenu').hidden = true; } });
+  document.addEventListener('keydown', (e) => {
+    const typing = e.target.isContentEditable;
+    if (e.key === 'Escape') {
+      if (st.editing) return;
+      if (!$('menu').hidden || !$('langMenu').hidden) { $('menu').hidden = true; $('langMenu').hidden = true; return; }
+      if (st.sel) { select(null); return; }
+      if (st.view !== 'tr' && st.phase !== 'idle') { st.view = 'tr'; applyView(); renderPanel(); renderUi(); return; }
+      if (st.panelOpen) { closePanel(); return; }
+    }
+    if (typing) return;
+    if ((e.key === 'y' || e.key === 'Y') && !e.ctrlKey && !e.altKey) { st.phase === 'idle' ? start() : (togglePanel(true), $('trBtn').classList.add('on')); }
+    if (e.key === 'Enter' && st.phase === 'done') toast('已复制含译文的图片');
+  });
+
+  function reset(keepOcr) {
+    st.run++; st.phase = keepOcr && st.ocrDone ? 'idle' : 'idle'; st.res = {}; st.sel = null; st.hov = null; st.editing = null; st.view = 'tr'; st.failedOnce = false;
+    if (!keepOcr) { st.ocrDone = false; $('ocrLayer').innerHTML = ''; }
+    $('scan').classList.remove('on');
+    $('trBtn').classList.remove('on');
+    togglePanel(false); renderAll();
+  }
+  $('replay').onclick = () => { reset(false); $('trBtn').classList.add('new'); setTimeout(start, 250); };
+  $('simFail').onchange = () => { st.failedOnce = false; };
+
+  // 主题
+  const modes = ['system', 'dark', 'light'], names = { system: '跟随系统', dark: '深色', light: '浅色' };
+  let mi = 0;
+  $('themeBtn').onclick = () => {
+    mi = (mi + 1) % 3; const m = modes[mi];
+    if (m === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', m);
+    $('themeBtn').textContent = '主题：' + names[m];
+  };
+
+  buildShot(); buildToolbar(); layoutStatic(); fit();
+  new ResizeObserver(fit).observe(wrap);
+  renderAll();
+  // 打开即展示完成态：直接跑一遍流程
+  setTimeout(start, 500);
+})();
+</script>

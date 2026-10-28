@@ -1,0 +1,425 @@
+<title>翻译设置 · 目标语言下拉</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 布局：顶部语言切换 → 860 宽设置窗口仿真（侧栏 + 翻译页 + 状态栏）→ 设计要点。深色优先，配色沿用 GPUI Palette 与 settings_widgets::Surface。 */
+:root {
+  --page: #0f1317; --win: #171b21; --card: #20262e; --raised: #37404b; --line: #2f3741; --track: #191d23;
+  --nav-hover: #1f252c; --nav-sel: #27303a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --accent: #40ce9d; --accent-soft: rgba(64, 206, 157, .16); --on-accent: #0d1f18;
+  --menu: #252c35; --shadow: 0 12px 32px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .3);
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --page: #e4e9ee; --win: #f3f6f9; --card: #ffffff; --raised: #ffffff; --line: #e3e8ed; --track: #eef2f5;
+  --nav-hover: #e9eef2; --nav-sel: #e1e8ee; --fg: #374351; --muted: #667482; --border: #dce3e9;
+  --hover: #eaf0f3; --accent: #126d4e; --accent-soft: rgba(18, 109, 78, .1); --on-accent: #ffffff;
+  --menu: #ffffff; --shadow: 0 12px 32px rgba(30, 45, 60, .16), 0 2px 6px rgba(30, 45, 60, .1); color-scheme: light; } }
+:root[data-theme="light"] {
+  --page: #e4e9ee; --win: #f3f6f9; --card: #ffffff; --raised: #ffffff; --line: #e3e8ed; --track: #eef2f5;
+  --nav-hover: #e9eef2; --nav-sel: #e1e8ee; --fg: #374351; --muted: #667482; --border: #dce3e9;
+  --hover: #eaf0f3; --accent: #126d4e; --accent-soft: rgba(18, 109, 78, .1); --on-accent: #ffffff;
+  --menu: #ffffff; --shadow: 0 12px 32px rgba(30, 45, 60, .16), 0 2px 6px rgba(30, 45, 60, .1); color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui);
+  padding-block: 18px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; text-align: left; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+h1 { font-size: 17px; font-weight: 600; margin: 0; text-wrap: balance; }
+h1 small { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 13px; }
+.tog { margin-left: auto; display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); }
+.tog button { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--muted); }
+.tog button.on { background: var(--card); color: var(--fg); font-weight: 600; }
+.layout { display: grid; grid-template-columns: minmax(0, 860px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* 设置窗口 */
+.win { background: var(--win); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-height: 640px; }
+.titlebar { height: 34px; display: flex; align-items: center; padding: 0 14px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); gap: 8px; }
+.titlebar i { width: 14px; height: 14px; border-radius: 4px; background: var(--accent); display: inline-block; }
+.body { flex: 1; display: flex; min-height: 0; }
+.side { width: 188px; flex-shrink: 0; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); }
+.nav { height: 36px; border-radius: 6px; display: flex; align-items: center; gap: 10px; padding: 0 10px; color: var(--muted); font-size: 14px; }
+.nav svg { width: 17px; height: 17px; }
+.nav.on { background: var(--nav-sel); color: var(--fg); font-weight: 600; }
+@media (max-width: 640px) { .side { display: none; } }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.head { padding: 16px 32px; display: flex; flex-direction: column; gap: 4px; }
+.head b { font-size: 24px; font-weight: 600; line-height: 1.25; }
+.head span { font-size: 13px; color: var(--muted); }
+.scroll { flex: 1; padding: 4px 32px 32px; display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 640px) { .head, .scroll { padding-left: 16px; padding-right: 16px; } }
+.status { min-height: 36px; padding: 8px 32px; display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.status.hot { color: var(--accent); }
+
+.section { display: flex; flex-direction: column; gap: 8px; }
+.section > .t { padding: 0 4px; font-size: 13px; font-weight: 600; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; }
+.sep { height: 1px; background: var(--line); margin: 0 12px; }
+.row { position: relative; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 8px 12px; border-radius: 6px; }
+.row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row .txt b { font-weight: 400; font-size: 14px; }
+.row .txt span { font-size: 12px; line-height: 18px; color: var(--muted); }
+.row.dim .txt b, .row.dim .txt span { opacity: .6; }
+.row.click { cursor: pointer; }
+.row.click:hover { background: var(--nav-hover); }
+.note { padding: 0 4px; font-size: 12px; line-height: 18px; color: var(--muted); }
+
+/* 下拉触发器 */
+.dd { height: 32px; min-width: 168px; max-width: 240px; padding: 0 8px 0 12px; display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--raised); font-size: 13px; }
+.dd:hover { background: var(--hover); }
+.dd.open { border-color: var(--accent); }
+.dd .v { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd .v em { font-style: normal; color: var(--muted); margin-left: 6px; }
+.dd svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); transition: transform .12s; }
+.dd.open svg { transform: rotate(180deg); }
+.dd[disabled] { opacity: .5; cursor: default; }
+.dd[disabled]:hover { background: var(--raised); }
+
+/* 下拉菜单 */
+.menu { position: absolute; right: 12px; top: calc(100% - 6px); z-index: 10; width: 344px; max-width: calc(100vw - 48px);
+  background: var(--menu); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); padding: 4px; }
+.mi { width: 100%; min-height: 32px; padding: 0 10px; border-radius: 6px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.mi:hover, .mi.kb { background: var(--hover); }
+.mi .ck { width: 14px; height: 14px; flex-shrink: 0; color: var(--accent); }
+.mi .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mi .s { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.mi.on .n { color: var(--accent); font-weight: 600; }
+.mi.auto { min-height: 44px; align-items: center; }
+.mi.auto .n { display: flex; flex-direction: column; line-height: 1.35; }
+.mi.auto .n small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 2px; }
+.msep { height: 1px; background: var(--line); margin: 4px 6px; }
+.mi.other .n { color: var(--muted); }
+
+/* 自定义语言输入 */
+.input { height: 32px; width: 100%; border: 1px solid var(--border); border-radius: 6px; background: var(--track); color: var(--fg);
+  padding: 0 10px; font: 13px var(--ui); }
+.input::placeholder { color: var(--muted); opacity: .7; }
+.custom { display: flex; flex-direction: column; gap: 6px; padding: 0 12px 12px; }
+.custom .line { display: flex; gap: 8px; }
+.custom .line .input { flex: 1; }
+
+/* 分段、按钮、徽标 */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 8px; border: 1px solid var(--line); background: var(--track); align-self: flex-start; }
+.seg button { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 13px; color: var(--muted); }
+.seg button.on { background: var(--raised); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.btn { height: 32px; padding: 0 14px; border-radius: 6px; font-size: 13px; border: 1px solid var(--line); background: var(--raised); flex-shrink: 0; }
+.btn:hover { background: var(--hover); }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.pri:hover { opacity: .9; background: var(--accent); }
+.badge { height: 22px; padding: 0 8px; border-radius: 6px; background: var(--track); color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; white-space: nowrap; }
+.badge.ok { color: var(--accent); background: var(--accent-soft); }
+.chev { width: 16px; height: 16px; color: var(--muted); transition: transform .12s; flex-shrink: 0; }
+.open > .chev, .row.expanded .chev { transform: rotate(180deg); }
+.panel { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 14px; }
+.panel .lbl { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.model { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--track); }
+.model i { width: 36px; height: 36px; border-radius: 6px; background: var(--accent-soft); display: grid; place-items: center; color: var(--accent); flex-shrink: 0; }
+.model i svg { width: 20px; height: 20px; }
+.model b { font-size: 13px; font-weight: 600; display: block; }
+.model span { font-size: 12px; color: var(--muted); }
+.applybar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; margin: 4px; border-radius: 6px; background: var(--accent-soft); }
+.applybar .msg { flex: 1; min-width: 140px; font-size: 12.5px; }
+.link { font-size: 12.5px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.link:hover { color: var(--fg); }
+
+/* 设计要点 */
+.notes { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.notes h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.notes ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.notes li span { color: var(--muted); }
+.notes code { font: 12px Consolas, "Cascadia Mono", monospace; background: var(--track); padding: 1px 5px; border-radius: 4px; }
+.notes table { border-collapse: collapse; font-size: 12.5px; width: 100%; }
+.notes td, .notes th { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.notes th { color: var(--muted); font-weight: 400; }
+.tw { overflow-x: auto; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>翻译设置重设计<small>主界面只留“译成”，服务与图片翻译收进高级</small></h1>
+    <div class="tog" id="langTog" role="group" aria-label="界面语言">
+      <button id="tog-zh" class="on" data-ui="zh">中文界面</button>
+      <button id="tog-en" data-ui="en">English UI</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="win" id="win">
+      <div class="titlebar"><i></i><span data-t="RaiShot 设置|RaiShot Settings"></span></div>
+      <div class="body">
+        <nav class="side" id="side"></nav>
+        <div class="main">
+          <div class="head"><b data-t="翻译|Translation"></b><span data-t="识别出的文字译成哪种语言|Which language recognized text is translated into"></span></div>
+          <div class="scroll" id="scroll"></div>
+          <div class="status" id="status"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="notes" id="notes"></aside>
+  </div>
+</div>
+
+<script>
+const ICON = {
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+  tr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h9M8.5 3v2M6 9c1 2.5 3 4.5 6 6M11 5c-.8 4.5-3.6 8-7 10"/><path d="m13 21 4-9 4 9M14.4 18h5.2"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+};
+const NAV = [['常规','General'],['截图','Capture'],['贴图','Pin'],['翻译','Translation'],['快捷键','Hotkeys'],['保存','Save'],['工具栏','Toolbar']];
+// 代码 → 母语名称、中文界面副标题、英文界面副标题；顺序按常用度，两列行优先排布。
+const LANGS = [
+  ['zh-CN','简体中文','','Simplified'], ['en','English','英语',''],
+  ['ja','日本語','日语','Japanese'], ['ko','한국어','韩语','Korean'],
+  ['zh-TW','繁體中文','','Traditional'], ['fr','Français','法语','French'],
+  ['de','Deutsch','德语','German'], ['es','Español','西班牙语','Spanish'],
+  ['ru','Русский','俄语','Russian'], ['pt','Português','葡萄牙语','Portuguese'],
+  ['it','Italiano','意大利语','Italian'], ['vi','Tiếng Việt','越南语','Vietnamese'],
+  ['th','ไทย','泰语','Thai'], ['id','Indonesia','印尼语','Indonesian'],
+];
+const DEFAULT_ENDPOINT = 'https://index-translate.bilibili.com/v1', DEFAULT_MODEL = 'Index-Translate-35B-A3B';
+
+let ui = 'zh';
+const saved = { target: 'auto', service: 'builtin', endpoint: DEFAULT_ENDPOINT, model: DEFAULT_MODEL, engine: 'auto', appId: '', apiKey: '' };
+let draft = { ...saved };
+const view = { menu: false, custom: false, customText: '', open: { service: false, image: false }, status: '', hot: false, kb: -1 };
+
+const t = (zh, en) => ui === 'zh' ? zh : en;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const lang = code => LANGS.find(l => l[0].toLowerCase() === String(code).toLowerCase());
+const dirty = () => ['service', 'endpoint', 'model', 'engine', 'appId', 'apiKey'].some(k => draft[k] !== saved[k]);
+
+function targetLabel() {
+  if (saved.target === 'auto') return `${t('自动', 'Auto')}<em>${t('中英互译', 'zh ⇄ en')}</em>`;
+  const l = lang(saved.target);
+  return esc(l ? l[1] : saved.target);
+}
+function targetDesc() {
+  if (saved.service === 'off') return t('文字翻译已关闭，可在下方“翻译服务”中开启。', 'Text translation is off. Turn it on under Translation service below.');
+  if (saved.target === 'auto') return t('中文译成英文，其它语言译成简体中文。', 'Chinese becomes English; other languages become Simplified Chinese.');
+  const l = lang(saved.target);
+  const name = l ? (ui === 'zh' ? (l[2] || l[1]) : (l[3] ? `${l[3]} (${l[1]})` : l[1])) : saved.target;
+  return t(`所有识别文字都译成${name}。`, `All recognized text is translated into ${name}.`);
+}
+function serviceSummary() {
+  return { builtin: t('内置', 'Built-in'), custom: t('自定义', 'Custom'), off: t('已关闭', 'Off') }[saved.service];
+}
+function engineSummary() {
+  return { auto: t('自动', 'Auto'), baidu: t('百度 V2', 'Baidu V2'), local: t('本机排版', 'Local layout') }[saved.engine];
+}
+
+function menuHtml() {
+  const on = saved.target;
+  const item = (i, code, name, sub) => {
+    const sel = on.toLowerCase() === code.toLowerCase();
+    return `<button class="mi${sel ? ' on' : ''}${view.kb === i ? ' kb' : ''}" data-pick="${code}" id="opt-${code}">
+      <span class="ck">${sel ? ICON.check : ''}</span><span class="n">${esc(name)}</span>${sub ? `<span class="s">${esc(sub)}</span>` : ''}</button>`;
+  };
+  const known = on === 'auto' || lang(on);
+  return `<div class="menu" role="listbox" id="menu">
+    <button class="mi auto${on === 'auto' ? ' on' : ''}${view.kb === 0 ? ' kb' : ''}" data-pick="auto" id="opt-auto">
+      <span class="ck">${on === 'auto' ? ICON.check : ''}</span>
+      <span class="n">${t('自动', 'Auto')}<small>${t('中文译成英文，其它译成简体中文', 'Chinese → English, others → Simplified Chinese')}</small></span></button>
+    <div class="msep"></div>
+    <div class="grid">${LANGS.map((l, i) => item(i + 1, l[0], l[1], ui === 'zh' ? l[2] : l[3])).join('')}</div>
+    <div class="msep"></div>
+    <button class="mi other${!known ? ' on' : ''}" data-pick="__custom" id="opt-custom">
+      <span class="ck">${!known ? ICON.check : ICON.edit}</span>
+      <span class="n">${!known ? esc(on) : t('其它语言…', 'Other language…')}</span>
+      <span class="s">${t('输入名称或代码', 'Name or code')}</span></button>
+  </div>`;
+}
+
+function render() {
+  document.querySelectorAll('[data-t]').forEach(el => { const [zh, en] = el.dataset.t.split('|'); el.textContent = t(zh, en); });
+  document.getElementById('side').innerHTML = NAV.map((n, i) =>
+    `<div class="nav${i === 3 ? ' on' : ''}">${i === 3 ? ICON.tr : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="4"/></svg>'}${t(n[0], n[1])}</div>`).join('');
+  const off = saved.service === 'off';
+  const s = draft.service, e = draft.engine;
+  const html = `
+  <div class="section">
+    <div class="card">
+      <div class="row${off ? ' dim' : ''}" id="target-row">
+        <div class="txt"><b>${t('译成', 'Translate into')}</b><span>${targetDesc()}</span></div>
+        <button class="dd${view.menu ? ' open' : ''}" id="dd" ${off ? 'disabled' : ''} aria-haspopup="listbox" aria-expanded="${view.menu}">
+          <span class="v">${targetLabel()}</span>${ICON.chev}</button>
+        ${view.menu ? menuHtml() : ''}
+      </div>
+      ${view.custom ? `<div class="custom">
+        <div class="line"><input class="input" id="custom-input" value="${esc(view.customText)}" placeholder="${t('如 Svenska、sv、文言文', 'e.g. Svenska, sv, Classical Chinese')}">
+        <button class="btn pri" id="custom-save">${t('保存', 'Save')}</button></div>
+        <div class="note">${t('回车保存。语言代码或名称都会原样交给翻译模型。', 'Press Enter to save. Codes and names are passed to the model as written.')}</div>
+      </div>` : ''}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="t">${t('高级', 'Advanced')}</div>
+    <div class="card">
+      <div class="row click${view.open.service ? ' expanded' : ''}" id="row-service">
+        <div class="txt"><b>${t('翻译服务', 'Translation service')}</b><span>${
+          saved.service === 'builtin' ? t('哔哩哔哩 Index 翻译大模型，免配置。', 'bilibili Index translation model, no setup.')
+          : saved.service === 'custom' ? esc(saved.model || DEFAULT_MODEL) + ' · ' + esc(saved.endpoint.replace(/^https?:\/\//, ''))
+          : t('不翻译文字；图片翻译只能用百度 V2。', 'No text translation; image translation can only use Baidu V2.')}</span></div>
+        <span class="badge${saved.service === 'builtin' ? ' ok' : ''}">${serviceSummary()}</span>${ICON.chev.replace('<svg', '<svg class="chev"')}
+      </div>
+      ${view.open.service ? `<div class="panel">
+        <div class="seg" role="group">${[['builtin', '内置', 'Built-in'], ['custom', '自定义', 'Custom'], ['off', '关闭', 'Off']].map(([v, zh, en]) =>
+          `<button class="${s === v ? 'on' : ''}" data-service="${v}" id="svc-${v}">${t(zh, en)}</button>`).join('')}</div>
+        ${s === 'builtin' ? `<div class="model"><i>${ICON.tr}</i><div><b>${t('哔哩哔哩 Index 翻译大模型', 'bilibili Index translation model')}</b><span>${t('内置在线服务，开箱即用；只发送识别出的文字。', 'Built-in online service; only recognized text is sent.')}</span></div></div>` : ''}
+        ${s === 'custom' ? `
+          <div class="lbl">${t('接口根地址', 'API base URL')}</div><input class="input" id="f-endpoint" value="${esc(draft.endpoint)}" placeholder="https://example.com/v1">
+          <div class="lbl">${t('模型名称', 'Model')}</div><input class="input" id="f-model" value="${esc(draft.model)}" placeholder="${DEFAULT_MODEL}">
+          <div class="note">${t('OpenAI 兼容接口（如以 /v1 结尾）；模型留空用默认模型。', 'OpenAI-compatible API (for example, ending in /v1). Leave the model empty for the default.')}</div>` : ''}
+        ${s === 'off' ? `<div class="note">${t('关闭后识别面板不再显示译文页与翻译按钮。', 'When off, the OCR panel hides the translation tab and buttons.')}</div>` : ''}
+      </div>` : ''}
+      <div class="sep"></div>
+      <div class="row click${view.open.image ? ' expanded' : ''}" id="row-image">
+        <div class="txt"><b>${t('图片翻译', 'Image translation')}</b><span>${
+          saved.engine === 'baidu' ? t('上传选区到百度图片翻译 V2，返回擦除重绘的贴合图。', 'Uploads the selection to Baidu V2 and gets a re-rendered image.')
+          : saved.engine === 'local' ? t('本机 OCR 后用上方翻译服务排版，图片不出本机。', 'Local OCR plus the service above; the image stays on this PC.')
+          : t('填了百度凭证用百度 V2，否则本机排版。', 'Baidu V2 when credentials are set, otherwise local layout.')}</span></div>
+        <span class="badge">${engineSummary()}</span>${ICON.chev.replace('<svg', '<svg class="chev"')}
+      </div>
+      ${view.open.image ? `<div class="panel">
+        <div class="seg" role="group">${[['auto', '自动', 'Auto'], ['baidu', '百度 V2', 'Baidu V2'], ['local', '本机排版', 'Local layout']].map(([v, zh, en]) =>
+          `<button class="${e === v ? 'on' : ''}" data-engine="${v}" id="eng-${v}">${t(zh, en)}</button>`).join('')}</div>
+        ${e !== 'local' ? `
+          <div class="lbl">${t('百度 APP ID', 'Baidu APP ID')}</div><input class="input" id="f-appId" value="${esc(draft.appId)}" placeholder="${t('百度翻译开放平台 APP ID', 'Baidu Translate APP ID')}">
+          <div class="lbl">API Key</div><input class="input" id="f-apiKey" value="${esc(draft.apiKey)}" placeholder="${t('图片翻译 V2.0 API Key', 'Picture Translation V2.0 API Key')}">
+          <div class="note">${t('在百度翻译开放平台开通“图片翻译 V2.0”；凭证只保存在本机。', 'Enable Picture Translation V2.0 on the Baidu Translate Open Platform. Stored on this PC only.')}</div>` : ''}
+      </div>` : ''}
+      ${dirty() ? `<div class="applybar">
+        <span class="msg">${t('服务设置有改动，应用后下次翻译生效。', 'Service changes take effect after Apply.')}</span>
+        <button class="btn" id="cancel">${t('取消修改', 'Cancel')}</button>
+        <button class="btn pri" id="apply">${t('应用', 'Apply')}</button>
+      </div>` : ''}
+    </div>
+    <div class="note">${t('文字翻译只发送识别出的文字；百度图片翻译会上传选区图片。', 'Text translation sends only recognized text; Baidu image translation uploads the selection.')}
+      <button class="link" id="defaults">${t('全部恢复默认', 'Restore all defaults')}</button></div>
+  </div>`;
+  document.getElementById('scroll').innerHTML = html;
+  const st = document.getElementById('status');
+  st.textContent = view.status || t('设置即时保存；翻译服务的改动需点击“应用”。', 'Settings save instantly; service changes need Apply.');
+  st.className = 'status' + (view.hot ? ' hot' : '');
+  renderNotes();
+  bind();
+}
+
+function say(msg) { view.status = msg; view.hot = true; }
+function pick(code) {
+  view.menu = false; view.kb = -1;
+  if (code === '__custom') { view.custom = true; view.customText = (saved.target === 'auto' || lang(saved.target)) ? '' : saved.target; render(); document.getElementById('custom-input')?.focus(); return; }
+  view.custom = false; saved.target = code; draft.target = code;
+  const l = lang(code);
+  say(code === 'auto' ? t('已保存：自动（中英互译），下次翻译生效。', 'Saved: Auto (zh ⇄ en), used next time.')
+    : t(`已保存：译成${l[2] || l[1]}，下次翻译生效。`, `Saved: translate into ${l[3] || l[1]}, used next time.`));
+  render();
+}
+function saveCustom() {
+  const v = document.getElementById('custom-input').value.trim();
+  if (!v) { say(t('请输入语言名称或代码。', 'Enter a language name or code.')); render(); return; }
+  const l = lang(v);
+  if (l || v.toLowerCase() === 'auto') { pick(l ? l[0] : 'auto'); return; }
+  saved.target = draft.target = v; view.custom = false;
+  say(t(`已保存：译成 ${v}，下次翻译生效。`, `Saved: translate into ${v}, used next time.`)); render();
+}
+
+function bind() {
+  const $ = id => document.getElementById(id);
+  $('dd')?.addEventListener('click', ev => { ev.stopPropagation(); view.menu = !view.menu; view.kb = -1; render(); });
+  document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', ev => { ev.stopPropagation(); pick(b.dataset.pick); }));
+  $('menu')?.addEventListener('click', ev => ev.stopPropagation());
+  $('custom-save')?.addEventListener('click', saveCustom);
+  $('custom-input')?.addEventListener('keydown', ev => { if (ev.key === 'Enter') saveCustom(); if (ev.key === 'Escape') { view.custom = false; render(); } });
+  $('row-service')?.addEventListener('click', () => { view.open.service = !view.open.service; render(); });
+  $('row-image')?.addEventListener('click', () => { view.open.image = !view.open.image; render(); });
+  document.querySelectorAll('[data-service]').forEach(b => b.addEventListener('click', () => {
+    draft.service = b.dataset.service;
+    if (draft.service === 'custom' && saved.service !== 'custom') { draft.endpoint = ''; draft.model = ''; }
+    view.status = ''; view.hot = false; render();
+  }));
+  document.querySelectorAll('[data-engine]').forEach(b => b.addEventListener('click', () => { draft.engine = b.dataset.engine; view.status = ''; view.hot = false; render(); }));
+  ['endpoint', 'model', 'appId', 'apiKey'].forEach(k => $('f-' + k)?.addEventListener('input', ev => {
+    const had = dirty(); draft[k] = ev.target.value;
+    if (had !== dirty()) { const pos = ev.target.selectionStart; render(); const f = $('f-' + k); f.focus(); f.setSelectionRange(pos, pos); }
+  }));
+  $('apply')?.addEventListener('click', () => {
+    if (draft.service === 'custom' && !/^https?:\/\/[^?#\s]+$/.test(draft.endpoint.trim())) { say(t('请输入有效的 HTTP 或 HTTPS 接口根地址。', 'Enter a valid HTTP or HTTPS API base URL.')); render(); return; }
+    Object.assign(saved, draft, { target: saved.target });
+    if (saved.service === 'builtin') { saved.endpoint = draft.endpoint = DEFAULT_ENDPOINT; saved.model = draft.model = DEFAULT_MODEL; }
+    say(saved.service === 'off' ? t('已关闭文字翻译；设置已保存。', 'Text translation off; settings saved.') : t('服务设置已保存，下次翻译生效。', 'Service settings saved for the next translation.'));
+    render();
+  });
+  $('cancel')?.addEventListener('click', () => { draft = { ...saved }; say(t('已取消修改，保留已保存的设置。', 'Changes canceled; saved settings kept.')); render(); });
+  $('defaults')?.addEventListener('click', () => {
+    draft = { target: 'auto', service: 'builtin', endpoint: DEFAULT_ENDPOINT, model: DEFAULT_MODEL, engine: 'auto', appId: '', apiKey: '' };
+    saved.target = 'auto'; view.custom = false;
+    say(dirty() ? t('“译成”已恢复为自动；服务默认值已填入，点击应用生效。', 'Target reset to Auto; service defaults filled in, click Apply.') : t('已恢复默认。', 'Defaults restored.'));
+    render();
+  });
+}
+
+// 菜单键盘：↑↓←→ 在两列网格内移动，回车选中，Esc 关闭。
+document.addEventListener('keydown', ev => {
+  if (!view.menu) return;
+  const n = LANGS.length;
+  if (ev.key === 'Escape') { view.menu = false; render(); document.getElementById('dd')?.focus(); return; }
+  if (ev.key === 'Enter' && view.kb >= 0) { ev.preventDefault(); pick(view.kb === 0 ? 'auto' : LANGS[view.kb - 1][0]); return; }
+  const step = { ArrowDown: 2, ArrowUp: -2, ArrowRight: 1, ArrowLeft: -1 }[ev.key];
+  if (!step) return;
+  ev.preventDefault();
+  let k = view.kb < 0 ? 0 : view.kb;
+  if (k === 0) k = step > 0 ? 1 : 0;
+  else { k += step; if (k < 1) k = 0; if (k > n) k = view.kb; }
+  view.kb = k; render();
+});
+document.addEventListener('click', () => { if (view.menu) { view.menu = false; render(); } });
+
+function renderNotes() {
+  document.getElementById('notes').innerHTML = ui === 'zh' ? `
+    <h2>设计要点</h2>
+    <ol>
+      <li>首屏只有一项<b>译成</b>，下拉即选即存，和主题、语言等设置一样不需要“应用”。<span>原先端点、模型、目标语言、图片引擎、百度凭证五块平铺。</span></li>
+      <li>下拉顶部是<b>自动</b>并写明规则；14 种常用语言两列排，母语名在前、界面语言名作副标题；末项<b>其它语言…</b>可填任意名称或代码。</li>
+      <li><b>翻译服务</b>与<b>图片翻译</b>收进“高级”，折叠时一行写清当前状态；展开才见分段和输入框。</li>
+      <li>服务草稿与即时项分离：只有服务字段改过，卡片底部才出现<b>取消修改 / 应用</b>条。</li>
+      <li>服务关闭时“译成”置灰并指路；“全部恢复默认”把目标语言即时复位，服务默认值进草稿。</li>
+      <li>键盘：方向键在两列间移动，回车选中，Esc 关闭；点外部关闭。</li>
+    </ol>
+    <div class="tw"><table>
+      <tr><th>存储值</th><th>菜单显示</th><th>模型收到</th></tr>
+      <tr><td><code>auto</code> / 空</td><td>自动</td><td>按原文判断 英语 / 简体中文</td></tr>
+      <tr><td><code>ja</code></td><td>日本語 ✓</td><td>日语</td></tr>
+      <tr><td><code>vi</code> <code>th</code> <code>id</code></td><td>新增三项</td><td>越南语 / 泰语 / 印尼语</td></tr>
+      <tr><td><code>Svenska</code></td><td>其它语言 ✓ Svenska</td><td>Svenska（原样）</td></tr>
+    </table></div>` : `
+    <h2>Design notes</h2>
+    <ol>
+      <li>The first screen has one setting, <b>Translate into</b>. Picking from the dropdown saves at once, like theme and language.</li>
+      <li><b>Auto</b> sits on top with its rule spelled out; 14 common languages in two columns; <b>Other language…</b> accepts any name or code.</li>
+      <li><b>Translation service</b> and <b>Image translation</b> move under Advanced and show a one-line summary when collapsed.</li>
+      <li>Only service edits are drafts; the <b>Cancel / Apply</b> bar appears only when they differ from saved.</li>
+      <li>When the service is off, the target row is dimmed and points to where to turn it on.</li>
+      <li>Keyboard: arrows move through the grid, Enter picks, Esc closes.</li>
+    </ol>`;
+}
+
+document.getElementById('langTog').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  ui = b.dataset.ui; view.status = ''; view.hot = false;
+  document.querySelectorAll('#langTog button').forEach(x => x.classList.toggle('on', x === b));
+  render();
+});
+view.menu = true; // 首屏直接展示下拉的样子
+render();
+</script>

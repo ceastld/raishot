@@ -1,0 +1,1369 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RaiShot OCR 演示</title>
+<style>
+/* 官网首页宣传动画：1280×720 逻辑舞台按容器宽度缩放，纯 HTML/CSS/JS，无外部依赖。
+   嵌入：<iframe src="promo-ocr.html?embed" style="width:100%;aspect-ratio:16/10;border:0"></iframe>
+   舞台内是一块“屏幕”，界面配色取自 src/capture_toolbar.rs Palette 的深色档；页面外框随系统主题。 */
+:root {
+  --page: #0a0d11; --ink: #e3eaef; --muted: #8a99a6; --line: #222b33; --accent: #40ce9d; --track: #1c242c; --chip: #12171d;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --page: #eef2f5; --ink: #1d2b36; --muted: #5b6c79; --line: #d2dbe2; --accent: #12805c; --track: #d9e2e8; --chip: #ffffff;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --page: #eef2f5; --ink: #1d2b36; --muted: #5b6c79; --line: #d2dbe2; --accent: #12805c; --track: #d9e2e8; --chip: #ffffff;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --page: #0a0d11; --ink: #e3eaef; --muted: #8a99a6; --line: #222b33; --accent: #40ce9d; --track: #1c242c; --chip: #12171d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--ink); font: 14px/1.5 var(--ui); }
+body.embed { background: transparent; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 28px; display: flex; flex-direction: column; gap: 14px; }
+body.embed .wrap { padding: 0; }
+.hd { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; }
+.hd span { color: var(--muted); font-weight: 400; }
+body.embed .hd { display: none; }
+
+.stage-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #07090c;
+  box-shadow: 0 0 0 1px var(--line), 0 30px 80px rgba(0, 0, 0, .28); }
+.stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; overflow: hidden; user-select: none;
+  font-family: var(--ui); color: #d9e2e9; contain: layout paint;
+  --bg: #1d222a; --fg: #d9e2e9; --mu: #8997a6; --bd: #3d4651; --hv: #2a333d; --selc: #28473d; --ac: #40ce9d; --acfg: #0e1d17;
+  --gold: #f2b632; --blue: #609dff; --frame: #2f8cff; --warn: #e6a35c; }
+.stage.instant, .stage.instant * { transition: none !important; animation: none !important; }
+
+/* ---------- 控制条 ---------- */
+.ctrl { display: flex; align-items: center; gap: 12px; }
+.pp { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--chip); box-shadow: 0 0 0 1px var(--line); }
+.pp:hover { box-shadow: 0 0 0 1px var(--accent); }
+.pp svg { width: 16px; height: 16px; fill: currentColor; }
+.chs { flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.ch { display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 4px 2px; color: var(--muted); font-size: 13px; min-width: 0; }
+.ch .cl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .2s; }
+.ch .pg { height: 3px; border-radius: 2px; background: var(--track); overflow: hidden; }
+.ch .pg i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 2px; }
+.ch.on .cl, .ch:hover .cl { color: var(--ink); }
+.ch.done .pg i { width: 100%; opacity: .45; }
+.ext-cap { display: none; }
+.ext-cap .t { font-size: 17px; font-weight: 650; }
+.ext-cap .s { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+.narrow .ext-cap { display: block; min-height: 64px; }
+.narrow .ch .cl { display: none; }
+.narrow .chs { gap: 4px; }
+
+/* ---------- 桌面与被截取的窗口（截图像素，不随主题） ---------- */
+.desk { position: absolute; inset: 0;
+  background: radial-gradient(760px 520px at 88% 8%, rgba(64, 206, 157, .17), transparent 62%),
+              radial-gradient(820px 560px at 4% 104%, rgba(47, 140, 255, .16), transparent 60%),
+              linear-gradient(160deg, #0e141a, #090c10); }
+.desk::after { content: ""; position: absolute; inset: 0; opacity: .5;
+  background-image: radial-gradient(rgba(255, 255, 255, .05) 1px, transparent 1.2px); background-size: 28px 28px; }
+.reader { position: absolute; left: 56px; top: 116px; width: 760px; height: 560px; background: #161a1f; border: 1px solid #262c34; border-radius: 10px;
+  overflow: hidden; box-shadow: 0 24px 60px rgba(0, 0, 0, .45); font-family: var(--ui); transition: opacity .6s, filter .6s, transform .6s; }
+#reader.away { opacity: .22; filter: blur(2px); transform: translateX(-40px) scale(.96); }
+.rbar { position: absolute; left: 0; right: 0; top: 0; height: 32px; background: #12151a; border-bottom: 1px solid #262c34; display: flex; align-items: center; gap: 7px; padding: 0 12px; }
+.rbar i { width: 10px; height: 10px; border-radius: 50%; background: #2a3038; }
+.rbar b { margin-left: 12px; height: 18px; width: 220px; border-radius: 5px; background: #1b2026; }
+.rside { position: absolute; left: 0; top: 32px; bottom: 0; width: 124px; background: #12151a; border-right: 1px solid #262c34; }
+.navi { position: absolute; left: 18px; width: 14px; height: 14px; border-radius: 4px; background: #252c35; }
+.navi.on { background: #2f6f5a; }
+.navrow { position: absolute; left: 10px; width: 104px; height: 30px; border-radius: 7px; background: #1b2128; }
+.adcard { position: absolute; left: 18px; top: 452px; width: 94px; height: 78px; border-radius: 9px; background: #1a2027; border: 1px solid #29313a; }
+.figure { position: absolute; left: 590px; top: 52px; width: 150px; height: 206px; border-radius: 10px; overflow: hidden;
+  background: linear-gradient(150deg, #1c3a48, #15292a 60%, #13201f); border: 1px solid #23343a; }
+.figure::before { content: ""; position: absolute; width: 120px; height: 120px; left: 46px; top: -26px; border-radius: 50%; background: radial-gradient(circle, rgba(64, 206, 157, .5), transparent 68%); }
+.figure::after { content: ""; position: absolute; left: 18px; right: 18px; bottom: 22px; height: 56px; border-radius: 6px;
+  background: repeating-linear-gradient(180deg, rgba(190, 210, 220, .22) 0 6px, transparent 6px 14px); }
+.rule { position: absolute; left: 152px; width: 420px; height: 1px; background: #232930; }
+.ln { position: absolute; white-space: nowrap; line-height: 1.3; }
+.ln.nav { left: 40px; font-size: 15px; color: #aab4be; }
+.ln.h1 { left: 152px; font-size: 28px; font-weight: 650; color: #e6ebf0; }
+.ln.meta { left: 152px; font-size: 13.5px; color: #7c8895; }
+.ln.p { left: 152px; font-size: 19px; color: #bec7d0; }
+.ln.h2 { left: 152px; font-size: 21px; font-weight: 600; color: #e6ebf0; }
+.ln.li { left: 152px; font-size: 17px; color: #bec7d0; }
+.ln.contact { left: 152px; font-size: 14.5px; color: #7c8895; }
+.ln.ad1 { left: 33px; font-size: 13px; color: #c3ccd5; font-weight: 600; }
+.ln.ad2 { left: 30px; font-size: 12px; color: #c3ccd5; background: #2a323c; border-radius: 10px; padding: 1px 10px; }
+
+/* ---------- 截图层：遮罩、选区、扫描、识别框 ---------- */
+.frame { position: absolute; border: 1.5px solid var(--frame); box-shadow: 0 0 0 3000px rgba(3, 5, 8, .52); opacity: 0; transition: opacity .35s; pointer-events: none; z-index: 10; }
+.frame.on { opacity: 1; }
+.frame.empty { border-color: transparent; }
+.frame i { position: absolute; width: 9px; height: 9px; margin: -5px 0 0 -5px; background: #fff; border: 1.5px solid var(--frame); border-radius: 50%; opacity: 0; transition: opacity .2s; }
+.frame.handles i { opacity: 1; }
+.sizetag { position: absolute; z-index: 11; font: 12px var(--mono); color: #fff; background: rgba(20, 24, 30, .82); border-radius: 4px; padding: 2px 7px; white-space: nowrap; opacity: 0; transition: opacity .2s; }
+.sizetag.on { opacity: 1; }
+.scan { position: absolute; z-index: 11; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity .3s; }
+.scan.on { opacity: 1; }
+.scan::before { content: ""; position: absolute; inset: 0; background: rgba(106, 183, 255, .05); }
+.scan .band { position: absolute; left: 0; right: 0; height: 150px; top: -150px;
+  background: linear-gradient(180deg, rgba(106, 183, 255, 0), rgba(106, 183, 255, .1) 60%, rgba(106, 183, 255, .32) 96%, rgba(200, 232, 255, .9)); }
+.scan.on .band { animation: sweep 1.1s cubic-bezier(.45, .05, .55, .95) infinite; }
+@keyframes sweep { to { transform: translateY(650px); } }
+.scan .busy { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 13px; color: #dceaff; background: rgba(16, 24, 34, .8); padding: 4px 12px; border-radius: 12px; border: 1px solid rgba(106, 183, 255, .35); }
+.boxes { position: absolute; inset: 0; z-index: 12; pointer-events: none; }
+.lb { position: absolute; border: 1px solid rgba(96, 157, 255, .55); background: rgba(96, 157, 255, .06); border-radius: 3px; opacity: 0; transform: scale(.94);
+  transition: opacity .3s, transform .3s, background .2s, border-color .2s, left .5s cubic-bezier(.6, 0, .2, 1), top .5s cubic-bezier(.6, 0, .2, 1), width .5s cubic-bezier(.6, 0, .2, 1), height .5s cubic-bezier(.6, 0, .2, 1); }
+.lb.on { opacity: 1; transform: none; }
+.lb.sel { background: rgba(96, 157, 255, .3); border-color: #8ab6ff; }
+.lb.sel::after { content: "✓"; position: absolute; right: -7px; top: -8px; width: 14px; height: 14px; display: grid; place-items: center; font-size: 10px; line-height: 1;
+  border-radius: 3px; background: var(--blue); color: #0b1522; font-weight: 700; }
+.lb.filt { border-style: dashed; border-color: var(--warn); background: rgba(230, 163, 92, .14); }
+.lb.gone { opacity: 0; transform: scale(.96); }
+.lb.hot, .gb.hot { background: rgba(96, 157, 255, .22); border-color: #8ab6ff; box-shadow: 0 0 0 3px rgba(96, 157, 255, .18); }
+.gb { position: absolute; border: 1.5px solid rgba(64, 206, 157, .75); background: rgba(64, 206, 157, .07); border-radius: 6px; opacity: 0; transition: opacity .35s, background .2s, border-color .2s, box-shadow .2s; }
+.gb.on { opacity: 1; }
+.tagc { position: absolute; z-index: 1; font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 4px; background: var(--ac); color: var(--acfg); font-weight: 600; white-space: nowrap;
+  opacity: 0; transform: translateY(3px); transition: opacity .3s, transform .3s; }
+.tagc.on { opacity: 1; transform: none; }
+.tagc.kept { background: #2a333d; color: #c7d2db; border: 1px solid #46515d; }
+.spark { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 12px 3px rgba(242, 182, 50, .7); animation: spark .9s ease-out forwards; }
+@keyframes spark { 0% { transform: scale(.2); opacity: 0; } 30% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(.6); opacity: 0; } }
+/* Delete 排除后按行框四周底色填充，原图上的文字随之抹去 */
+.fills { position: absolute; inset: 0; z-index: 11; pointer-events: none; }
+.fillpx { position: absolute; border-radius: 3px; clip-path: inset(0 100% 0 0); transition: clip-path .45s cubic-bezier(.6, 0, .2, 1); }
+.fillpx.on { clip-path: inset(0 0 0 0); }
+.marquee { position: absolute; z-index: 14; border: 1px solid var(--blue); background: rgba(96, 157, 255, .12); opacity: 0; transition: opacity .15s; pointer-events: none; }
+.marquee.on { opacity: 1; }
+
+/* 图片翻译：取样底色 + 原字号推算，逐块揭开 */
+.itl { position: absolute; inset: 0; z-index: 13; pointer-events: none; }
+.it { position: absolute; overflow: hidden; padding: 0 2px; line-height: 1.32; clip-path: inset(0 100% 0 0); transition: clip-path .55s cubic-bezier(.6, 0, .2, 1); }
+.it.on { clip-path: inset(0 0 0 0); }
+.cmp { position: absolute; z-index: 15; top: 160px; width: 2px; height: 496px; margin-left: -1px; background: #fff; box-shadow: 0 0 12px rgba(255, 255, 255, .6); opacity: 0; transition: opacity .25s; }
+.cmp.on { opacity: 1; }
+.cmp span { position: absolute; top: 12px; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 10px; white-space: nowrap; }
+.cmp .l { right: 10px; background: rgba(20, 24, 30, .85); color: #cfd8df; }
+.cmp .r { left: 10px; background: var(--ac); color: var(--acfg); }
+
+/* ---------- RaiShot 界面：工具栏、结果面板 ---------- */
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.i.s { width: 15px; height: 15px; }
+.toolbar { position: absolute; z-index: 20; height: 38px; padding: 3px; display: flex; align-items: center; gap: 1px; background: var(--bg); border: 1px solid var(--bd); border-radius: 9px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .45); opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s; }
+.toolbar.on { opacity: 1; transform: none; }
+.tbb { width: 32px; height: 30px; border-radius: 6px; display: grid; place-items: center; color: var(--fg); transition: background .15s, color .15s; }
+.tbb.on { background: var(--selc); color: var(--ac); }
+.tbb.ok { color: var(--ac); }
+.tsep { width: 1px; height: 18px; background: var(--bd); margin: 0 4px; }
+.status { position: absolute; z-index: 21; height: 28px; padding: 0 12px 0 10px; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg);
+  background: var(--bg); border: 1px solid var(--bd); border-radius: 14px; opacity: 0; transform: translateY(4px); transition: opacity .25s, transform .25s; white-space: nowrap; }
+.status.on { opacity: 1; transform: none; }
+.status .sp { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(64, 206, 157, .3); border-top-color: var(--ac); animation: spin .8s linear infinite; }
+.status.done .sp { animation: none; border-color: var(--ac); background: var(--ac); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.panel { position: absolute; z-index: 20; left: 812px; top: 160px; width: 340px; height: 540px; background: var(--bg); border: 1px solid var(--bd); border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .5); display: flex; flex-direction: column; overflow: hidden; opacity: 0; transform: translateX(14px); transition: opacity .3s, transform .3s; }
+.panel.on { opacity: 1; transform: none; }
+.p-head { height: 40px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 6px 0 14px; color: var(--mu); font-size: 12.5px; }
+.p-head .cnt { margin-right: auto; color: var(--fg); font-weight: 600; font-size: 13px; }
+.p-head .ib { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; }
+.p-tabs { height: 36px; flex: none; display: flex; align-items: stretch; gap: 18px; padding: 0 12px 0 14px; border-bottom: 1px solid var(--bd); position: relative; }
+.tab { font-size: 13px; color: var(--mu); display: flex; align-items: center; transition: color .2s; }
+.tab.on { color: var(--fg); }
+.ink { position: absolute; bottom: -1px; height: 2px; background: var(--ac); border-radius: 2px; transition: left .3s cubic-bezier(.4, 0, .2, 1), width .3s; }
+.cmpbtn { margin-left: auto; align-self: center; height: 24px; padding: 0 9px; border-radius: 12px; font-size: 12px; color: var(--mu); border: 1px solid var(--bd); display: none; align-items: center; gap: 5px; transition: background .2s, color .2s; }
+.cmpbtn.on { background: var(--selc); color: var(--ac); border-color: transparent; }
+.panel.v-tr .cmpbtn { display: inline-flex; }
+.p-sub { height: 38px; flex: none; display: none; align-items: center; padding: 0 12px; gap: 10px; }
+.panel.v-line .p-sub { display: flex; }
+.seg { display: inline-flex; border: 1px solid var(--bd); border-radius: 6px; overflow: hidden; font-size: 12px; }
+.seg span { height: 24px; padding: 0 10px; display: flex; align-items: center; color: var(--mu); }
+.seg span + span { border-left: 1px solid var(--bd); }
+.seg span.on { background: var(--selc); color: var(--ac); }
+.sw { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mu); }
+.sw i { width: 26px; height: 14px; border-radius: 7px; border: 1px solid var(--bd); position: relative; background: #161a20; }
+.sw i::after { content: ""; position: absolute; left: 2px; top: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--mu); transition: transform .2s; }
+.sw.on i { background: var(--ac); border-color: var(--ac); }
+.sw.on i::after { background: var(--acfg); transform: translateX(12px); }
+.p-sub .sw { margin-left: auto; }
+.p-body { flex: 1; min-height: 0; overflow: hidden; position: relative; padding: 2px 8px 8px; }
+.row { display: flex; align-items: center; gap: 8px; height: 22px; padding: 0 6px; border-radius: 5px; font-size: 12.5px; color: var(--fg); overflow: hidden;
+  transition: background .2s, height .35s, opacity .3s, transform .3s; }
+.row.in { opacity: 0; transform: translateX(8px); }
+.row .ck { width: 12px; height: 12px; flex: none; border: 1px solid #56616d; border-radius: 3px; display: grid; place-items: center; font-size: 9px; color: transparent; font-weight: 700; transition: background .15s, border-color .15s; }
+.row .no { width: 16px; flex: none; text-align: right; font: 10.5px var(--mono); color: #66737f; transition: opacity .3s, width .3s; }
+.row .tx { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .br { flex: none; font-size: 11px; color: #5d6976; transition: color .2s, transform .3s, opacity .3s; }
+.row.sel { background: rgba(96, 157, 255, .17); }
+.row.sel .ck { background: var(--blue); border-color: var(--blue); color: #0b1522; }
+.row.gone { height: 0; opacity: 0; }
+.row.seam .br { color: var(--gold); transform: scale(1.5); text-shadow: 0 0 8px rgba(242, 182, 50, .8); }
+.panel.merging .row .no { opacity: 0; }
+.panel.merging .row.seam .br { opacity: 0; transform: scale(.2); }
+.pb { padding: 5px 8px; margin-bottom: 3px; border-radius: 6px; font-size: 12.5px; line-height: 1.58; color: var(--fg); transition: background .2s, opacity .35s, transform .35s; }
+.pb.in { opacity: 0; transform: translateY(5px); }
+.pb.k-title { font-size: 14px; font-weight: 600; }
+.pb.k-meta, .pb.k-contact { color: var(--mu); font-size: 12px; }
+.pb .pt { display: inline-block; margin-left: 6px; font-size: 10.5px; line-height: 15px; padding: 0 5px; border-radius: 4px; color: var(--ac); border: 1px solid rgba(64, 206, 157, .4); vertical-align: 1px; }
+.seamc { border-radius: 2px; transition: background .3s, box-shadow .3s; }
+.seamc.glow { background: rgba(242, 182, 50, .32); box-shadow: 0 0 0 2px rgba(242, 182, 50, .18); }
+.tb { padding: 7px 8px; margin-bottom: 4px; border-radius: 6px; transition: background .2s; }
+.tb.hov, .pb.hov { background: var(--hv); }
+.tb .src { font-size: 11.5px; line-height: 1.5; color: var(--mu); overflow: hidden; max-height: 80px; transition: max-height .4s, opacity .3s, margin .4s; margin-bottom: 3px; white-space: pre-line; }
+.panel.nosrc .tb .src { max-height: 0; opacity: 0; margin-bottom: 0; }
+.tb .dst { font-size: 13px; line-height: 1.5; color: var(--fg); white-space: pre-line; min-height: 19px; }
+.tb.wait .dst { color: transparent; }
+.tb.wait .dst::before { content: ""; display: block; height: 9px; margin-top: 5px; width: 70%; border-radius: 5px; background: #2b333d; }
+.tb.typing .dst::after { content: ""; display: inline-block; width: 2px; height: 14px; margin-left: 1px; vertical-align: -2px; background: var(--ac); animation: blink .7s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.skel { padding: 8px 6px; }
+.skel i { display: block; height: 10px; border-radius: 5px; margin: 9px 0; background: linear-gradient(90deg, #2b333d 0%, #36404b 50%, #2b333d 100%); background-size: 200% 100%; animation: shim 1.2s linear infinite; }
+@keyframes shim { to { background-position: -200% 0; } }
+.p-foot { height: 52px; flex: none; border-top: 1px solid var(--bd); display: flex; align-items: center; gap: 10px; padding: 0 10px 0 12px; }
+.fl { font-size: 12px; color: var(--warn); padding: 2px 7px; border-radius: 10px; background: rgba(230, 163, 92, .12); display: none; }
+.fl.on { display: inline-block; }
+.fl.pulse { animation: pulse .6s; }
+@keyframes pulse { 40% { transform: scale(1.18); box-shadow: 0 0 0 4px rgba(230, 163, 92, .2); } }
+.fstat { font-size: 12px; color: var(--mu); display: none; align-items: center; gap: 6px; }
+.fstat.on { display: inline-flex; }
+.fstat .sp { width: 11px; height: 11px; border-radius: 50%; border: 2px solid rgba(64, 206, 157, .3); border-top-color: var(--ac); animation: spin .8s linear infinite; }
+.primary { margin-left: auto; height: 32px; padding: 0 14px; border-radius: 7px; background: var(--ac); color: var(--acfg); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; transition: filter .15s, opacity .2s; }
+.primary.dis { opacity: .45; }
+
+/* ---------- 贴图 ---------- */
+.pin { position: absolute; left: 0; top: 0; z-index: 25; overflow: hidden; transform-origin: 0 0; display: none; border-radius: 2px; transition: box-shadow .5s; }
+.pin.on { display: block; }
+.pin.float { box-shadow: 0 0 0 1px rgba(64, 206, 157, .6), 0 30px 70px rgba(0, 0, 0, .6), 0 6px 18px rgba(0, 0, 0, .4); }
+.pin .reader { border-radius: 0; box-shadow: none; }
+.pmarks { position: absolute; inset: 0; pointer-events: none; }
+.pband { position: absolute; background: rgba(96, 157, 255, .36); border-radius: 2px; }
+.mk-hl { position: absolute; border-radius: 2px; background: rgba(255, 212, 59, .38); transform-origin: left center; animation: grow .35s cubic-bezier(.4, 0, .2, 1); }
+.mk-ul { position: absolute; height: 2.5px; border-radius: 2px; transform-origin: left center; animation: grow .35s cubic-bezier(.4, 0, .2, 1); }
+.mk-wv { position: absolute; overflow: visible; }
+.mk-wv path { fill: none; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw .6s ease-out forwards; }
+@keyframes grow { from { transform: scaleX(0); } }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.cand { position: absolute; border: 1.5px dashed var(--warn); border-radius: 3px; background: rgba(230, 163, 92, .1); opacity: 0; transition: opacity .3s, background .2s; }
+.cand.on { opacity: 1; }
+.cand.chk { background: rgba(230, 163, 92, .26); border-style: solid; }
+.mosaic { position: absolute; image-rendering: pixelated; opacity: 0; transition: opacity .4s; border-radius: 1px; }
+.mosaic.on { opacity: 1; }
+.pscan { position: absolute; inset: 0; overflow: hidden; opacity: 0; transition: opacity .25s; }
+.pscan.on { opacity: 1; }
+.pscan i { position: absolute; left: 0; right: 0; height: 120px; top: -120px; background: linear-gradient(180deg, rgba(106, 183, 255, 0), rgba(106, 183, 255, .28) 94%, rgba(210, 236, 255, .9)); }
+.minibar { position: absolute; z-index: 30; height: 38px; padding: 3px 6px; display: flex; align-items: center; gap: 2px; background: var(--bg); border: 1px solid var(--bd); border-radius: 9px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5); opacity: 0; transform: translateY(4px) scale(.97); transition: opacity .2s, transform .2s; pointer-events: none; }
+.minibar.on { opacity: 1; transform: none; }
+.mb { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; font-size: 14px; font-weight: 700; color: var(--fg); transition: background .15s; }
+.mb.on { background: var(--selc); color: var(--ac); }
+.mb.m-hl span { padding: 0 3px; background: linear-gradient(transparent 55%, rgba(255, 212, 59, .55) 55%); }
+.mb.m-ul span { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.mb.m-wv span { text-decoration: underline wavy; text-underline-offset: 3px; }
+.mb.m-st span { text-decoration: line-through; text-decoration-thickness: 2px; }
+.msep { width: 1px; height: 18px; background: var(--bd); margin: 0 4px; }
+.dot { width: 22px; height: 28px; display: grid; place-items: center; }
+.dot i { width: 12px; height: 12px; border-radius: 50%; transition: box-shadow .15s; }
+.dot.on i { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px currentColor; }
+.shield { position: absolute; z-index: 30; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--bd); color: var(--warn);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .45); opacity: 0; transform: scale(.8); transition: opacity .25s, transform .25s; }
+.shield.on { opacity: 1; transform: none; }
+.sens { position: absolute; z-index: 31; width: 290px; background: var(--bg); border: 1px solid var(--bd); border-radius: 10px; box-shadow: 0 16px 40px rgba(0, 0, 0, .55);
+  opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s; overflow: hidden; }
+.sens.on { opacity: 1; transform: none; }
+.sens .sh { padding: 10px 12px 6px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.sens .sh span { margin-left: auto; font-weight: 400; color: var(--mu); font-size: 12px; }
+.srow { display: flex; align-items: center; gap: 9px; padding: 7px 12px; font-size: 12.5px; transition: background .15s; }
+.srow .ck { width: 14px; height: 14px; border: 1px solid #56616d; border-radius: 3px; display: grid; place-items: center; font-size: 10px; color: transparent; font-weight: 700; flex: none; }
+.srow.chk .ck { background: var(--ac); border-color: var(--ac); color: var(--acfg); }
+.srow .ty { color: var(--mu); width: 30px; flex: none; }
+.srow .v { font-family: var(--mono); font-size: 12px; }
+.sfoot { display: flex; gap: 8px; padding: 8px 12px 10px; border-top: 1px solid var(--bd); margin-top: 4px; }
+.sfoot span { flex: 1; height: 30px; border-radius: 7px; display: grid; place-items: center; font-size: 12.5px; border: 1px solid var(--bd); }
+.sfoot .go { background: var(--ac); color: var(--acfg); border-color: var(--ac); font-weight: 600; }
+
+/* ---------- 通用：提示、光标、字幕、片尾 ---------- */
+.toast { position: absolute; z-index: 35; width: 316px; background: #232a33; border: 1px solid #46515d; border-radius: 10px; padding: 10px 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, .55);
+  font-size: 12.5px; color: var(--fg); opacity: 0; transform: translateY(8px); transition: opacity .25s, transform .25s; }
+.toast.on { opacity: 1; transform: none; }
+.toast .th { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; }
+.toast .th b { width: 16px; height: 16px; border-radius: 50%; background: var(--ac); color: var(--acfg); display: grid; place-items: center; font-size: 10px; }
+.toast .tp { margin-top: 7px; padding: 7px 9px; border-radius: 6px; background: #161a20; font-size: 12px; line-height: 1.6; color: #b8c3cc; white-space: pre-line; }
+.toast .tp em { font-style: normal; color: var(--mu); font-size: 11px; margin-right: 6px; }
+.toast .tp .x { color: #7d8893; text-decoration: line-through; text-decoration-color: rgba(255, 107, 122, .7); }
+.toast mark { background: rgba(242, 182, 50, .32); color: inherit; border-radius: 2px; }
+.cursor { position: absolute; left: 0; top: 0; z-index: 50; width: 24px; height: 24px; pointer-events: none; opacity: 0; transition: opacity .3s; }
+.cursor.on { opacity: 1; }
+.cursor svg { position: absolute; left: 0; top: 0; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); transition: transform .12s; transform-origin: 2px 2px; }
+.cursor .cx { display: none; left: -12px; top: -12px; }
+.cursor.cross .cx { display: block; }
+.cursor.cross .ar { display: none; }
+.cursor.down .ar { transform: scale(.86); }
+.kchip { position: absolute; left: 24px; top: 26px; white-space: nowrap; font-size: 13px; color: #eef3f6; background: rgba(14, 18, 23, .92); border: 1px solid #3d4651; border-radius: 8px;
+  padding: 4px 10px; opacity: 0; transform: translateY(4px); transition: opacity .2s, transform .2s; box-shadow: 0 8px 20px rgba(0, 0, 0, .4); }
+.kchip.on { opacity: 1; transform: none; }
+.cursor.up .kchip { top: -34px; }
+.cursor.left .kchip { left: auto; right: 6px; }
+.kchip kbd, .toast kbd { font: 600 11.5px var(--mono); padding: 1px 6px; border: 1px solid #56616d; border-bottom-width: 2px; border-radius: 4px; background: #262e38; color: #f2f6f8; margin: 0 2px; }
+.rip { position: absolute; z-index: 49; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; border: 2px solid rgba(64, 206, 157, .9); pointer-events: none; animation: rip .55s ease-out forwards; }
+@keyframes rip { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+.cap { position: absolute; z-index: 45; left: 56px; top: 30px; transition: opacity .35s, transform .35s; }
+.cap.swap { opacity: 0; transform: translateY(8px); }
+.cap .t { display: flex; align-items: center; gap: 12px; font-size: 30px; font-weight: 650; color: #f3f7f9; letter-spacing: .01em; }
+.cap .no { font: 600 13px var(--mono); color: var(--ac); border: 1px solid rgba(64, 206, 157, .45); border-radius: 6px; padding: 2px 7px; letter-spacing: .04em; }
+.cap .s { margin-top: 6px; font-size: 15.5px; color: #9fb1be; }
+.narrow .cap { display: none; }
+.outro { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; opacity: 0; transition: opacity .7s; pointer-events: none;
+  background: radial-gradient(700px 420px at 50% 46%, rgba(22, 186, 138, .2), transparent 70%), rgba(7, 10, 13, .9); }
+.outro.on { opacity: 1; }
+.o-in { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; transform: translateY(14px); transition: transform .9s cubic-bezier(.2, .7, .2, 1); }
+.outro.on .o-in { transform: none; }
+.o-name { font-size: 52px; font-weight: 700; letter-spacing: .01em; color: #f4f8fa; line-height: 1.1; }
+.o-tag { font-size: 22px; color: #b9c8d2; }
+.o-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 760px; margin-top: 10px; }
+.o-chips span { font-size: 14px; padding: 5px 13px; border-radius: 16px; border: 1px solid rgba(64, 206, 157, .4); color: #cfeee2; background: rgba(64, 206, 157, .08);
+  opacity: 0; transform: translateY(6px); transition: opacity .4s, transform .4s; }
+.outro.on .o-chips span { opacity: 1; transform: none; }
+.o-foot { margin-top: 12px; font-size: 13.5px; color: #7f909c; }
+@media (prefers-reduced-motion: reduce) {
+  .scan.on .band, .skel i, .status .sp, .fstat .sp { animation: none; }
+}
+</style>
+</head>
+<body>
+<main class="wrap" id="wrapAll">
+  <header class="hd">
+    <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="emA" x1="3" y1="3" x2="29" y2="29" gradientUnits="userSpaceOnUse"><stop stop-color="#16ba8a"/><stop offset="1" stop-color="#078267"/></linearGradient></defs><rect x="2" y="2" width="28" height="28" rx="8" fill="url(#emA)"/><path d="M12 8H10a2 2 0 0 0-2 2v2m12-4h2a2 2 0 0 1 2 2v2M8 20v2a2 2 0 0 0 2 2h2m8 0h2a2 2 0 0 0 2-2v-2" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="3" fill="white"/></svg>
+    RaiShot <span>文字识别演示</span>
+  </header>
+
+  <div class="stage-wrap" id="wrap">
+    <div class="stage" id="stage" aria-hidden="true">
+      <div class="desk"></div>
+
+      <div class="reader" id="reader">
+        <div class="rbar"><i></i><i></i><i></i><b></b></div>
+        <div class="rside"></div>
+        <div class="navrow" style="top:50px"></div>
+        <i class="navi on" style="top:59px"></i><i class="navi" style="top:95px"></i><i class="navi" style="top:131px"></i>
+        <div class="ln nav" data-id="nav1" style="top:55px">首页</div>
+        <div class="ln nav" data-id="nav2" style="top:91px">专栏</div>
+        <div class="ln nav" data-id="nav3" style="top:127px">收藏</div>
+        <div class="adcard"></div>
+        <div class="ln ad1" data-id="ad1" style="top:466px">最近更新</div>
+        <div class="ln ad2" data-id="ad2" style="top:496px">查看全部</div>
+
+        <div class="ln h1" data-id="h1" style="top:50px">在本机完成文字识别</div>
+        <div class="ln meta" data-id="meta" style="top:98px">RaiShot 文档 · 3 分钟读完</div>
+        <div class="ln p" data-id="p1a" style="top:134px">截图里的文字不必再手动重打：框选一块区域，</div>
+        <div class="ln p" data-id="p1b" style="top:166px">识别就在<span data-ph="local">本机完成</span>，结果直接叠在原图之上，</div>
+        <div class="ln p" data-id="p1c" style="top:198px">像网页一样<span data-ph="drag">拖选、复制和标注</span>。</div>
+        <div class="rule" style="top:236px"></div>
+        <div class="ln h2" data-id="h2" style="top:250px">为什么段落合并很重要</div>
+        <div class="ln p" data-id="p2a" style="top:290px">屏幕上的一段话常被折成好几行，逐行复制会</div>
+        <div class="ln p" data-id="p2b" style="top:322px">带来多余的换行。按行距、缩进与是否写满判</div>
+        <div class="ln p" data-id="p2c" style="top:354px">断后，<span data-ph="merge">同一段的折行会被合并</span>成一句。</div>
+        <div class="ln li" data-id="li1" style="top:400px">• 标题、列表与代码保持分行</div>
+        <div class="ln li" data-id="li2" style="top:432px">• 中文续行的标点处不插空格</div>
+        <div class="rule" style="top:476px"></div>
+        <div class="ln contact" data-id="contact" style="top:488px">反馈：<span data-ph="email">hello@example.com</span> · <span data-ph="phone">010-5555-0123</span></div>
+        <div class="figure"></div>
+      </div>
+
+      <div class="frame" id="frame"></div>
+      <div class="sizetag" id="sizetag"></div>
+      <div class="scan" id="scan"><div class="band"></div><div class="busy">识别中…</div></div>
+      <div class="fills" id="fills"></div>
+      <div class="boxes" id="boxes"></div>
+      <div class="itl" id="itl"></div>
+      <div class="cmp" id="cmp"><span class="l">原图</span><span class="r">译图</span></div>
+      <div class="marquee" id="marquee"></div>
+
+      <div class="toolbar" id="toolbar"></div>
+      <div class="status" id="status"><i class="sp"></i><span></span></div>
+
+      <div class="panel" id="panel">
+        <div class="p-head"><span class="cnt" id="pcnt">16 行</span><span class="ib" data-ic="search"></span><span class="ib" data-ic="edit"></span><span class="ib" data-ic="more"></span><span class="ib" data-ic="close"></span></div>
+        <div class="p-tabs" id="ptabs">
+          <span class="tab" data-v="para">段落</span><span class="tab" data-v="line">逐行</span><span class="tab" data-v="table">表格</span><span class="tab" data-v="tr">译文</span>
+          <span class="cmpbtn on" id="cmpbtn">对照</span>
+          <i class="ink" id="ink"></i>
+        </div>
+        <div class="p-sub"><span class="seg"><span class="on">框选多行</span><span>逐字选取</span></span><span class="sw"><i></i>过滤</span></div>
+        <div class="p-body" id="pbody"></div>
+        <div class="p-foot">
+          <span class="sw on" id="layerSw"><i></i>识别层</span>
+          <span class="fl" id="fl">已过滤 0</span>
+          <span class="fstat" id="fstat"><i class="sp"></i><span></span></span>
+          <span class="primary" id="primary">复制全文</span>
+        </div>
+      </div>
+
+      <div class="pin" id="pin"></div>
+      <div class="minibar" id="minibar"></div>
+      <div class="shield" id="shield"></div>
+      <div class="sens" id="sens"></div>
+      <div class="toast" id="toast"></div>
+
+      <div class="cap" id="cap"><div class="t"><span class="no" id="capNo">01</span><span id="capT"></span></div><div class="s" id="capS"></div></div>
+
+      <div class="outro" id="outro">
+        <div class="o-in">
+          <svg width="84" height="84" viewBox="0 0 32 32"><defs><linearGradient id="emB" x1="3" y1="3" x2="29" y2="29" gradientUnits="userSpaceOnUse"><stop stop-color="#16ba8a"/><stop offset="1" stop-color="#078267"/></linearGradient></defs><rect x="2" y="2" width="28" height="28" rx="8" fill="url(#emB)"/><path d="M12 8H10a2 2 0 0 0-2 2v2m12-4h2a2 2 0 0 1 2 2v2M8 20v2a2 2 0 0 0 2 2h2m8 0h2a2 2 0 0 0 2-2v-2" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="3" fill="white"/></svg>
+          <div class="o-name">RaiShot</div>
+          <div class="o-tag">截图里的文字，现在都能直接用</div>
+          <div class="o-chips" id="ochips"></div>
+          <div class="o-foot">Windows 10 / 11 · Rust 原生 · 识别在本机 CPU 完成</div>
+        </div>
+      </div>
+
+      <div class="cursor" id="cursor">
+        <svg class="ar" width="24" height="24" viewBox="0 0 24 24"><path d="M3 2.5v17.2l4.6-4.3 3 6.6 3-1.4-3-6.4h6.2z" fill="#fff" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/></svg>
+        <svg class="cx" width="24" height="24" viewBox="0 0 24 24"><path d="M12 1v8M12 15v8M1 12h8M15 12h8" stroke="#111" stroke-width="3.2"/><path d="M12 1v8M12 15v8M1 12h8M15 12h8" stroke="#fff" stroke-width="1.4"/></svg>
+        <div class="kchip" id="kchip"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ctrl">
+    <button class="pp" id="pp" aria-label="暂停"></button>
+    <nav class="chs" id="chs" aria-label="章节"></nav>
+  </div>
+  <div class="ext-cap" id="extcap"><div class="t"></div><div class="s"></div></div>
+</main>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const stage = $('#stage'), wrap = $('#wrap'), wrapAll = $('#wrapAll');
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+if (new URLSearchParams(location.search).has('embed')) document.body.classList.add('embed');
+
+/* ---------- 图标（与 assets/icons 同一画法） ---------- */
+const P = {
+  rect: '<rect x="4" y="5.5" width="16" height="13" rx="2"/>',
+  arrow: '<path d="M5 19 18 6M10 6h8v8"/>',
+  pen: '<path d="M4.5 19.5 5.5 15 16 4.5l3.5 3.5L9 18.5z"/>',
+  text: '<path d="M5 7V5h14v2M12 5v14M9 19h6"/>',
+  mosaic: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16M15 4v16"/>',
+  ocr: '<path d="M8 3.5H5A1.5 1.5 0 0 0 3.5 5v3m12-4.5H19A1.5 1.5 0 0 1 20.5 5v3M3.5 16v3A1.5 1.5 0 0 0 5 20.5h3m8 0h3a1.5 1.5 0 0 0 1.5-1.5v-3M8 16l4-8 4 8m-6.5-3h5"/>',
+  translate: '<path d="M3 5.5h10M8 3.5v2M11 5.5c-.8 3.6-3.4 6.6-7 8.5M6.5 8.5c1.3 2.2 3.1 3.9 5.5 5"/><path d="M13 20.5l4-9 4 9M14.6 17h4.8"/>',
+  pin: '<g transform="rotate(35 12 12)"><path d="M8 3.5h8M9 3.5v6l-3 4v1h12v-1l-3-4v-6M12 14.5v6"/></g>',
+  save: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
+  copy: '<rect x="8" y="8" width="12.5" height="12.5" rx="2"/><path d="M15.5 8V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2H8"/>',
+  check: '<path d="M5 12.5 9.5 17 19 7.5"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  more: '<circle cx="6" cy="12" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="18" cy="12" r="1.1"/>',
+  close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  shield: '<path d="M12 3.5 5 6v5.5c0 4.3 3 7.6 7 9 4-1.4 7-4.7 7-9V6l-7-2.5Z"/><path d="M12 9v4m0 3v.01"/>',
+};
+const ic = (n, c = '') => `<svg class="i ${c}" viewBox="0 0 24 24">${P[n]}</svg>`;
+$$('[data-ic]').forEach((e) => (e.innerHTML = ic(e.dataset.ic, 's')));
+
+/* ---------- 场景数据 ---------- */
+const S = { x: 70, y: 160, w: 730, h: 496 }; // 截图选区
+const BLOCKS = [
+  { id: 'nav', kind: 'kept', lines: ['nav1', 'nav2', 'nav3'], tag: '短行 · 保持分行', en: 'Home\nColumns\nFavorites', bg: '#12151a', fg: '#aab4be', maxW: 96 },
+  { id: 'h1', kind: 'title', lines: ['h1'], en: 'Recognize text right on your PC', bg: '#161a1f', fg: '#e6ebf0', maxW: 430, bold: 650 },
+  { id: 'meta', kind: 'meta', lines: ['meta'], en: 'RaiShot Docs · 3-minute read', bg: '#161a1f', fg: '#7c8895', maxW: 300 },
+  { id: 'p1', kind: 'para', lines: ['p1a', 'p1b', 'p1c'], tag: '3 行 → 1 段', en: 'No more retyping text from screenshots: select an area and recognition runs locally, with the result laid right over the original image — drag-select, copy and annotate it like a web page.', bg: '#161a1f', fg: '#bec7d0' },
+  { id: 'h2', kind: 'title', lines: ['h2'], en: 'Why paragraph merging matters', bg: '#161a1f', fg: '#e6ebf0', maxW: 430, bold: 600 },
+  { id: 'p2', kind: 'para', lines: ['p2a', 'p2b', 'p2c'], tag: '3 行 → 1 段', en: 'One paragraph on screen often wraps into several lines. Weighing line spacing, indentation and fullness, the wrapped lines are merged back into one sentence.', bg: '#161a1f', fg: '#bec7d0' },
+  { id: 'list', kind: 'kept', lines: ['li1', 'li2'], tag: '列表 · 保持分行', en: '• Headings, lists and code keep their breaks\n• No spaces at Chinese punctuation seams', bg: '#161a1f', fg: '#bec7d0', maxW: 430 },
+  { id: 'ad', kind: 'kept', lines: ['ad1', 'ad2'], en: 'Updates\nView all', bg: '#1a2027', fg: '#c3ccd5', maxW: 0 },
+  { id: 'contact', kind: 'contact', lines: ['contact'], en: 'Feedback: hello@example.com · 010-5555-0123', skipImage: true },
+];
+const BY = Object.fromEntries(BLOCKS.map((b) => [b.id, b]));
+const CHAPTERS = [
+  { t: '本机识别', s: '框选即识别，文字原位叠在截图上；CPU 本机推理，图片不出本机。' },
+  { t: '框选筛选', s: '拖框整行选中，Ctrl 追加、Alt 减选；Delete 排除并抹去原图文字，复制只带走要的行。' },
+  { t: '段落合并', s: '按行距、缩进和是否写满还原段落；标题与列表保持分行，中文标点接缝不插空格。' },
+  { t: '流式翻译', s: '按段落边收边出，原文译文逐段对照；悬停一段，原图同步高亮。' },
+  { t: '图片翻译', s: '按 Y，译文按原底色与字号落回图上，每段都是可再编辑的文字标注。' },
+  { t: '贴图标注', s: '钉在桌面上的截图照样能选字：高亮、下划线、波浪线、删除线，四色可选。' },
+  { t: '敏感打码', s: '自动找出邮箱、电话、身份证号，勾选后一键马赛克，一次撤销。' },
+];
+const NAV = ['识别', '框选筛选', '段落合并', '流式翻译', '图片翻译', '贴图标注', '敏感打码'];
+const DUR = [7600, 11500, 8200, 12500, 8600, 11500, 7000, 4600];
+
+/* ---------- 缩放 ---------- */
+function fit() {
+  const w = wrap.clientWidth;
+  stage.style.transform = `scale(${w / 1280})`;
+  wrapAll.classList.toggle('narrow', w < 640);
+}
+new ResizeObserver(fit).observe(wrap);
+fit();
+const k = () => stage.getBoundingClientRect().width / 1280;
+function rel(r) {
+  if (r.getBoundingClientRect) r = r.getBoundingClientRect();
+  const s = stage.getBoundingClientRect(), q = k();
+  return { x: (r.left - s.left) / q, y: (r.top - s.top) / q, w: r.width / q, h: r.height / q };
+}
+const mid = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+const center = (el) => mid(rel(el));
+const union = (rs) => {
+  const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y));
+  return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
+};
+const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+const place = (el, r) => Object.assign(el.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+
+/* ---------- 可暂停的时钟：所有等待与补间都走它，章节跳转时整体作废 ---------- */
+const CANCEL = Symbol('cancel');
+let token = 0, clock = 0, playing = true, inView = true, lastT = performance.now(), waiters = [];
+let cur = 0, sceneT0 = 0;
+function tick(t) {
+  const dt = Math.min(64, t - lastT);
+  lastT = t;
+  if (playing && inView && !document.hidden) clock += dt;
+  const due = waiters.filter((w) => clock >= w.at);
+  if (due.length) { waiters = waiters.filter((w) => clock < w.at); due.forEach((w) => w.res()); }
+  progress();
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+const sleep = (ms) => new Promise((res, rej) => waiters.push({ at: clock + ms, res, rej }));
+const bg = (p) => p.catch(() => {});
+const io = (p) => (p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const lin = (p) => p;
+function tween(ms, fn, ease = io) {
+  const my = token, t0 = clock;
+  return new Promise((res, rej) => {
+    const f = () => {
+      if (my !== token) return rej(CANCEL);
+      const p = ms <= 0 ? 1 : Math.min(1, (clock - t0) / ms);
+      fn(ease(p), p);
+      p >= 1 ? res() : requestAnimationFrame(f);
+    };
+    f();
+  });
+}
+function cancelAll() {
+  token++;
+  const ws = waiters;
+  waiters = [];
+  ws.forEach((w) => w.rej(CANCEL));
+}
+
+/* ---------- 光标与按键提示 ---------- */
+const cursor = $('#cursor'), kchip = $('#kchip');
+const cp = { x: 640, y: 470 };
+function putCursor(x, y) {
+  cp.x = x;
+  cp.y = y;
+  cursor.style.transform = `translate(${x}px,${y}px)`;
+  cursor.classList.toggle('up', y > 640);
+  cursor.classList.toggle('left', x > 1080);
+}
+async function move(x, y, ms = 600, onf) {
+  const x0 = cp.x, y0 = cp.y;
+  await tween(ms, (e) => { putCursor(x0 + (x - x0) * e, y0 + (y - y0) * e); onf && onf(e); });
+}
+function ripple() {
+  const r = document.createElement('div');
+  r.className = 'rip';
+  r.style.left = cp.x + 'px';
+  r.style.top = cp.y + 'px';
+  stage.append(r);
+  setTimeout(() => r.remove(), 700);
+}
+async function click() {
+  cursor.classList.add('down');
+  ripple();
+  await sleep(140);
+  cursor.classList.remove('down');
+  await sleep(90);
+}
+let chipV = 0;
+function chip(html, ms = 1500) {
+  const v = ++chipV;
+  kchip.innerHTML = html;
+  kchip.classList.add('on');
+  bg(sleep(ms).then(() => { if (v === chipV) kchip.classList.remove('on'); }));
+}
+
+/* ---------- 识别行 ---------- */
+let L = [], LBY = {};
+const boxes = $('#boxes');
+function measure() {
+  boxes.innerHTML = '';
+  L = $$('#reader .ln').map((el) => {
+    const r = rel(el);
+    const box = { x: r.x - 4, y: r.y - 3, w: r.w + 8, h: r.h + 6 };
+    const lb = document.createElement('div');
+    lb.className = 'lb';
+    place(lb, box);
+    boxes.append(lb);
+    return { id: el.dataset.id, el, text: el.textContent, box, lb };
+  });
+  L.sort((a, b) => (Math.abs(a.box.y - b.box.y) < 10 ? a.box.x - b.box.x : a.box.y - b.box.y));
+  LBY = Object.fromEntries(L.map((l) => [l.id, l]));
+  BLOCKS.forEach((b) => {
+    b.rect = union(b.lines.map((id) => LBY[id].box));
+    const gb = document.createElement('div');
+    gb.className = 'gb';
+    place(gb, b.rect);
+    boxes.append(gb);
+    b.gb = gb;
+    if (b.tag) {
+      const t = document.createElement('div');
+      t.className = 'tagc' + (b.kind === 'kept' ? ' kept' : '');
+      t.textContent = b.tag;
+      const below = b.id === 'nav';
+      const ax = b.kind === 'para' ? b.rect.x + b.rect.w - 4 : below ? b.rect.x : b.rect.x + b.rect.w + 8;
+      t.style.left = ax + 'px';
+      t.style.top = (b.kind === 'para' ? b.rect.y - 9 : below ? b.rect.y + b.rect.h + 6 : b.rect.y + 2) + 'px';
+      if (b.kind === 'para') t.style.transform = 'translateX(-100%)';
+      boxes.append(t);
+      b.tagEl = t;
+    }
+  });
+}
+let sel = new Set(), filt = new Set();
+function renderSel() {
+  L.forEach((l) => {
+    l.lb.classList.toggle('sel', sel.has(l.id));
+    const r = rowOf(l.id);
+    r && r.classList.toggle('sel', sel.has(l.id));
+  });
+  if (view === 'line') setPrimary(sel.size ? `复制所选 · ${sel.size}` : filt.size ? '复制保留项' : '复制全文');
+}
+function boxesMode(mode) {
+  L.forEach((l) => {
+    place(l.lb, l.box);
+    l.lb.classList.remove('sel', 'filt', 'gone', 'hot');
+    const b = BLOCKS.find((x) => x.lines.includes(l.id));
+    const on = mode === 'lines' || (mode === 'groups' && b.kind !== 'para');
+    l.lb.classList.toggle('on', on);
+  });
+  BLOCKS.forEach((b) => {
+    b.gb.classList.toggle('on', mode === 'groups' && b.kind === 'para');
+    b.gb.classList.remove('hot');
+    b.tagEl && b.tagEl.classList.toggle('on', mode === 'groups');
+  });
+  $$('.spark', boxes).forEach((s) => s.remove());
+}
+function blockHot(id, on) {
+  const b = BY[id];
+  if (b.gb.classList.contains('on')) b.gb.classList.toggle('hot', on);
+  else b.lines.forEach((x) => LBY[x].lb.classList.toggle('hot', on));
+}
+
+/* ---------- 截图框、工具栏 ---------- */
+const frame = $('#frame'), sizetag = $('#sizetag'), toolbar = $('#toolbar'), statusEl = $('#status');
+frame.innerHTML = '<i style="left:0;top:0"></i><i style="left:50%;top:0"></i><i style="left:100%;top:0"></i><i style="left:100%;top:50%"></i><i style="left:100%;top:100%"></i><i style="left:50%;top:100%"></i><i style="left:0;top:100%"></i><i style="left:0;top:50%"></i>';
+function setFrame(r) {
+  place(frame, r);
+  frame.classList.toggle('empty', r.w < 2);
+  sizetag.style.left = r.x + 'px';
+  sizetag.style.top = r.y - 26 + 'px';
+  sizetag.textContent = `${Math.round(r.w)} × ${Math.round(r.h)}`;
+}
+const TB = ['rect', 'arrow', 'pen', 'text', 'mosaic', '|', 'ocr', 'translate', '|', 'pin', 'save', 'copy', '|', 'check'];
+toolbar.innerHTML = TB.map((n) => (n === '|' ? '<i class="tsep"></i>' : `<span class="tbb${n === 'check' ? ' ok' : ''}" data-k="${n}">${ic(n)}</span>`)).join('');
+const tbb = (n) => $(`.tbb[data-k="${n}"]`, toolbar);
+function placeToolbar() {
+  const w = toolbar.offsetWidth;
+  toolbar.style.left = S.x + S.w - w + 'px';
+  toolbar.style.top = S.y + S.h + 8 + 'px';
+  statusEl.style.top = S.y + S.h + 13 + 'px';
+}
+function setStatus(text, done = false) {
+  $('span', statusEl).textContent = text;
+  statusEl.classList.toggle('done', done);
+  statusEl.style.left = toolbar.offsetLeft - statusEl.offsetWidth - 8 + 'px';
+}
+
+/* ---------- 结果面板 ---------- */
+const panel = $('#panel'), pbody = $('#pbody'), ink = $('#ink'), primary = $('#primary'), fl = $('#fl'), fstat = $('#fstat'), cmpbtn = $('#cmpbtn');
+let view = 'line';
+const rowOf = (id) => (view === 'line' ? $(`.row[data-id="${id}"]`, pbody) : null);
+function setPrimary(t, dis = false) { primary.textContent = t; primary.classList.toggle('dis', dis); }
+function setTab(v) {
+  $$('.tab', panel).forEach((t) => t.classList.toggle('on', t.dataset.v === v));
+  const t = $(`.tab[data-v="${v}"]`, panel);
+  ink.style.left = t.offsetLeft + 'px';
+  ink.style.width = t.offsetWidth + 'px';
+}
+function paraHtml(b, glow) {
+  const ls = b.lines.map((id) => LBY[id].text);
+  if (b.kind !== 'para') return ls.map(esc).join('<br>');
+  let h = '';
+  ls.forEach((s, i) => {
+    let core = s;
+    if (i > 0) { h += `<span class="seamc${glow ? ' glow' : ''}">${esc(ls[i - 1].slice(-1) + s[0])}</span>`; core = core.slice(1); }
+    if (i < ls.length - 1) core = core.slice(0, -1);
+    h += esc(core);
+  });
+  return h;
+}
+const plain = (b) => (b.kind === 'para' ? b.lines.map((id) => LBY[id].text).join('') : b.lines.map((id) => LBY[id].text).join('\n'));
+function setView(v, opt = {}) {
+  view = v;
+  panel.classList.remove('v-line', 'v-para', 'v-tr', 'v-skel', 'merging', 'nosrc');
+  panel.classList.add('v-' + v);
+  pbody.scrollTop = 0;
+  fl.classList.toggle('on', v === 'line' && filt.size > 0);
+  fstat.classList.remove('on');
+  cmpbtn.classList.add('on');
+  if (v === 'skel') {
+    pbody.innerHTML = '<div class="skel">' + [82, 64, 90, 70, 86, 52, 78, 60, 88, 46].map((w) => `<i style="width:${w}%"></i>`).join('') + '</div>';
+    $('#pcnt').textContent = '识别中';
+    setPrimary('复制全文', true);
+    return;
+  }
+  $('#pcnt').textContent = `${L.length} 行`;
+  if (v === 'line') {
+    pbody.innerHTML = L.map((l, i) => `<div class="row${opt.stagger ? ' in' : ''}${filt.has(l.id) ? ' gone' : ''}" data-id="${l.id}"><span class="ck">✓</span><span class="no">${i + 1}</span><span class="tx">${esc(l.text)}</span><span class="br">↵</span></div>`).join('');
+    if (opt.stagger) $$('.row', pbody).forEach((r, i) => bg(sleep(40 + i * 45).then(() => r.classList.remove('in'))));
+    renderSel();
+  } else if (v === 'para') {
+    pbody.innerHTML = BLOCKS.map((b) => `<div class="pb k-${b.kind}${opt.enter ? ' in' : ''}" data-b="${b.id}">${paraHtml(b, false)}${b.kind === 'para' ? '<span class="pt">合并 3 行</span>' : ''}</div>`).join('');
+    if (opt.enter) $$('.pb', pbody).forEach((r, i) => bg(sleep(i * 55).then(() => r.classList.remove('in'))));
+    setPrimary('复制段落');
+  } else if (v === 'tr') {
+    pbody.innerHTML = BLOCKS.map((b) => `<div class="tb${opt.full ? '' : ' wait'}" data-b="${b.id}"><div class="src">${esc(plain(b))}</div><div class="dst">${opt.full ? esc(b.en) : ''}</div></div>`).join('');
+    if (opt.full) setPrimary('复制译文');
+    else { setPrimary('复制译文', true); fstat.classList.add('on'); }
+  }
+}
+const blockEl = (id) => $(`[data-b="${id}"]`, pbody);
+
+/* ---------- 提示 ---------- */
+const toast = $('#toast');
+function showToast(html, at) {
+  toast.innerHTML = html;
+  toast.style.left = at.x + 'px';
+  toast.style.top = at.y + 'px';
+  toast.classList.add('on');
+}
+
+/* ---------- 排除后填充：底色取行框外侧环带（导航选中行、侧栏、卡片各不相同） ---------- */
+const fills = $('#fills');
+const FILL = { nav1: '#1b2128', nav2: '#12151a', nav3: '#12151a', ad1: '#1a2027', ad2: '#1a2027' };
+function fillLine(id) {
+  const d = document.createElement('div');
+  d.className = 'fillpx';
+  place(d, LBY[id].box);
+  d.style.background = FILL[id] || '#161a1f';
+  fills.append(d);
+  bg(sleep(20).then(() => d.classList.add('on')));
+}
+
+/* ---------- 图片翻译 ---------- */
+const itl = $('#itl'), cmp = $('#cmp');
+function buildCovers() {
+  itl.innerHTML = '';
+  itl.style.clipPath = '';
+  const covers = [];
+  BLOCKS.filter((b) => !b.skipImage).forEach((b) => {
+    const lines = b.kind === 'kept' ? b.lines.map((id, i) => ({ ids: [id], en: b.en.split('\n')[i] })) : [{ ids: b.lines, en: b.en }];
+    lines.forEach(({ ids, en }) => {
+      const first = LBY[ids[0]].el, cs = getComputedStyle(first);
+      const r = union(ids.map((id) => LBY[id].box));
+      const pad = { x: r.x + 2, y: r.y + 1, w: Math.max(r.w - 4, b.maxW || 0), h: r.h - 2 };
+      const d = document.createElement('div');
+      d.className = 'it';
+      place(d, pad);
+      const pill = ids[0] === 'ad2';
+      Object.assign(d.style, {
+        background: pill ? '#2a323c' : b.bg, color: b.fg, fontWeight: b.bold || cs.fontWeight,
+        borderRadius: pill ? '10px' : '2px', whiteSpace: b.kind === 'para' || b.kind === 'title' ? 'normal' : 'nowrap',
+        textAlign: pill ? 'center' : 'left',
+      });
+      d.textContent = en;
+      itl.append(d);
+      // 从原行高推算字号，逐级缩小至放下；最小 9px 仍放不下时向下延伸
+      let fs = parseFloat(cs.fontSize);
+      d.style.fontSize = fs + 'px';
+      while ((d.scrollHeight > d.clientHeight + 1 || d.scrollWidth > d.clientWidth + 1) && fs > 9) { fs -= .5; d.style.fontSize = fs + 'px'; }
+      if (d.scrollHeight > d.clientHeight + 1) d.style.height = d.scrollHeight + 'px';
+      covers.push(d);
+    });
+  });
+  return covers;
+}
+
+/* ---------- 贴图 ---------- */
+const pin = $('#pin'), minibar = $('#minibar'), shield = $('#shield'), sens = $('#sens');
+const PIN = { x: 330, y: 166, s: .9 };
+let pmarks, pscan, pinS = 1;
+const COLORS = { y: '#ffd43b', r: '#ff5c6c', b: '#4c9bff', g: '#3ddc97' };
+minibar.innerHTML = `<span class="mb" data-m="copy">${ic('copy', 's')}</span><i class="msep"></i>` +
+  '<span class="mb m-hl" data-m="hl"><span>A</span></span><span class="mb m-ul" data-m="ul"><span>U</span></span><span class="mb m-wv" data-m="wv"><span>W</span></span><span class="mb m-st" data-m="st"><span>S</span></span><i class="msep"></i>' +
+  Object.entries(COLORS).map(([c, v]) => `<span class="dot${c === 'y' ? ' on' : ''}" data-c="${c}" style="color:${v}"><i style="background:${v}"></i></span>`).join('');
+shield.innerHTML = ic('shield');
+sens.innerHTML = `<div class="sh">${ic('shield', 's')}敏感文字<span>2 项 · 默认不勾选</span></div>` +
+  '<div class="srow" data-s="email"><span class="ck">✓</span><span class="ty">邮箱</span><span class="v">hello@example.com</span></div>' +
+  '<div class="srow" data-s="phone"><span class="ck">✓</span><span class="ty">电话</span><span class="v">010-5555-0123</span></div>' +
+  '<div class="sfoot"><span>模糊</span><span class="go">马赛克</span></div>';
+function buildPin() {
+  pin.innerHTML = '';
+  const c = $('#reader').cloneNode(true);
+  c.removeAttribute('id');
+  c.style.left = 56 - S.x + 'px';
+  c.style.top = 116 - S.y + 'px';
+  pmarks = document.createElement('div');
+  pmarks.className = 'pmarks';
+  pscan = document.createElement('div');
+  pscan.className = 'pscan';
+  pscan.innerHTML = '<i></i>';
+  pin.append(c, pmarks, pscan);
+  pin.style.width = S.w + 'px';
+  pin.style.height = S.h + 'px';
+  pin.classList.add('on');
+  pin.classList.remove('float');
+  setPin(S.x, S.y, 1);
+}
+function setPin(x, y, s) { pinS = s; pin.style.transform = `translate(${x}px,${y}px) scale(${s})`; }
+function local(r) {
+  const p = pin.getBoundingClientRect(), q = p.width / S.w;
+  return { x: (r.left - p.left) / q, y: (r.top - p.top) / q, w: r.width / q, h: r.height / q };
+}
+function phraseRange(key, n) {
+  const sp = $(`[data-ph="${key}"]`, pin), t = sp.firstChild, rg = document.createRange();
+  rg.setStart(t, 0);
+  rg.setEnd(t, n == null ? t.length : Math.min(n, t.length));
+  return { rg, len: t.length };
+}
+function addMark(kind, color, rl) {
+  if (kind === 'hl') {
+    const d = document.createElement('div');
+    d.className = 'mk-hl';
+    place(d, { x: rl.x - 1, y: rl.y + 1, w: rl.w + 2, h: rl.h - 2 });
+    pmarks.append(d);
+  } else if (kind === 'ul') {
+    const d = document.createElement('div');
+    d.className = 'mk-ul';
+    place(d, { x: rl.x, y: rl.y + rl.h - 2, w: rl.w, h: 2.5 });
+    d.style.background = COLORS[color];
+    pmarks.append(d);
+  } else if (kind === 'wv') {
+    const w = rl.w, svgNS = 'http://www.w3.org/2000/svg', s = document.createElementNS(svgNS, 'svg');
+    s.setAttribute('class', 'mk-wv');
+    s.setAttribute('width', w);
+    s.setAttribute('height', 8);
+    s.style.left = rl.x + 'px';
+    s.style.top = rl.y + rl.h - 4 + 'px';
+    let d = 'M0 4';
+    for (let x = 0; x < w; x += 6) d += ` q1.5 -3.5 3 0 t3 0`;
+    const p = document.createElementNS(svgNS, 'path');
+    p.setAttribute('d', d);
+    p.style.stroke = COLORS[color];
+    s.append(p);
+    pmarks.append(s);
+  }
+}
+function mosaicAt(rl) {
+  const cell = 6, c = document.createElement('canvas');
+  const w = Math.ceil((rl.w + 6) / cell), h = Math.ceil((rl.h + 4) / cell);
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d');
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const t = Math.random(), v = Math.round(30 + t * t * 80);
+    g.fillStyle = `rgb(${v - 4},${v + 2},${v + 10})`;
+    g.fillRect(x, y, 1, 1);
+  }
+  c.className = 'mosaic';
+  place(c, { x: rl.x - 3, y: rl.y - 2, w: w * cell, h: h * cell });
+  pmarks.append(c);
+  return c;
+}
+
+/* ---------- 字幕与章节 ---------- */
+const cap = $('#cap'), extcap = $('#extcap'), chs = $('#chs');
+chs.innerHTML = NAV.map((n, i) => `<button class="ch" data-i="${i}"><span class="cl">${n}</span><span class="pg"><i></i></span></button>`).join('');
+$$('.ch', chs).forEach((b) => b.addEventListener('click', () => { if (!playing) setPlaying(true); runFrom(+b.dataset.i); }));
+function setCaption(i) {
+  const c = CHAPTERS[i];
+  cap.classList.add('swap');
+  bg(sleep(260).then(() => {
+    if (!c) return;
+    $('#capNo').textContent = String(i + 1).padStart(2, '0');
+    $('#capT').textContent = c.t;
+    $('#capS').textContent = c.s;
+    $('.t', extcap).textContent = c.t;
+    $('.s', extcap).textContent = c.s;
+    cap.classList.remove('swap');
+  }));
+}
+function progress() {
+  $$('.ch', chs).forEach((b, i) => {
+    b.classList.toggle('on', i === cur);
+    b.classList.toggle('done', i < cur);
+    $('i', b).style.width = i === cur ? Math.min(100, ((clock - sceneT0) / DUR[cur]) * 100) + '%' : '';
+  });
+}
+const pp = $('#pp');
+const PLAY = '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z"/></svg>', PAUSE = '<svg viewBox="0 0 16 16"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>';
+function setPlaying(v) { playing = v; pp.innerHTML = v ? PAUSE : PLAY; pp.setAttribute('aria-label', v ? '暂停' : '播放'); }
+pp.addEventListener('click', () => setPlaying(!playing));
+new IntersectionObserver((es) => { inView = es[0].isIntersecting; }, { threshold: .15 }).observe(wrap);
+
+/* ---------- 状态重置：每个章节从确定的起点开始，可任意跳转 ---------- */
+function instant(fn) {
+  stage.classList.add('instant');
+  fn();
+  void stage.offsetWidth;
+  stage.classList.remove('instant');
+}
+function reset(keepOutro) {
+  sel = new Set();
+  filt = new Set();
+  frame.classList.remove('on', 'handles');
+  sizetag.classList.remove('on');
+  $('#scan').classList.remove('on');
+  toolbar.classList.remove('on');
+  $$('.tbb', toolbar).forEach((b) => b.classList.toggle('on', false));
+  statusEl.classList.remove('on');
+  panel.classList.remove('on');
+  setView('line');
+  setTab('line');
+  boxesMode('off');
+  itl.innerHTML = '';
+  fills.innerHTML = '';
+  cmp.classList.remove('on');
+  $('#marquee').classList.remove('on');
+  pin.classList.remove('on', 'float');
+  pin.innerHTML = '';
+  minibar.classList.remove('on');
+  shield.classList.remove('on');
+  sens.classList.remove('on');
+  $$('.srow', sens).forEach((r) => r.classList.remove('chk'));
+  toast.classList.remove('on');
+  kchip.classList.remove('on');
+  cursor.classList.remove('cross', 'down');
+  cursor.classList.add('on');
+  $('#reader').classList.remove('away');
+  if (!keepOutro) $('#outro').classList.remove('on');
+  $$('.rip', stage).forEach((r) => r.remove());
+}
+function baseCapture(ocrOn) {
+  setFrame(S);
+  frame.classList.add('on', 'handles');
+  toolbar.classList.add('on');
+  placeToolbar();
+  tbb('ocr').classList.toggle('on', !!ocrOn);
+}
+function ocrReady() {
+  baseCapture(true);
+  panel.classList.add('on');
+  setView('line');
+  setTab('line');
+  boxesMode('lines');
+}
+function pinFinal() {
+  buildPin();
+  $('#reader').classList.add('away');
+  setPin(PIN.x, PIN.y, PIN.s);
+  pin.classList.add('float');
+  [['local', 'hl', 'y'], ['drag', 'wv', 'r'], ['merge', 'ul', 'b']].forEach(([key, kind, c]) => addMark(kind, c, local(phraseRange(key).rg.getBoundingClientRect())));
+  $$('.mk-hl, .mk-ul, .mk-wv path', pmarks).forEach((e) => { e.style.animation = 'none'; e.style.strokeDashoffset = 0; });
+  placeShield();
+}
+function placeShield() {
+  const r = rel(pin);
+  shield.style.left = r.x + r.w - 44 + 'px';
+  shield.style.top = r.y + r.h - 44 + 'px';
+}
+
+/* ---------- 01 本机识别 ---------- */
+async function playOcr() {
+  putCursor(600, 450);
+  await sleep(600);
+  chip('<kbd>Ctrl</kbd>+<kbd>1</kbd> 开始截图', 1300);
+  cursor.classList.add('cross');
+  setFrame({ x: 600, y: 450, w: 0, h: 0 });
+  frame.classList.add('on');
+  await move(S.x, S.y, 750);
+  setFrame({ x: S.x, y: S.y, w: 0, h: 0 });
+  sizetag.classList.add('on');
+  await move(S.x + S.w, S.y + S.h, 1100, () => setFrame({ x: S.x, y: S.y, w: cp.x - S.x, h: cp.y - S.y }));
+  cursor.classList.remove('cross');
+  frame.classList.add('handles');
+  await sleep(150);
+  sizetag.classList.remove('on');
+  placeToolbar();
+  toolbar.classList.add('on');
+  await sleep(450);
+  const b = center(tbb('ocr'));
+  await move(b.x, b.y, 650);
+  await click();
+  tbb('ocr').classList.add('on');
+  chip('<kbd>R</kbd> 文字识别', 1400);
+  const scan = $('#scan');
+  place(scan, S);
+  scan.classList.add('on');
+  setView('skel');
+  setTab('para');
+  panel.classList.add('on');
+  await sleep(1500);
+  scan.classList.remove('on');
+  L.forEach((l, i) => bg(sleep(i * 45).then(() => l.lb.classList.add('on'))));
+  setView('line', { stagger: true });
+  setTab('line');
+  await move(1000, 690, 900);
+  await sleep(900);
+}
+
+/* ---------- 02 框选筛选 ---------- */
+async function drag(x0, y0, x1, y1, ms, mode) {
+  const mq = $('#marquee');
+  await move(x0, y0, 520);
+  const base = new Set(sel);
+  cursor.classList.add('down');
+  place(mq, { x: x0, y: y0, w: 0, h: 0 });
+  mq.classList.add('on');
+  await move(x1, y1, ms, () => {
+    const r = { x: Math.min(x0, cp.x), y: Math.min(y0, cp.y), w: Math.abs(cp.x - x0), h: Math.abs(cp.y - y0) };
+    place(mq, r);
+    const hits = L.filter((l) => !filt.has(l.id) && hit(r, l.box)).map((l) => l.id);
+    sel = mode === 'add' ? new Set([...base, ...hits]) : new Set(hits);
+    renderSel();
+  });
+  cursor.classList.remove('down');
+  mq.classList.remove('on');
+}
+async function playFilter() {
+  await sleep(400);
+  chip('拖框：碰到的行整行选中', 1700);
+  await drag(76, 166, 192, 652, 900, 'replace');
+  await sleep(350);
+  chip('<kbd>Delete</kbd> 排除并填充原图', 1600);
+  await sleep(300);
+  [...sel].forEach((id) => { filt.add(id); LBY[id].lb.classList.add('filt'); });
+  sel = new Set();
+  renderSel();
+  await sleep(450);
+  filt.forEach((id) => { LBY[id].lb.classList.add('gone'); rowOf(id).classList.add('gone'); });
+  [...filt].forEach((id, i) => bg(sleep(i * 80).then(() => fillLine(id))));
+  fl.textContent = `已过滤 ${filt.size}`;
+  fl.classList.add('on', 'pulse');
+  bg(sleep(700).then(() => fl.classList.remove('pulse')));
+  renderSel();
+  await sleep(700);
+  chip('拖框选择正文', 1400);
+  await drag(198, 244, 624, 590, 1050, 'replace');
+  await sleep(350);
+  chip('<kbd>Ctrl</kbd> 拖框追加', 1500);
+  await drag(200, 598, 480, 634, 600, 'add');
+  await sleep(350);
+  const h = mid(LBY.h2.box);
+  await move(h.x + 30, h.y, 520);
+  chip('<kbd>Alt</kbd> 点击减选', 1500);
+  await sleep(250);
+  await click();
+  sel.delete('h2');
+  renderSel();
+  await sleep(700);
+  const p = center(primary);
+  await move(p.x, p.y, 650);
+  await click();
+  const picked = L.filter((l) => sel.has(l.id)).map((l) => esc(l.text));
+  showToast(`<div class="th"><b>✓</b>已复制 ${picked.length} 行 · 按原顺序</div><div class="tp">${picked.slice(0, 4).join('\n')}\n…\n${picked[picked.length - 1]}</div>`, { x: 824, y: 404 });
+  await sleep(2600);
+}
+
+/* ---------- 03 段落合并 ---------- */
+async function playPara() {
+  await sleep(300);
+  const t = center($('.tab[data-v="para"]', panel));
+  await move(t.x, t.y, 700);
+  await click();
+  setTab('para');
+  // 同段折行的换行符先亮起，原图对应位置闪出接缝
+  const seams = BLOCKS.filter((b) => b.kind === 'para').flatMap((b) => b.lines.slice(0, -1));
+  seams.forEach((id, i) => bg(sleep(i * 110).then(() => {
+    rowOf(id).classList.add('seam');
+    const r = LBY[id].box, s = document.createElement('div');
+    s.className = 'spark';
+    s.style.left = r.x + r.w - 2 + 'px';
+    s.style.top = r.y + r.h / 2 + 'px';
+    boxes.append(s);
+  })));
+  await sleep(900);
+  panel.classList.add('merging');
+  BLOCKS.filter((b) => b.kind === 'para').forEach((b) => b.lines.forEach((id) => place(LBY[id].lb, b.rect)));
+  await sleep(560);
+  setView('para', { enter: true });
+  boxesMode('groups');
+  await sleep(700);
+  $$('.seamc', pbody).forEach((s, i) => bg(sleep(i * 160).then(() => s.classList.add('glow'))));
+  await sleep(1200);
+  const p = center(primary);
+  await move(p.x, p.y, 700);
+  await click();
+  showToast('<div class="th"><b>✓</b>已按段落复制</div>' +
+    '<div class="tp"><em>逐行</em><span class="x">…框选一块区域，↵ 识别就在…</span>\n<em>段落</em>…框选一块区域<mark>，识</mark>别就在本机完成…</div>', { x: 824, y: 468 });
+  await sleep(2700);
+}
+
+/* ---------- 04 流式翻译 ---------- */
+async function stream(el, text, tb) {
+  tb.classList.remove('wait');
+  tb.classList.add('typing');
+  for (let n = 0; n < text.length;) {
+    n = Math.min(text.length, n + 2 + Math.floor(Math.random() * 3));
+    el.textContent = text.slice(0, n);
+    const want = tb.offsetTop + tb.offsetHeight - pbody.clientHeight + 12;
+    if (want > pbody.scrollTop) pbody.scrollTop += Math.max(1, (want - pbody.scrollTop) * .25);
+    await sleep(22);
+  }
+  tb.classList.remove('typing');
+}
+async function scrollTo(y, ms) {
+  const y0 = pbody.scrollTop;
+  await tween(ms, (e) => (pbody.scrollTop = y0 + (y - y0) * e));
+}
+async function playTr() {
+  await sleep(300);
+  const t = center($('.tab[data-v="tr"]', panel));
+  await move(t.x, t.y, 700);
+  await click();
+  setTab('tr');
+  setView('tr');
+  const st = $('span', fstat);
+  st.textContent = `翻译中 0/${BLOCKS.length}`;
+  await sleep(450);
+  for (const [i, b] of BLOCKS.entries()) {
+    const tb = blockEl(b.id);
+    blockHot(b.id, true);
+    await stream($('.dst', tb), b.en, tb);
+    blockHot(b.id, false);
+    st.textContent = `翻译中 ${i + 1}/${BLOCKS.length}`;
+    await sleep(60);
+  }
+  fstat.classList.remove('on');
+  setPrimary('复制译文');
+  await sleep(400);
+  const p2 = blockEl('p2');
+  await scrollTo(Math.max(0, p2.offsetTop - 70), 500);
+  const c = center(p2);
+  await move(c.x + 40, c.y, 650);
+  p2.classList.add('hov');
+  blockHot('p2', true);
+  chip('悬停：原图同步高亮', 1500);
+  await sleep(1500);
+  const b = center(cmpbtn);
+  await move(b.x, b.y, 600);
+  p2.classList.remove('hov');
+  blockHot('p2', false);
+  await click();
+  cmpbtn.classList.remove('on');
+  panel.classList.add('nosrc');
+  chip('隐藏原文，只看译文', 1500);
+  await sleep(400);
+  await scrollTo(0, 700);
+  await sleep(1500);
+}
+
+/* ---------- 05 图片翻译 ---------- */
+async function playImage() {
+  await sleep(300);
+  chip('<kbd>Y</kbd> 图片翻译', 1500);
+  await sleep(350);
+  panel.classList.remove('on');
+  boxesMode('off');
+  const covers = buildCovers();
+  setStatus(`图片翻译 0/${covers.length}`);
+  statusEl.classList.add('on');
+  await move(980, 640, 700);
+  for (let i = 0; i < covers.length; i += 3) {
+    covers.slice(i, i + 3).forEach((c) => c.classList.add('on'));
+    setStatus(`图片翻译 ${Math.min(covers.length, i + 3)}/${covers.length}`);
+    await sleep(420);
+  }
+  await sleep(300);
+  setStatus(`已插入 ${covers.length} 段文字标注 · 一次撤销`, true);
+  await sleep(700);
+  cmp.classList.add('on');
+  const clip = (x) => { cmp.style.left = x + 'px'; itl.style.clipPath = `inset(0 0 0 ${x}px)`; };
+  clip(S.x + S.w);
+  await tween(1300, (e) => clip(S.x + S.w - S.w * .62 * e));
+  await sleep(800);
+  await tween(1100, (e) => clip(S.x + S.w * .38 + S.w * .62 * e));
+  cmp.classList.remove('on');
+  itl.style.clipPath = '';
+  await sleep(900);
+}
+
+/* ---------- 06 贴图选字标注 ---------- */
+async function selectPhrase(key) {
+  const band = document.createElement('div');
+  band.className = 'pband';
+  pmarks.append(band);
+  const { rg, len } = phraseRange(key, 1);
+  const r0 = rel(rg.getBoundingClientRect());
+  await move(r0.x + 1, r0.y + r0.h / 2, 650);
+  cursor.classList.add('down');
+  await tween(700, (e) => {
+    const n = Math.max(1, Math.round(e * len));
+    const r = phraseRange(key, n).rg.getBoundingClientRect();
+    place(band, local(r));
+    const s = rel(r);
+    putCursor(s.x + s.w, s.y + s.h / 2);
+  }, lin);
+  cursor.classList.remove('down');
+  const full = phraseRange(key).rg.getBoundingClientRect();
+  const s = rel(full);
+  minibar.style.left = Math.max(10, s.x + s.w / 2 - minibar.offsetWidth / 2) + 'px';
+  minibar.style.top = s.y - 48 + 'px';
+  minibar.classList.add('on');
+  return { band, rl: local(full) };
+}
+async function miniClick(sel) {
+  const el = $(sel, minibar), c = center(el);
+  await move(c.x, c.y, 480);
+  await click();
+  if (el.classList.contains('dot')) $$('.dot', minibar).forEach((d) => d.classList.toggle('on', d === el));
+  else el.classList.add('on');
+}
+async function playPin() {
+  await sleep(300);
+  const b = center(tbb('pin'));
+  await move(b.x, b.y, 700);
+  await click();
+  chip('<kbd>T</kbd> 贴到桌面', 1400);
+  buildPin();
+  frame.classList.remove('on');
+  toolbar.classList.remove('on');
+  $('#reader').classList.add('away');
+  await sleep(200);
+  await tween(950, (e) => setPin(S.x + (PIN.x - S.x) * e, S.y + (PIN.y - S.y) * e, 1 + (PIN.s - 1) * e));
+  pin.classList.add('float');
+  await sleep(350);
+  chip('<kbd>E</kbd> 选字（按需识别）', 1500);
+  pscan.classList.add('on');
+  await tween(750, (e) => ($('i', pscan).style.transform = `translateY(${e * (S.h + 120)}px)`), lin);
+  pscan.classList.remove('on');
+  await sleep(200);
+  const steps = [['local', null, 'hl', 'y'], ['drag', '[data-c="r"]', 'wv', 'r'], ['merge', '[data-c="b"]', 'ul', 'b']];
+  for (const [key, dot, kind, color] of steps) {
+    $$('.mb', minibar).forEach((m) => m.classList.remove('on'));
+    const { band, rl } = await selectPhrase(key);
+    await sleep(250);
+    if (dot) await miniClick(dot);
+    await miniClick(`[data-m="${kind}"]`);
+    band.remove();
+    addMark(kind, color, rl);
+    await sleep(150);
+    minibar.classList.remove('on');
+    await sleep(350);
+  }
+  await move(1180, 600, 700);
+  await sleep(900);
+}
+
+/* ---------- 07 敏感打码 ---------- */
+async function playSens() {
+  placeShield();
+  await sleep(300);
+  shield.classList.add('on');
+  await sleep(400);
+  const c = center(shield);
+  await move(c.x, c.y, 700);
+  await click();
+  const sr = rel(shield);
+  sens.style.left = sr.x + sr.w - 290 + 'px';
+  sens.style.top = sr.y - 186 + 'px';
+  sens.classList.add('on');
+  const cands = ['email', 'phone'].map((key) => {
+    const rl = local(phraseRange(key).rg.getBoundingClientRect());
+    const d = document.createElement('div');
+    d.className = 'cand';
+    place(d, { x: rl.x - 3, y: rl.y - 2, w: rl.w + 6, h: rl.h + 4 });
+    pmarks.append(d);
+    bg(sleep(50).then(() => d.classList.add('on')));
+    return { key, d, rl };
+  });
+  await sleep(700);
+  for (const cd of cands) {
+    const row = $(`[data-s="${cd.key}"]`, sens), rc = center($('.ck', row));
+    await move(rc.x, rc.y, 450);
+    await click();
+    row.classList.add('chk');
+    cd.d.classList.add('chk');
+    await sleep(200);
+  }
+  const go = center($('.go', sens));
+  await move(go.x, go.y, 550);
+  await click();
+  sens.classList.remove('on');
+  cands.forEach((cd) => {
+    cd.d.classList.remove('on');
+    const m = mosaicAt(cd.rl);
+    bg(sleep(30).then(() => m.classList.add('on')));
+  });
+  await sleep(500);
+  const pr = rel(pin);
+  showToast('<div class="th"><b>✓</b>已打码 2 处</div><div class="tp">多个区域合为一个标注，<kbd>Ctrl</kbd>+<kbd>Z</kbd> 一次撤销</div>', { x: pr.x + 20, y: pr.y + pr.h + 14 });
+  await move(1220, 690, 800);
+  await sleep(1800);
+}
+
+/* ---------- 片尾 ---------- */
+$('#ochips').innerHTML = ['本机 OCR', '框选筛选', '段落合并', '流式翻译', '图片翻译', '贴图标注', '敏感打码'].map((t, i) => `<span style="transition-delay:${.35 + i * .07}s">${t}</span>`).join('');
+async function playOutro() {
+  cap.classList.add('swap');
+  cursor.classList.remove('on');
+  toast.classList.remove('on');
+  shield.classList.remove('on');
+  $('#outro').classList.add('on');
+  await sleep(4600);
+}
+
+const SCENES = [
+  { prep: () => putCursor(600, 450), play: playOcr },
+  { prep: () => { ocrReady(); putCursor(1000, 690); }, play: playFilter },
+  { prep: () => { ocrReady(); putCursor(1000, 690); }, play: playPara },
+  { prep: () => { ocrReady(); setView('para'); setTab('para'); boxesMode('groups'); putCursor(1000, 690); }, play: playTr },
+  { prep: () => { ocrReady(); setTab('tr'); setView('tr', { full: true }); boxesMode('groups'); putCursor(1000, 690); }, play: playImage },
+  { prep: () => { baseCapture(false); putCursor(980, 640); }, play: playPin },
+  { prep: () => { pinFinal(); putCursor(1180, 600); }, play: playSens },
+  { prep: () => { pinFinal(); }, play: playOutro },
+];
+
+async function runFrom(i) {
+  cancelAll();
+  const my = token;
+  try {
+    for (let n = i; ; n = (n + 1) % SCENES.length) {
+      if (my !== token) return;
+      const fromOutro = n === 0 && $('#outro').classList.contains('on');
+      cur = n;
+      instant(() => { reset(fromOutro); SCENES[n].prep(); });
+      if (n < CHAPTERS.length) setCaption(n);
+      if (fromOutro) $('#outro').classList.remove('on');
+      sceneT0 = clock;
+      await SCENES[n].play();
+      DUR[n] = clock - sceneT0; // 首轮之后进度条按实际时长走
+    }
+  } catch (e) {
+    if (e !== CANCEL) console.error(e);
+  }
+}
+
+function start() {
+  measure();
+  setPlaying(!matchMedia('(prefers-reduced-motion: reduce)').matches);
+  runFrom(0);
+}
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(start);
+})();
+</script>
+</body>
+</html>

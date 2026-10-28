@@ -1,0 +1,583 @@
+<title>选区外观条</title>
+<style>
+/* 布局：上方说明与切换，中间按 1:1 DIP 复刻冻结桌面 + 选区 + 左上角外观条 + 面板，下方交互约定。配色沿用 GPUI Palette。 */
+:root {
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --selected: #28473d; --accent: #40ce9d; --on-accent: #10231c;
+  --page: #0f1317; --field: #161a20; --sel: #1498ff;
+  --pop-shadow: 0 16px 40px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
+  --seg-shadow: 0 1px 2px rgba(0,0,0,.35);
+  --desk: #0c0e11; --desk-2: #15191e; --desk-line: #2a3038; --desk-text: #aab4bf;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+    --hover: #eaf0f3; --selected: #dcefe7; --accent: #126d4e; --on-accent: #ffffff;
+    --page: #e8edf1; --field: #ffffff;
+    --pop-shadow: 0 14px 36px rgba(24,36,48,.18), 0 2px 6px rgba(24,36,48,.08);
+    --seg-shadow: 0 1px 2px rgba(24,36,48,.12);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+  --hover: #eaf0f3; --selected: #dcefe7; --accent: #126d4e; --on-accent: #ffffff;
+  --page: #e8edf1; --field: #ffffff;
+  --pop-shadow: 0 14px 36px rgba(24,36,48,.18), 0 2px 6px rgba(24,36,48,.08);
+  --seg-shadow: 0 1px 2px rgba(24,36,48,.12);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); padding-block: 18px 48px; padding-inline: 16px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.top h1 { font-size: 17px; font-weight: 600; margin: 0; text-wrap: balance; }
+.top h1 span { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 13px; }
+.ctrls { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.tog { display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); }
+.tog button { height: 26px; padding: 0 11px; border-radius: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.tog button:hover { color: var(--fg); }
+.tog button.on { background: var(--bg); color: var(--fg); font-weight: 600; box-shadow: var(--seg-shadow); }
+
+/* ---------- 舞台：冻结桌面 ---------- */
+.stage-box { width: 100%; overflow: hidden; border-radius: 10px; border: 1px solid var(--border); }
+.stage { position: relative; width: 1000px; height: 600px; transform-origin: 0 0; overflow: hidden; background: var(--desk); user-select: none; }
+.desk { position: absolute; inset: 0; width: 1000px; height: 600px; font: 13px/1.5 var(--ui); color: var(--desk-text); }
+.desk .win { position: absolute; left: 40px; top: 30px; width: 920px; height: 540px; background: var(--desk-2); border-radius: 8px; border: 1px solid var(--desk-line); overflow: hidden; }
+.desk .tb { height: 34px; border-bottom: 1px solid var(--desk-line); display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; color: #7d8894; }
+.desk .tb i { width: 10px; height: 10px; border-radius: 50%; background: #3a424c; display: block; }
+.desk .side { position: absolute; left: 0; top: 34px; bottom: 0; width: 190px; border-right: 1px solid var(--desk-line); padding: 14px 12px; display: flex; flex-direction: column; gap: 9px; }
+.desk .side b { display: block; height: 9px; border-radius: 4px; background: #2b323b; }
+.desk .main { position: absolute; left: 210px; right: 24px; top: 54px; display: flex; flex-direction: column; gap: 10px; }
+.desk .main p { margin: 0; }
+.desk .main .h { font-size: 18px; color: #e6edf3; font-weight: 600; }
+.desk .card { border: 1px solid var(--desk-line); border-radius: 6px; padding: 10px 12px; background: #1a1f25; display: flex; gap: 12px; align-items: center; }
+.desk .chart { height: 120px; border-radius: 6px; background: linear-gradient(180deg, #1c2b38, #17202a); position: relative; overflow: hidden; }
+.desk .chart span { position: absolute; bottom: 0; width: 26px; border-radius: 3px 3px 0 0; background: #2f7fb8; }
+.desk .ok { color: #6fd3a5; }
+.desk .warn { color: #e7b85d; }
+.mask { position: absolute; inset: 0; background: rgba(0,0,0,.48); pointer-events: none; }
+
+/* 选区：内部复制一份桌面，按偏移对齐；圆角/阴影/边框只作用于这份副本。 */
+.sel { position: absolute; cursor: move; }
+.shot { position: absolute; inset: 0; overflow: hidden; }
+.shot .desk { pointer-events: none; }
+.edge { position: absolute; inset: 0; border: 1.5px solid var(--sel); pointer-events: none; }
+.h8 { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 1.5px solid var(--sel); transform: translate(-50%, -50%); pointer-events: none; }
+.outbox { position: absolute; border: 1px dashed rgba(20,152,255,.55); pointer-events: none; }
+
+/* ---------- 外观条 ---------- */
+.bar { position: absolute; display: flex; align-items: center; gap: 2px; height: 34px; padding: 0 3px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0,0,0,.35); color: var(--fg); font: 12px/1 "Segoe UI", "Microsoft YaHei UI", sans-serif; white-space: nowrap; cursor: default; z-index: 5; }
+.bb { height: 28px; min-width: 28px; padding: 0 7px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: var(--fg); position: relative; transition: background-color .12s, color .12s; }
+.bb:hover { background: var(--hover); }
+.bb.open { background: var(--hover); }
+.bb .num { font-variant-numeric: tabular-nums; }
+.bb .x { color: var(--muted); margin: 0 1px; }
+.bb .chev { width: 10px; height: 10px; stroke-width: 2; color: var(--muted); }
+.out { color: var(--muted); font-variant-numeric: tabular-nums; padding: 0 6px 0 2px; font-size: 11.5px; }
+.sep { width: 1px; height: 16px; background: var(--border); margin: 0 3px; flex: none; }
+.fx { display: inline-flex; align-items: center; gap: 1px; }
+.fxb { padding: 0 6px; color: var(--muted); }
+.fxb.on { color: var(--accent); background: var(--selected); }
+.fxb.on:hover { background: var(--selected); filter: brightness(1.12); }
+.fxb .val { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 14px; text-align: left; }
+.fxb.caret { min-width: 20px; width: 20px; padding: 0; }
+.fxb.caret .chev { color: var(--muted); }
+.fxb.dis { opacity: .4; pointer-events: none; }
+/* 轻提示：悬停 450ms 后在条下方出现，含快捷操作说明。 */
+.tip { position: absolute; z-index: 9; padding: 6px 9px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 6px 16px rgba(0,0,0,.3); color: var(--fg); font: 11px/1.45 "Segoe UI", "Microsoft YaHei UI", sans-serif; white-space: nowrap; pointer-events: none; }
+.tip em { font-style: normal; color: var(--muted); display: block; }
+
+/* ---------- 弹出面板（共用） ---------- */
+.pop { position: absolute; z-index: 6; width: 284px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--pop-shadow); font: 12px/1.4 "Segoe UI", "Microsoft YaHei UI", sans-serif; cursor: default; display: flex; flex-direction: column; overflow: hidden; }
+.pop-h { display: flex; align-items: center; height: 40px; padding: 0 6px 0 12px; gap: 4px; flex: none; }
+.pop-h b { font-size: 13px; font-weight: 600; flex: 1; }
+.ib { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); }
+.ib:hover { background: var(--hover); color: var(--fg); }
+.pop-f { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 40px; padding: 0 8px 0 12px; border-top: 1px solid var(--border); flex: none; }
+.chk { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11.5px; }
+.chk:hover { color: var(--fg); }
+.chk i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); display: grid; place-items: center; }
+.chk.on i { background: var(--accent); border-color: var(--accent); }
+.chk.on i::after { content: ""; width: 7px; height: 4px; border: solid var(--on-accent); border-width: 0 0 1.6px 1.6px; transform: translateY(-1px) rotate(-45deg); }
+.txtb { height: 26px; padding: 0 8px; border-radius: 6px; color: var(--muted); font-size: 11.5px; }
+.txtb:hover { background: var(--hover); color: var(--fg); }
+
+.sw { width: 32px; height: 18px; border-radius: 9px; background: var(--border); position: relative; flex: none; transition: background-color .15s; }
+.sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .15s, background-color .15s; }
+.sw.on { background: var(--accent); }
+.sw.on::after { transform: translateX(14px); background: var(--on-accent); }
+
+.ctl { display: grid; grid-template-columns: 44px 1fr 54px; align-items: center; gap: 8px; height: 28px; }
+.ctl > span { color: var(--muted); font-size: 11.5px; }
+.ctl input[type=range] { width: 100%; accent-color: var(--accent); height: 16px; margin: 0; }
+.numf { display: flex; align-items: center; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--field); padding: 0 6px; gap: 2px; }
+.numf:focus-within { border-color: var(--accent); }
+.numf input { width: 100%; min-width: 0; border: 0; background: none; color: var(--fg); font: 12px "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; text-align: right; outline: none; padding: 0; }
+.numf u { text-decoration: none; color: var(--muted); font-size: 10.5px; }
+.segs { display: flex; gap: 2px; padding: 2px; border-radius: 7px; background: var(--hover); }
+.segs button { flex: 1; height: 24px; border-radius: 5px; color: var(--muted); font-size: 11.5px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.segs button:hover { color: var(--fg); }
+.segs button.on { background: var(--bg); color: var(--fg); box-shadow: var(--seg-shadow); font-weight: 600; }
+.ticks { display: flex; gap: 4px; padding-left: 52px; }
+.ticks button { height: 22px; min-width: 30px; padding: 0 6px; border-radius: 5px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; border: 1px solid var(--border); }
+.ticks button:hover { color: var(--fg); background: var(--hover); }
+.ticks button.on { color: var(--accent); border-color: var(--accent); background: var(--selected); }
+.colors { display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 8px; height: 28px; }
+.colors > span { color: var(--muted); font-size: 11.5px; }
+.dots { display: flex; gap: 6px; align-items: center; }
+.dot { width: 20px; height: 20px; border-radius: 50%; padding: 2px; border: 1.5px solid transparent; }
+.dot i { display: block; width: 100%; height: 100%; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(128,128,128,.5); }
+.dot:hover { border-color: var(--muted); }
+.dot.on { border-color: var(--accent); }
+.dot.custom i { background: conic-gradient(#ff5368, #ffc94a, #40ce9d, #4291ff, #b86bff, #ff5368); }
+.hex { margin-left: auto; color: var(--muted); font: 11px ui-monospace, Consolas, monospace; }
+.note { color: var(--muted); font-size: 11px; padding: 0 12px 10px; }
+
+/* 方案 A：纵向分组，关闭的效果只剩一行。 */
+.pa .list { display: flex; flex-direction: column; }
+.pa .grp { border-top: 1px solid var(--border); padding: 4px 12px; }
+.pa .grp.on { padding-bottom: 12px; }
+.pa .gh { display: flex; align-items: center; gap: 8px; height: 36px; width: 100%; text-align: left; }
+.pa .gh .nm { font-weight: 600; flex: 1; }
+.pa .gh .sum { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+.pa .gh svg { color: var(--muted); }
+.pa .grp.on .gh svg { color: var(--accent); }
+.pa .grp.flash { animation: flash 0.9s ease-out; }
+@keyframes flash { from { background: var(--selected); } to { background: transparent; } }
+.pa .gb { display: flex; flex-direction: column; gap: 8px; }
+
+/* 方案 B：分页，高度固定，切页不跳。 */
+.pb .tabs { display: flex; padding: 0 6px; border-bottom: 1px solid var(--border); flex: none; }
+.pb .tab { flex: 1; height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); position: relative; font-size: 12px; }
+.pb .tab:hover { color: var(--fg); }
+.pb .tab.cur { color: var(--fg); font-weight: 600; }
+.pb .tab.cur::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); }
+.pb .tab .led { width: 6px; height: 6px; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
+.pb .tab .led.on { background: var(--accent); box-shadow: none; }
+.pb .page { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; height: 186px; }
+.pb .en { display: flex; align-items: center; justify-content: space-between; height: 28px; }
+.pb .en b { font-weight: 600; }
+.pb .en span { color: var(--muted); font-size: 11.5px; margin-left: 6px; font-weight: 400; }
+.pb .page.off .dim { opacity: .38; pointer-events: none; }
+
+/* ---------- 尺寸、更多 ---------- */
+.mini { width: 232px; padding: 10px 12px; gap: 8px; }
+.grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid4 label { display: grid; grid-template-columns: 14px 1fr; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.menu { width: 220px; padding: 4px; }
+.menu button { display: flex; align-items: center; width: 100%; height: 30px; padding: 0 10px; border-radius: 6px; gap: 8px; font-size: 12px; }
+.menu button:hover { background: var(--hover); }
+.menu button kbd { margin-left: auto; color: var(--muted); font: 11px "Segoe UI", sans-serif; }
+.menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 6px; }
+
+/* 主栏占位：只为看清上下文。 */
+.mainbar { position: absolute; z-index: 4; height: 40px; display: flex; align-items: center; gap: 2px; padding: 0 6px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0,0,0,.35); color: var(--fg); }
+.mainbar span { width: 30px; height: 30px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); }
+.mainbar .ok { color: var(--accent); }
+
+/* ---------- 说明区 ---------- */
+.info { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px 28px; }
+.info section { min-width: 0; }
+.info h2 { font-size: 13.5px; margin: 0 0 6px; font-weight: 600; }
+.info ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+.info b { color: var(--fg); font-weight: 600; }
+.status { font-size: 12px; color: var(--muted); }
+.status b { color: var(--fg); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1 id="ttl">选区外观条<span id="sub">左上角尺寸 + 三个效果开关，细调面板放在选区外</span></h1>
+    <div class="ctrls">
+      <div class="tog" id="tVar"><button data-v="B" class="on">方案 B 分页</button><button data-v="A">方案 A 分组</button></div>
+      <div class="tog" id="tPos"><button data-v="mid" class="on">常规</button><button data-v="top">贴顶</button><button data-v="small">小选区</button><button data-v="left">靠左贴顶</button></div>
+      <div class="tog" id="tLang"><button data-v="zh" class="on">中文</button><button data-v="en">English</button></div>
+      <div class="tog" id="tTheme"><button data-v="system" class="on">跟随</button><button data-v="dark">深</button><button data-v="light">浅</button></div>
+    </div>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="stage-box" id="box"><div class="stage" id="stage"></div></div>
+  <div class="info" id="info"></div>
+</div>
+
+<script>
+(() => {
+const $ = (s, r = document) => r.querySelector(s);
+const W = 1000, H = 600;
+const st = {
+  corner: true, radius: 24, shadow: true, blur: 16, opacity: 45, shadowColor: '#000000',
+  border: false, thick: 2, inside: false, borderColor: '#ffffff', remember: false,
+};
+const DEF = { corner: false, radius: 12, shadow: false, blur: 10, opacity: 36, shadowColor: '#000000', border: false, thick: 2, inside: false, borderColor: '#ffffff', remember: false };
+const ui = { variant: 'B', lang: 'zh', pop: null, tab: 'corner', sel: { x: 300, y: 214, w: 470, h: 250 }, popSide: '', flash: null };
+const POS = { mid: { x: 300, y: 214, w: 470, h: 250 }, top: { x: 300, y: 0, w: 470, h: 330 }, small: { x: 520, y: 260, w: 96, h: 64 }, left: { x: 0, y: 0, w: 420, h: 300 } };
+const SHADOW_COLORS = ['#000000', '#ffffff', '#4291ff', '#ff5368'];
+const BORDER_COLORS = ['#ffffff', '#000000', '#4291ff', '#ff5368'];
+const PRESETS = { soft: [10, 36], standard: [16, 45], strong: [28, 55] };
+const L = (zh, en) => ui.lang === 'zh' ? zh : en;
+
+const ICON = {
+  corner: '<svg class="i" viewBox="0 0 16 16"><path d="M3 13.5V8a5 5 0 0 1 5-5h5.5"/><path d="M3 13.5h0M13.5 3h0" stroke-width="2.4"/></svg>',
+  shadow: '<svg class="i" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="8.5" height="8.5" rx="1.6"/><path d="M13.5 5.5v6.4a1.6 1.6 0 0 1-1.6 1.6H5.5" opacity=".55"/></svg>',
+  border: '<svg class="i" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="1.6"/><rect x="5.2" y="5.2" width="5.6" height="5.6" rx=".6" stroke-dasharray="1.4 1.4" opacity=".6"/></svg>',
+  chev: '<svg class="i chev" viewBox="0 0 10 10"><path d="M2.5 3.8 5 6.3l2.5-2.5"/></svg>',
+  more: '<svg class="i" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".9" fill="currentColor"/><circle cx="8" cy="8" r=".9" fill="currentColor"/><circle cx="12.5" cy="8" r=".9" fill="currentColor"/></svg>',
+  reset: '<svg class="i" viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.6-3.7"/><path d="M3 2.5v2.8h2.8"/></svg>',
+  close: '<svg class="i" viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg>',
+  outside: '<svg class="i" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke-width="2.2"/><rect x="5" y="5" width="6" height="6" rx=".5" opacity=".45" fill="currentColor" stroke="none"/></svg>',
+  inside: '<svg class="i" viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1.5" stroke-width="2.2"/><rect x="1" y="1" width="14" height="14" rx="2" stroke-dasharray="1.5 1.5" opacity=".5"/></svg>',
+};
+
+// ---------- 桌面 ----------
+function deskHTML() {
+  const bars = [62, 88, 54, 110, 76, 96, 120, 70, 102, 84, 66, 116];
+  return `<div class="desk"><div class="win"><div class="tb"><i></i><i></i><i></i><span style="margin-left:8px">Release dashboard — build 2026.10.14</span></div>
+  <div class="side">${Array.from({ length: 12 }, (_, i) => `<b style="width:${60 + (i * 37) % 90}px"></b>`).join('')}</div>
+  <div class="main"><p class="h">Nightly build status</p>
+  <div class="card"><span class="ok">● passed</span><span>kirie-gpui · debug · 4m 12s</span><span style="margin-left:auto">x86_64-pc-windows-msvc</span></div>
+  <div class="card"><span class="warn">● flaky</span><span>table_ navigation · 1 of 76 assertions</span><span style="margin-left:auto">retry 2/3</span></div>
+  <div class="chart">${bars.map((h, i) => `<span style="left:${18 + i * 44}px;height:${h}px;opacity:${.55 + (i % 4) * .12}"></span>`).join('')}</div>
+  <p>Frozen-desktop to selectable: 196 ms on the 2-monitor rig. OCR cold start 1.4 s with the 5.3 MB runtime pack.</p>
+  <p style="color:#7d8894">Pinned windows keep vector annotations until copy, save or drag-out renders them.</p></div></div></div>`;
+}
+
+// ---------- 计算 ----------
+function pad() {
+  const s = st.shadow && st.blur > 0 && st.opacity > 0 ? Math.ceil(st.blur) : 0;
+  const b = st.border && !st.inside ? Math.ceil(st.thick) : 0;
+  return Math.max(s, b);
+}
+function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+
+function barRect() {
+  const s = ui.sel, h = 34, gap = 8;
+  const w = $('.bar', stage)?.offsetWidth || 260;
+  let x = s.x, y = s.y - h - gap, inside = false;
+  if (y < 4) { y = s.y + gap; x = s.x + gap; inside = true; }
+  x = Math.min(Math.max(4, x), W - w - 4);
+  return { x, y, w, h, inside };
+}
+
+// ---------- 渲染 ----------
+const stage = $('#stage');
+function render() {
+  const s = ui.sel;
+  const r = st.corner ? Math.min(st.radius, s.w / 2, s.h / 2) : 0;
+  const shadow = st.shadow ? `0 ${Math.round(st.blur * .25)}px ${st.blur}px ${hexA(st.shadowColor, st.opacity / 100)}` : '';
+  const ring = st.border ? (st.inside ? `inset 0 0 0 ${st.thick}px ${st.borderColor}` : `0 0 0 ${st.thick}px ${st.borderColor}`) : '';
+  const p = pad();
+  const handles = [[0, 0], [.5, 0], [1, 0], [0, .5], [1, .5], [0, 1], [.5, 1], [1, 1]];
+  stage.innerHTML = `${deskHTML()}<div class="mask"></div>
+    ${p ? `<div class="outbox" style="left:${s.x - p}px;top:${s.y - p}px;width:${s.w + 2 * p}px;height:${s.h + 2 * p}px"></div>` : ''}
+    <div class="sel" id="sel" style="left:${s.x}px;top:${s.y}px;width:${s.w}px;height:${s.h}px">
+      <div class="shot" style="border-radius:${r}px;box-shadow:${[shadow, st.border && !st.inside ? ring : ''].filter(Boolean).join(',') || 'none'}">
+        <div style="position:absolute;left:${-s.x}px;top:${-s.y}px">${deskHTML()}</div>
+        ${st.border && st.inside ? `<div style="position:absolute;inset:0;border-radius:${r}px;box-shadow:${ring}"></div>` : ''}
+      </div>
+      <div class="edge"></div>
+      ${handles.map(([a, b]) => `<i class="h8" style="left:${a * 100}%;top:${b * 100}%"></i>`).join('')}
+    </div>
+    ${barHTML()}
+    ${mainbarHTML()}
+    ${popHTML()}`;
+  placeBar(); placeMainbar(); placePop(); bindStage(); renderStatus();
+}
+
+function barHTML() {
+  const s = ui.sel, p = pad();
+  const out = p ? `<span class="out">→ ${s.w + 2 * p} × ${s.h + 2 * p}</span>` : '';
+  const fx = (k, label, extra = '') => `<button class="bb fxb ${st[k] ? 'on' : ''}" data-fx="${k}" aria-pressed="${st[k]}" aria-label="${label}">${ICON[k]}${extra}</button>`;
+  return `<div class="bar" id="bar">
+    <button class="bb ${ui.pop === 'size' ? 'open' : ''}" data-act="size"><span class="num">${s.w}</span><span class="x">×</span><span class="num">${s.h}</span>${ICON.chev}</button>${out}
+    <i class="sep"></i>
+    <div class="fx">
+      ${fx('corner', L('圆角', 'Corners'), st.corner ? `<span class="val">${st.radius}</span>` : '')}
+      ${fx('shadow', L('阴影', 'Shadow'))}
+      ${fx('border', L('边框', 'Border'))}
+      <button class="bb fxb caret ${ui.pop === 'style' ? 'open' : ''}" data-act="style" aria-label="${L('外观设置', 'Style settings')}">${ICON.chev}</button>
+    </div>
+    <i class="sep"></i>
+    <button class="bb ${ui.pop === 'more' ? 'open' : ''}" data-act="more" aria-label="${L('更多', 'More')}">${ICON.more}</button>
+  </div>`;
+}
+function placeBar() {
+  const bar = $('#bar'); const b = barRect();
+  bar.style.left = b.x + 'px'; bar.style.top = b.y + 'px';
+}
+function mainbarHTML() {
+  const ic = ['M3 3h10v10H3z', 'M3 13 13 3M8 3h5v5', 'M3 13c3-1 5-6 10-10', 'M4 3h8M8 3v10', 'M3 3h4v4H3zM9 9h4v4H9z'];
+  return `<div class="mainbar" id="mainbar">${ic.map(d => `<span><svg class="i" viewBox="0 0 16 16"><path d="${d}"/></svg></span>`).join('')}<i class="sep"></i><span>${ICON.close}</span><span class="ok"><svg class="i" viewBox="0 0 16 16"><path d="m3 8.5 3 3 7-7"/></svg></span></div>`;
+}
+function placeMainbar() {
+  const m = $('#mainbar'), s = ui.sel, w = m.offsetWidth;
+  let x = Math.min(Math.max(4, s.x + s.w - w), W - w - 4), y = s.y + s.h + 10;
+  if (y + 40 > H - 4) y = s.y + s.h - 50;
+  m.style.left = x + 'px'; m.style.top = y + 'px';
+}
+
+function numf(id, v, unit) { return `<div class="numf"><input id="${id}" value="${v}" inputmode="numeric" aria-label="${id}"><u>${unit}</u></div>`; }
+function slider(id, label, v, min, max, unit) {
+  return `<div class="ctl"><span>${label}</span><input type="range" id="r-${id}" min="${min}" max="${max}" value="${v}" data-k="${id}">${numf('n-' + id, v, unit)}</div>`;
+}
+function colorRow(kind) {
+  const list = kind === 'shadow' ? SHADOW_COLORS : BORDER_COLORS;
+  const cur = kind === 'shadow' ? st.shadowColor : st.borderColor;
+  return `<div class="colors"><span>${L('颜色', 'Color')}</span><div class="dots">${list.map(c => `<button class="dot ${c === cur ? 'on' : ''}" data-color="${kind}:${c}" aria-label="${c}"><i style="background:${c}"></i></button>`).join('')}
+    <button class="dot custom ${list.includes(cur) ? '' : 'on'}" data-act="custom-${kind}" aria-label="${L('自定义颜色', 'Custom color')}"><i></i></button><span class="hex">${cur.toUpperCase()}</span></div></div>`;
+}
+function presetName() { for (const [k, [b, o]] of Object.entries(PRESETS)) if (st.blur === b && st.opacity === o) return k; return ''; }
+function body(k) {
+  if (k === 'corner') return `${slider('radius', L('半径', 'Radius'), st.radius, 1, 60, 'px')}
+    <div class="ticks">${[8, 12, 16, 24, 32].map(v => `<button data-radius="${v}" class="${st.radius === v ? 'on' : ''}">${v}</button>`).join('')}</div>`;
+  if (k === 'shadow') { const pn = presetName(); return `<div class="segs">${[['soft', L('柔和', 'Soft')], ['standard', L('标准', 'Medium')], ['strong', L('浓重', 'Strong')]].map(([v, t]) => `<button data-preset="${v}" class="${pn === v ? 'on' : ''}">${t}</button>`).join('')}</div>
+    ${slider('blur', L('扩散', 'Spread'), st.blur, 0, 48, 'px')}${slider('opacity', L('浓度', 'Opacity'), st.opacity, 0, 100, '%')}${colorRow('shadow')}`; }
+  return `<div class="segs"><button data-inside="0" class="${st.inside ? '' : 'on'}">${ICON.outside}${L('外侧', 'Outside')}</button><button data-inside="1" class="${st.inside ? 'on' : ''}">${ICON.inside}${L('内侧', 'Inside')}</button></div>
+    ${slider('thick', L('粗细', 'Width'), st.thick, 1, 8, 'px')}${colorRow('border')}`;
+}
+function summary(k) {
+  if (k === 'corner') return st.corner ? `${st.radius}px` : L('关', 'Off');
+  if (k === 'shadow') return st.shadow ? ({ soft: L('柔和', 'Soft'), standard: L('标准', 'Medium'), strong: L('浓重', 'Strong') }[presetName()] || `${st.blur}px · ${st.opacity}%`) : L('关', 'Off');
+  return st.border ? `${st.thick}px · ${st.inside ? L('内侧', 'Inside') : L('外侧', 'Outside')}` : L('关', 'Off');
+}
+const NAME = k => ({ corner: L('圆角', 'Corners'), shadow: L('阴影', 'Shadow'), border: L('边框', 'Border') }[k]);
+
+function popHTML() {
+  if (ui.pop === 'size') {
+    const s = ui.sel;
+    return `<div class="pop mini" id="pop" style="display:flex;flex-direction:column"><div class="grid4">
+      ${[['X', 'x', s.x], ['Y', 'y', s.y], ['W', 'w', s.w], ['H', 'h', s.h]].map(([t, k, v]) => `<label>${t}${numf('sz-' + k, v, 'px')}</label>`).join('')}</div>
+      <div style="color:var(--muted);font-size:11px">${L('坐标是全屏物理像素；Enter 应用，Esc 还原', 'Full-desktop physical pixels. Enter applies, Esc reverts')}</div></div>`;
+  }
+  if (ui.pop === 'more') {
+    return `<div class="pop menu" id="pop"><button>${L('重新框选', 'Reselect')}<kbd>R</kbd></button><button>${L('刷新底图', 'Refresh capture')}<kbd>F5</kbd></button><hr><button>${L('工具栏跟随选区', 'Toolbar follows selection')}<kbd>✓</kbd></button><button>${L('快捷键帮助', 'Shortcuts')}<kbd>F1</kbd></button></div>`;
+  }
+  if (ui.pop !== 'style') return '';
+  const head = `<div class="pop-h"><b>${L('选区外观', 'Selection style')}</b><button class="ib" data-act="close" aria-label="close">${ICON.close}</button></div>`;
+  const foot = `<div class="pop-f"><button class="chk ${st.remember ? 'on' : ''}" data-act="remember"><i></i>${L('新截图沿用阴影和边框', 'Keep shadow & border for new captures')}</button><button class="txtb" data-act="reset">${L('重置', 'Reset')}</button></div>`;
+  if (ui.variant === 'A') {
+    return `<div class="pop pa" id="pop">${head}<div class="list">${['corner', 'shadow', 'border'].map(k => `<div class="grp ${st[k] ? 'on' : ''} ${ui.flash === k ? 'flash' : ''}" data-grp="${k}">
+      <button class="gh" data-toggle="${k}">${ICON[k]}<span class="nm">${NAME(k)}</span><span class="sum">${st[k] ? summary(k) : ''}</span><i class="sw ${st[k] ? 'on' : ''}"></i></button>
+      ${st[k] ? `<div class="gb">${body(k)}</div>` : ''}</div>`).join('')}</div>${foot}</div>`;
+  }
+  const t = ui.tab;
+  return `<div class="pop pb" id="pop">${head.replace('<div class="pop-h">', '<div class="pop-h" style="height:36px">')}<div class="tabs">${['corner', 'shadow', 'border'].map(k => `<button class="tab ${t === k ? 'cur' : ''}" data-tab="${k}">${ICON[k]}${NAME(k)}<i class="led ${st[k] ? 'on' : ''}"></i></button>`).join('')}</div>
+    <div class="page ${st[t] ? '' : 'off'}"><div class="en"><b>${L('启用', 'Enabled')}<span>${st[t] ? summary(t) : ''}</span></b><button class="sw ${st[t] ? 'on' : ''}" data-toggle="${t}" aria-label="toggle"></button></div><div class="dim" style="display:flex;flex-direction:column;gap:8px">${body(t)}</div></div>${foot}</div>`;
+}
+
+// 面板优先放在选区外：条上方 → 选区左侧 → 选区右侧 → 条下方（覆盖选区）。
+function placePop() {
+  const pop = $('#pop'); if (!pop) { ui.popSide = ''; return; }
+  const b = barRect(), s = ui.sel, w = pop.offsetWidth, h = pop.offsetHeight, g = 8;
+  const anchorX = ui.pop === 'size' ? b.x : ui.pop === 'more' ? b.x + b.w - w : b.x + ($('.fx', stage)?.offsetLeft || 0) - 4;
+  const clampX = x => Math.min(Math.max(4, x), W - w - 4), clampY = y => Math.min(Math.max(4, y), H - h - 4);
+  let x, y, side;
+  if (!b.inside && b.y - g - h >= 4) { x = clampX(anchorX); y = b.y - g - h; side = L('外观条上方（选区外）', 'above the bar (outside)'); }
+  else if (s.x - g - w >= 4) { x = s.x - g - w; y = clampY(s.y); side = L('选区左侧（选区外）', 'left of selection (outside)'); }
+  else if (s.x + s.w + g + w <= W - 4) { x = s.x + s.w + g; y = clampY(s.y); side = L('选区右侧（选区外）', 'right of selection (outside)'); }
+  else { x = clampX(anchorX); y = b.y + b.h + g; side = L('条下方（无处可放，覆盖选区）', 'below the bar (covers selection)'); }
+  pop.style.left = x + 'px'; pop.style.top = y + 'px'; ui.popSide = side;
+}
+function renderStatus() {
+  const p = pad();
+  $('#status').innerHTML = `${L('输出', 'Output')} <b>${ui.sel.w + 2 * p} × ${ui.sel.h + 2 * p}</b>${p ? L(`（四周各扩 ${p}px，虚线框）`, ` (+${p}px each side, dashed)`) : ''}${ui.popSide ? ` · ${L('面板位置', 'Panel')}: <b>${ui.popSide}</b>` : ''}`;
+}
+
+// ---------- 交互 ----------
+let tipTimer = 0;
+function hint(el) {
+  const k = el.dataset.fx, a = el.dataset.act;
+  if (k === 'corner') return [`${L('圆角', 'Corners')} · ${st.corner ? `${st.radius}px` : L('关', 'off')}`, L('单击开关 · 滚轮调半径 · 右键细调', 'Click toggles · wheel sets radius · right-click to tune')];
+  if (k === 'shadow') return [`${L('阴影', 'Shadow')} · ${summary('shadow')}`, L('单击开关 · 滚轮调扩散 · 右键细调', 'Click toggles · wheel sets spread · right-click to tune')];
+  if (k === 'border') return [`${L('边框', 'Border')} · ${summary('border')}`, L('单击开关 · 滚轮调粗细 · 右键细调', 'Click toggles · wheel sets width · right-click to tune')];
+  if (a === 'size') return [`(${ui.sel.x}, ${ui.sel.y}) · ${ui.sel.w} × ${ui.sel.h}`, L('点击输入精确位置和尺寸', 'Click to enter exact position and size')];
+  if (a === 'style') return [L('外观设置', 'Style settings'), L('圆角、阴影、边框的参数与颜色', 'Radius, shadow and border details')];
+  if (a === 'more') return [L('更多', 'More'), L('重新框选、刷新、帮助', 'Reselect, refresh, help')];
+  return null;
+}
+function showTip(el) {
+  hideTip(); const t = hint(el); if (!t || ui.pop) return;
+  tipTimer = setTimeout(() => {
+    const d = document.createElement('div'); d.className = 'tip'; d.id = 'tip';
+    d.innerHTML = `${t[0]}<em>${t[1]}</em>`; stage.appendChild(d);
+    const bar = $('#bar'), x = bar.offsetLeft + el.offsetLeft;
+    d.style.left = Math.min(x, W - d.offsetWidth - 4) + 'px';
+    d.style.top = (bar.offsetTop + bar.offsetHeight + 6) + 'px';
+  }, 450);
+}
+function hideTip() { clearTimeout(tipTimer); $('#tip')?.remove(); }
+
+function setPop(p, tab) {
+  ui.pop = ui.pop === p && !tab ? null : p;
+  if (tab) { ui.tab = tab; ui.flash = tab; setTimeout(() => { ui.flash = null; }, 900); }
+  render();
+}
+function toggle(k) {
+  st[k] = !st[k];
+  if (k === 'shadow' && st.shadow) { if (st.blur <= 0) st.blur = DEF.blur; if (st.opacity <= 0) st.opacity = DEF.opacity; }
+  if (ui.pop === 'style') ui.tab = k;
+  render();
+}
+const LIM = { radius: [1, 60], blur: [0, 48], opacity: [0, 100], thick: [1, 8] };
+function setVal(k, v, full) {
+  const [a, b] = LIM[k]; v = Math.round(Math.min(b, Math.max(a, +v || 0)));
+  st[k] = v;
+  if (k === 'radius') st.corner = true;
+  if (k === 'blur' || k === 'opacity') st.shadow = true;
+  if (k === 'thick') st.border = true;
+  if (full) { render(); return; }
+  // 拖动滑条时只更新预览、条和数字框，不重建面板，避免打断拖动。
+  const keepPop = $('#pop'); const r = $('#r-' + k), n = $('#n-' + k);
+  if (n && document.activeElement !== n) n.value = v;
+  if (r) r.value = v;
+  const s = ui.sel, rad = st.corner ? Math.min(st.radius, s.w / 2, s.h / 2) : 0, shot = $('.shot', stage);
+  const shadow = st.shadow ? `0 ${Math.round(st.blur * .25)}px ${st.blur}px ${hexA(st.shadowColor, st.opacity / 100)}` : '';
+  const ring = st.border ? (st.inside ? `inset 0 0 0 ${st.thick}px ${st.borderColor}` : `0 0 0 ${st.thick}px ${st.borderColor}`) : '';
+  shot.style.borderRadius = rad + 'px';
+  shot.style.boxShadow = [shadow, st.border && !st.inside ? ring : ''].filter(Boolean).join(',') || 'none';
+  const inner = shot.children[1]; if (inner) { inner.style.borderRadius = rad + 'px'; inner.style.boxShadow = ring; }
+  const p = pad(); let ob = $('.outbox', stage);
+  if (p) { if (!ob) { ob = document.createElement('div'); ob.className = 'outbox'; stage.insertBefore(ob, $('#sel')); } Object.assign(ob.style, { left: s.x - p + 'px', top: s.y - p + 'px', width: s.w + 2 * p + 'px', height: s.h + 2 * p + 'px' }); } else ob?.remove();
+  const bar = $('#bar'); const tmp = document.createElement('div'); tmp.innerHTML = barHTML(); bar.replaceWith(tmp.firstElementChild); placeBar(); bindBar();
+  const tabLed = keepPop && keepPop.querySelectorAll('.led'); if (tabLed) ['corner', 'shadow', 'border'].forEach((x, i) => tabLed[i]?.classList.toggle('on', st[x]));
+  const sum = keepPop && keepPop.querySelector('.en span'); if (sum) sum.textContent = st[ui.tab] ? summary(ui.tab) : '';
+  keepPop?.querySelectorAll('.grp').forEach(g => { const sm = g.querySelector('.sum'); if (sm) sm.textContent = st[g.dataset.grp] ? summary(g.dataset.grp) : ''; });
+  keepPop?.querySelectorAll('[data-preset]').forEach(bn => bn.classList.toggle('on', bn.dataset.preset === presetName()));
+  keepPop?.querySelectorAll('[data-radius]').forEach(bn => bn.classList.toggle('on', +bn.dataset.radius === st.radius));
+  renderStatus();
+}
+
+function bindBar() {
+  const bar = $('#bar');
+  bar.addEventListener('mousedown', e => e.stopPropagation());
+  bar.querySelectorAll('button').forEach(el => {
+    el.addEventListener('mouseenter', () => showTip(el));
+    el.addEventListener('mouseleave', hideTip);
+  });
+  bar.querySelectorAll('[data-fx]').forEach(el => {
+    const k = el.dataset.fx;
+    el.addEventListener('click', () => { hideTip(); toggle(k); });
+    el.addEventListener('contextmenu', e => { e.preventDefault(); hideTip(); ui.pop = null; setPop('style', k); });
+    el.addEventListener('wheel', e => {
+      e.preventDefault(); hideTip();
+      const d = e.deltaY < 0 ? 1 : -1;
+      const key = { corner: 'radius', shadow: 'blur', border: 'thick' }[k];
+      setVal(key, st[key] + d * (key === 'thick' ? 1 : 2), !!$('#pop'));
+    }, { passive: false });
+  });
+  bar.querySelectorAll('[data-act]').forEach(el => el.addEventListener('click', () => { hideTip(); setPop(el.dataset.act); }));
+}
+function bindStage() {
+  bindBar();
+  const pop = $('#pop');
+  if (pop) {
+    pop.addEventListener('mousedown', e => e.stopPropagation());
+    pop.querySelectorAll('[data-toggle]').forEach(el => el.addEventListener('click', () => toggle(el.dataset.toggle)));
+    pop.querySelectorAll('[data-tab]').forEach(el => el.addEventListener('click', () => { ui.tab = el.dataset.tab; render(); }));
+    pop.querySelectorAll('input[type=range]').forEach(el => el.addEventListener('input', () => setVal(el.dataset.k, el.value)));
+    pop.querySelectorAll('.numf input').forEach(el => {
+      const k = el.id.replace(/^n-/, '');
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); if (k.startsWith('sz-')) applySize(); else setVal(k, el.value, true); }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); render(); }
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { if (k.startsWith('sz-')) return; e.preventDefault(); setVal(k, +el.value + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)); el.value = st[k]; }
+      });
+      el.addEventListener('input', () => { if (!k.startsWith('sz-') && /^\d+$/.test(el.value)) setVal(k, el.value); });
+    });
+    pop.querySelectorAll('[data-radius]').forEach(el => el.addEventListener('click', () => setVal('radius', +el.dataset.radius, true)));
+    pop.querySelectorAll('[data-preset]').forEach(el => el.addEventListener('click', () => { [st.blur, st.opacity] = PRESETS[el.dataset.preset]; st.shadow = true; render(); }));
+    pop.querySelectorAll('[data-inside]').forEach(el => el.addEventListener('click', () => { st.inside = el.dataset.inside === '1'; st.border = true; render(); }));
+    pop.querySelectorAll('[data-color]').forEach(el => el.addEventListener('click', () => { const [k, c] = el.dataset.color.split(':'); st[k + 'Color'] = c; st[k] = true; render(); }));
+    pop.querySelectorAll('[data-act]').forEach(el => el.addEventListener('click', () => {
+      const a = el.dataset.act;
+      if (a === 'close') ui.pop = null;
+      if (a === 'remember') st.remember = !st.remember;
+      if (a === 'reset') Object.assign(st, DEF);
+      if (a.startsWith('custom-')) { const k = a.slice(7); st[k + 'Color'] = k === 'shadow' ? '#1f3a5f' : '#ffc94a'; st[k] = true; }
+      render();
+    }));
+  }
+  // 拖动选区：外观条和面板随选区移动并重新挑位置。
+  const sel = $('#sel');
+  sel.addEventListener('mousedown', e => {
+    e.preventDefault(); hideTip();
+    const sc = stage.getBoundingClientRect().width / W, x0 = e.clientX, y0 = e.clientY, s0 = { ...ui.sel };
+    const mv = ev => { ui.sel.x = Math.round(Math.min(Math.max(0, s0.x + (ev.clientX - x0) / sc), W - s0.w)); ui.sel.y = Math.round(Math.min(Math.max(0, s0.y + (ev.clientY - y0) / sc), H - s0.h)); render(); };
+    const up = () => { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); };
+    addEventListener('mousemove', mv); addEventListener('mouseup', up);
+  });
+}
+function applySize() {
+  const g = k => +($('#n-sz-' + k)?.value) || 0;
+  const s = ui.sel;
+  s.w = Math.min(Math.max(8, g('w')), W); s.h = Math.min(Math.max(8, g('h')), H);
+  s.x = Math.min(Math.max(0, g('x')), W - s.w); s.y = Math.min(Math.max(0, g('y')), H - s.h);
+  render();
+}
+stage.addEventListener('mousedown', e => { if (ui.pop && !e.target.closest('#pop,#bar')) { ui.pop = null; render(); } });
+addEventListener('keydown', e => { if (e.key === 'Escape' && ui.pop) { ui.pop = null; render(); } });
+
+// ---------- 顶部切换 ----------
+function tog(id, fn) {
+  $(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    $(id).querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); fn(b.dataset.v);
+  });
+}
+tog('#tVar', v => { ui.variant = v; render(); });
+tog('#tPos', v => { ui.sel = { ...POS[v] }; render(); });
+tog('#tLang', v => { ui.lang = v; render(); renderInfo(); });
+tog('#tTheme', v => { if (v === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', v); });
+
+function renderInfo() {
+  $('#sub').textContent = L('左上角尺寸 + 三个效果开关，细调面板放在选区外', 'Size plus three effect toggles; the tuning panel opens outside the selection');
+  $('#info').innerHTML = ui.lang === 'zh' ? `
+  <section><h2>外观条（常驻）</h2><ul>
+    <li><b>尺寸</b>：只显示 W × H；坐标放悬停提示和尺寸面板。效果扩边时追加灰色 <b>→ 输出尺寸</b>，空间不足先省掉它。</li>
+    <li><b>三个图标开关</b>：圆角／阴影／边框，单击开关，开启时强调色底；圆角开启时直接显示半径。</li>
+    <li><b>滚轮</b>调主参数（半径／扩散／粗细），关着时滚动会顺带开启。<b>右键</b>任一图标直接打开面板并定位到该效果。</li>
+    <li><b>⌄</b> 打开完整面板；<b>⋯</b> 收纳重新框选、刷新、跟随、帮助。</li>
+  </ul></section>
+  <section><h2>细调面板</h2><ul>
+    <li>位置优先级：<b>条上方 → 选区左 → 选区右 → 条下方</b>。前三种都在选区外，不挡正在预览的圆角（切“贴顶”“靠左贴顶”看降级）。</li>
+    <li><b>方案 B 分页</b>：高度固定 ~300px，切页不跳；页签小圆点显示哪些效果已开。推荐。</li>
+    <li><b>方案 A 分组</b>：一眼看全三项，关闭项只剩一行；三项全开约 420px，更容易被迫盖住选区。</li>
+    <li>滑条与数字框实时生效；数字 Enter 留在面板、不触发完成；Esc 先还原草稿再关面板。</li>
+  </ul></section>
+  <section><h2>相对现状去掉的东西</h2><ul>
+    <li>“Corners”文字按钮与单独的“24”按钮合并成一个图标开关。</li>
+    <li>“Style ▾”这个含义模糊的入口，改为效果组末尾的 ⌄。</li>
+    <li>常驻坐标 (486, 475)、被截断的 “··”。</li>
+    <li>面板里卡片套卡片、“颜色与边框位置”折叠区；颜色和内外侧直接放在对应效果下。</li>
+  </ul></section>` : `
+  <section><h2>The bar</h2><ul>
+    <li><b>Size</b> shows W × H only; coordinates move to the tooltip and size popover. When effects grow the output, a muted <b>→ output size</b> follows and is the first thing dropped when space is tight.</li>
+    <li><b>Three icon toggles</b>: corners, shadow, border. Click toggles; on state uses the accent fill; corners show the radius.</li>
+    <li><b>Wheel</b> sets the main value and turns the effect on. <b>Right-click</b> opens the panel at that effect.</li>
+    <li><b>⌄</b> opens the full panel; <b>⋯</b> holds reselect, refresh, follow and help.</li>
+  </ul></section>
+  <section><h2>Tuning panel</h2><ul>
+    <li>Placement: <b>above bar → left of selection → right → below bar</b>. The first three stay outside the selection.</li>
+    <li><b>B Tabs</b>: fixed height, no jumping; dots show which effects are on. Recommended.</li>
+    <li><b>A Groups</b>: all three visible, off groups collapse to one row; about 420px with everything on.</li>
+  </ul></section>
+  <section><h2>Removed</h2><ul>
+    <li>Separate “Corners” and “24” buttons, the vague “Style ▾”, permanent coordinates, the clipped “··”, nested cards.</li>
+  </ul></section>`;
+}
+
+// 舞台按容器宽度缩放
+const box = $('#box');
+function fit() { const sc = Math.min(1, box.clientWidth / W); stage.style.transform = `scale(${sc})`; box.style.height = H * sc + 'px'; }
+new ResizeObserver(fit).observe(box);
+ui.pop = 'style'; ui.tab = 'corner';
+render(); renderInfo(); fit();
+})();
+</script>

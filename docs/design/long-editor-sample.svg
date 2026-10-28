@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="4320" viewBox="0 0 1080 4320">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#535c52"/><stop offset="1" stop-color="#202a27"/></linearGradient>
+    <linearGradient id="sunlight" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e0c391" stop-opacity=".85"/><stop offset="1" stop-color="#e0c391" stop-opacity="0"/></linearGradient>
+    <linearGradient id="clay" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#c28b6c"/><stop offset="1" stop-color="#785441"/></linearGradient>
+    <linearGradient id="chair" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#bc8c64"/><stop offset="1" stop-color="#73553e"/></linearGradient>
+    <radialGradient id="lamp"><stop stop-color="#cbbb91" stop-opacity=".45"/><stop offset="1" stop-color="#cbbb91" stop-opacity="0"/></radialGradient>
+    <pattern id="lines" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 0V8" stroke="#eee5d2" stroke-opacity=".08" stroke-width="1"/></pattern>
+    <pattern id="linen" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M0 0H12M0 0V12" stroke="#d7d0b9" stroke-opacity=".13" stroke-width="1"/></pattern>
+    <clipPath id="hero"><rect x="70" y="325" width="940" height="340" rx="4"/></clipPath>
+    <clipPath id="room"><rect x="70" y="1065" width="940" height="560" rx="4"/></clipPath>
+    <clipPath id="material"><rect x="70" y="2090" width="940" height="530" rx="4"/></clipPath>
+  </defs>
+  <rect width="1080" height="4320" fill="#161c1b"/>
+  <g font-family="Segoe UI, Microsoft YaHei, sans-serif">
+    <text x="70" y="73" fill="#e9e6db" font-size="30" font-weight="650" letter-spacing="5">FORM</text>
+    <path d="M202 48V77" stroke="#4c5450"/>
+    <text x="224" y="70" fill="#b9bcb1" font-size="17" letter-spacing="5">日常形态</text>
+    <g fill="#8c9690" font-size="15"><text x="702" y="69">空间</text><text x="786" y="69">物件</text><text x="870" y="69">生活</text><text x="962" y="69">订阅</text></g>
+    <path d="M70 108H1010" stroke="#343d38"/>
+    <text x="70" y="166" fill="#c0a577" font-size="14" letter-spacing="3">SPACE JOURNAL · VOL. 028</text>
+    <text x="70" y="245" fill="#eeece2" font-size="62" font-weight="550" letter-spacing="3">让光，慢一点。</text>
+    <text x="73" y="288" fill="#a9b0a5" font-size="18">一间安静的房子，如何重新定义日常。</text>
+    <text x="796" y="282" fill="#78867e" font-size="14">文 / 林间　　8 分钟阅读</text>
+    <g clip-path="url(#hero)">
+      <rect x="70" y="325" width="940" height="340" fill="#2c3932"/>
+      <rect x="70" y="325" width="665" height="340" fill="url(#wall)"/>
+      <path d="M270 325H500L665 665H431Z" fill="url(#sunlight)"/>
+      <rect x="160" y="325" width="11" height="340" fill="#232b25"/>
+      <rect x="333" y="325" width="11" height="340" fill="#232b25"/>
+      <rect x="506" y="325" width="11" height="340" fill="#232b25"/>
+      <path d="M90 485H645" stroke="#2a332d" stroke-width="10"/>
+      <rect x="735" y="325" width="275" height="340" fill="#313b33"/>
+      <rect x="747" y="335" width="248" height="330" fill="url(#lines)"/>
+      <path d="M70 608L1010 550V665H70Z" fill="#464b3c"/>
+      <ellipse cx="680" cy="602" rx="215" ry="34" fill="#141d19" opacity=".45"/>
+      <rect x="548" y="525" width="260" height="18" rx="7" fill="#9c805c"/>
+      <path d="M567 540L554 657M787 540L805 657" stroke="#8c7252" stroke-width="10"/>
+      <ellipse cx="678" cy="516" rx="35" ry="8" fill="#b2a387"/>
+      <path d="M661 476H696L691 516H666Z" fill="#a8997f"/>
+      <path d="M680 480Q670 420 648 399M681 479Q706 420 724 415" stroke="#252f23" stroke-width="3" fill="none"/>
+      <ellipse cx="648" cy="411" rx="8" ry="27" transform="rotate(-34 648 411)" fill="#6a7756"/>
+      <ellipse cx="712" cy="429" rx="9" ry="28" transform="rotate(35 712 429)" fill="#778264"/>
+      <path d="M380 563V620M476 563V620" stroke="#5a4838" stroke-width="7"/>
+      <rect x="358" y="515" width="139" height="54" rx="19" fill="#7d6850"/>
+      <path d="M369 521L380 465Q383 448 401 449H458Q474 450 478 467L487 520" fill="#9c815e"/>
+      <path d="M75 661H1007" stroke="#a79b78" stroke-opacity=".2"/>
+    </g>
+    <text x="70" y="696" fill="#6f7d74" font-size="13">午后 3:20，光从西南方向进入起居室。</text>
+    <text x="957" y="696" fill="#6f7d74" font-size="13">01 / 06</text>
+    <text x="70" y="796" fill="#c0a577" font-size="15" letter-spacing="2">01 — LIGHT</text>
+    <text x="70" y="852" fill="#e5e6db" font-size="38" font-weight="500">留白，给光一个入口</text>
+    <g fill="#abb3a9" font-size="19">
+      <text x="72" y="908">好的空间，不急于填满每一处角落。我们把靠窗的位置空出来，</text>
+      <text x="72" y="945">让一天之中的光线，成为房间里最自然的变化。</text>
+      <text x="72" y="1001">墙面没有过多装饰。木头、石材与一张舒适的椅子，已经足够。</text>
+    </g>
+    <g clip-path="url(#room)">
+      <rect x="70" y="1065" width="940" height="560" fill="#3b463b"/>
+      <rect x="70" y="1065" width="335" height="560" fill="#737963"/>
+      <rect x="102" y="1065" width="232" height="393" fill="#a9ac8e"/>
+      <rect x="116" y="1065" width="203" height="379" fill="#717e66"/>
+      <path d="M134 1080L311 1226V1430H134Z" fill="#9ba285"/>
+      <path d="M124 1192H317M222 1065V1444" stroke="#465342" stroke-width="9"/>
+      <path d="M405 1065H1010V1485L405 1544Z" fill="#4a5140"/>
+      <path d="M405 1065H1010V1485L405 1544Z" fill="url(#lines)"/>
+      <path d="M70 1455L1010 1480V1625H70Z" fill="#454536"/>
+      <path d="M125 1455L440 1625H816L314 1455Z" fill="#b3a47b" opacity=".28"/>
+      <path d="M217 1455L531 1625M125 1455L440 1625" stroke="#333b2d" stroke-width="8"/>
+      <ellipse cx="626" cy="1537" rx="246" ry="43" fill="#18231a" opacity=".48"/>
+      <path d="M506 1438L482 1581M714 1438L741 1579" stroke="#654c35" stroke-width="12"/>
+      <path d="M480 1344Q493 1314 522 1314H707Q736 1315 750 1344L738 1452H492Z" fill="url(#chair)"/>
+      <path d="M494 1345L514 1234Q519 1209 546 1209H685Q712 1209 717 1235L738 1345" fill="#ac865c"/>
+      <path d="M515 1330Q606 1352 716 1331" fill="none" stroke="#715439" stroke-width="4"/>
+      <path d="M494 1357L462 1333M738 1357L770 1334" stroke="#c99a6c" stroke-width="14" stroke-linecap="round"/>
+      <rect x="803" y="1414" width="138" height="14" rx="5" fill="#8e886a"/>
+      <path d="M821 1428L810 1558M921 1428L932 1558" stroke="#777459" stroke-width="8"/>
+      <ellipse cx="870" cy="1412" rx="29" ry="6" fill="#2d3529"/>
+      <path d="M849 1364H891L885 1410H855Z" fill="#b1a58c"/>
+      <path d="M891 1370Q917 1373 902 1395H888" fill="none" stroke="#b1a58c" stroke-width="6"/>
+      <rect x="833" y="1398" width="62" height="5" fill="#bd9b6a"/>
+      <path d="M839 1388L892 1394" stroke="#606d57" stroke-width="7"/>
+      <circle cx="870" cy="1225" r="116" fill="url(#lamp)"/>
+      <path d="M870 1065V1194" stroke="#282f25" stroke-width="3"/>
+      <path d="M821 1212Q870 1158 919 1212Z" fill="#b5aa86"/>
+      <path d="M821 1212H919" stroke="#d8ca9b" stroke-width="3"/>
+    </g>
+    <g fill="#6f7d74" font-size="13"><text x="70" y="1657">一把椅子，一杯温热的茶。让房间留下一点呼吸的余地。</text><text x="957" y="1657">02 / 06</text></g>
+    <path d="M70 1724H1010" stroke="#343d38"/>
+    <text x="70" y="1842" fill="#c0a577" font-size="15" letter-spacing="2">02 — TEXTURE</text>
+    <text x="70" y="1898" fill="#e5e6db" font-size="38" font-weight="500">材料，让时间有了触感</text>
+    <g fill="#abb3a9" font-size="19"><text x="72" y="1956">我们偏爱那些会慢慢变化的材料。木纹的深浅、陶器的细孔，</text><text x="72" y="1993">以及亚麻折叠后留下的痕迹，都让一件物品有了自己的故事。</text></g>
+    <g clip-path="url(#material)">
+      <rect x="70" y="2090" width="940" height="530" fill="#242d27"/>
+      <rect x="70" y="2090" width="453" height="530" fill="#84765b"/>
+      <rect x="70" y="2090" width="453" height="530" fill="url(#linen)"/>
+      <path d="M70 2454L523 2327V2620H70Z" fill="#6a624c" opacity=".6"/>
+      <path d="M80 2540Q200 2470 295 2490T523 2400" fill="none" stroke="#b1a28b" stroke-width="2" opacity=".5"/>
+      <ellipse cx="304" cy="2528" rx="159" ry="28" fill="#332e24" opacity=".35"/>
+      <path d="M215 2253Q192 2310 194 2411Q195 2514 296 2524Q395 2513 396 2411Q398 2308 375 2253Z" fill="url(#clay)"/>
+      <ellipse cx="295" cy="2253" rx="80" ry="22" fill="#6f503c"/>
+      <ellipse cx="295" cy="2251" rx="66" ry="14" fill="#332a23"/>
+      <path d="M220 2320Q206 2410 229 2468" fill="none" stroke="#d1a688" stroke-opacity=".55" stroke-width="3"/>
+      <path d="M276 2250Q272 2180 253 2120M301 2250Q333 2158 359 2110M304 2250Q385 2193 420 2198" fill="none" stroke="#4a4833" stroke-width="4"/>
+      <ellipse cx="258" cy="2150" rx="12" ry="42" transform="rotate(-24 258 2150)" fill="#62684b"/>
+      <ellipse cx="343" cy="2140" rx="12" ry="40" transform="rotate(34 343 2140)" fill="#555f43"/>
+      <ellipse cx="397" cy="2202" rx="12" ry="38" transform="rotate(70 397 2202)" fill="#73775b"/>
+      <rect x="539" y="2090" width="471" height="254" fill="#455344"/>
+      <path d="M560 2114H1010M560 2126H1010M560 2180H1010M560 2188H1010M560 2235H1010M560 2251H1010M560 2298H1010" stroke="#7b8768" opacity=".28" stroke-width="2"/>
+      <path d="M539 2138Q680 2087 850 2145T1050 2120M539 2210Q688 2161 843 2213T1040 2180M539 2282Q710 2224 890 2285T1040 2247" fill="none" stroke="#29392d" stroke-width="6" opacity=".5"/>
+      <circle cx="770" cy="2215" r="61" fill="#c1b28f"/>
+      <circle cx="770" cy="2215" r="49" fill="#a99978"/>
+      <circle cx="770" cy="2215" r="35" fill="#b7a785"/>
+      <ellipse cx="774" cy="2220" rx="22" ry="5" fill="#7c7458" opacity=".45"/>
+      <rect x="539" y="2360" width="471" height="260" fill="#3e4035"/>
+      <path d="M555 2360L1010 2515V2620H706L539 2516Z" fill="#77705a"/>
+      <path d="M539 2392L985 2542M539 2420L985 2570M578 2360L1010 2505" stroke="#aaa18c" stroke-width="2" opacity=".3"/>
+      <rect x="660" y="2420" width="229" height="126" rx="5" transform="rotate(-8 660 2420)" fill="#96917a"/>
+      <rect x="660" y="2420" width="229" height="126" rx="5" transform="rotate(-8 660 2420)" fill="url(#linen)"/>
+      <path d="M681 2425L702 2520M707 2422L728 2515M735 2418L754 2510" stroke="#4e5846" stroke-width="3" opacity=".6"/>
+    </g>
+    <g fill="#6f7d74" font-size="13"><text x="70" y="2652">陶 / 木 / 织物　　自然材料的三种表情</text><text x="957" y="2652">03 / 06</text></g>
+    <path d="M70 2730H1010" stroke="#343d38"/>
+    <text x="82" y="2821" fill="#c0a577" font-size="60" font-family="Georgia, serif">“</text>
+    <text x="134" y="2815" fill="#d8dacc" font-size="29">真正的质感，来自愿意被使用的日常。</text>
+    <text x="135" y="2864" fill="#78867b" font-size="15">— 空间设计师，陈未</text>
+    <path d="M70 2942H1010" stroke="#343d38"/>
+    <text x="70" y="3060" fill="#c0a577" font-size="15" letter-spacing="2">03 — EVERYDAY</text>
+    <text x="70" y="3116" fill="#e5e6db" font-size="38" font-weight="500">生活，才是空间的尺度</text>
+    <g fill="#abb3a9" font-size="19"><text x="72" y="3174">不必把家布置成一张完美的照片。一本翻到一半的书，</text><text x="72" y="3211">一只每天都用的杯子，才是空间最动人的部分。</text></g>
+    <g transform="translate(70 3270)">
+      <rect width="940" height="432" rx="4" fill="#202a24"/>
+      <text x="40" y="57" fill="#d2d8c5" font-size="20">把时间还给自己</text>
+      <text x="40" y="87" fill="#778875" font-size="14">一日的光线，也是一日的节奏。</text>
+      <path d="M76 296H861" stroke="#455344" stroke-width="1"/>
+      <path d="M76 256H861M76 216H861M76 176H861" stroke="#344230" stroke-dasharray="3 9"/>
+      <path d="M96 281C171 280 201 209 276 183S393 146 470 172S563 245 638 254S748 261 843 287V296H96Z" fill="#b7b37b" opacity=".1"/>
+      <path d="M96 281C171 280 201 209 276 183S393 146 470 172S563 245 638 254S748 261 843 287" fill="none" stroke="#afb981" stroke-width="3"/>
+      <g fill="#d1d7b1" stroke="#202a24" stroke-width="5"><circle cx="106" cy="280" r="7"/><circle cx="326" cy="170" r="7"/><circle cx="562" cy="226" r="7"/><circle cx="830" cy="285" r="7"/></g>
+      <g fill="#adb59b" font-size="15"><text x="79" y="329">07:00</text><text x="302" y="329">11:00</text><text x="540" y="329">15:00</text><text x="806" y="329">20:00</text></g>
+      <g fill="#6f8069" font-size="14"><text x="79" y="365">醒来 · 一杯清水</text><text x="302" y="365">工作 · 专注片刻</text><text x="540" y="365">阅读 · 午后小憩</text><text x="768" y="365">相聚 · 慢慢晚餐</text></g>
+    </g>
+    <g fill="#abb3a9" font-size="19"><text x="72" y="3780">设计最终要回到生活。留一点空白，接受一点不完美，</text><text x="72" y="3817">也许就是一个家最好的样子。</text></g>
+    <text x="72" y="3882" fill="#78867b" font-size="14">摄影 / 周野　　空间 / 山隐设计　　地点 / 杭州</text>
+    <path d="M70 3940H1010" stroke="#343d38"/>
+    <text x="70" y="4003" fill="#77867a" font-size="13" letter-spacing="2">CONTINUE READING</text>
+    <text x="70" y="4052" fill="#d3d8c9" font-size="24">下一篇：一件好物，和它漫长的一生</text>
+    <path d="M948 4028H1004M990 4014L1004 4028L990 4042" stroke="#a6b58f" fill="none" stroke-width="2"/>
+    <path d="M70 4110H1010" stroke="#343d38"/>
+    <text x="70" y="4187" fill="#c6cdbb" font-size="25" font-weight="600" letter-spacing="5">FORM</text>
+    <text x="70" y="4223" fill="#6d7c70" font-size="14">发现日常之中的好设计。</text>
+    <text x="776" y="4190" fill="#6d7c70" font-size="13">© 2026 FORM JOURNAL</text>
+    <text x="859" y="4223" fill="#6d7c70" font-size="13">关于我们　　联系编辑</text>
+    <circle cx="540" cy="4280" r="3" fill="#77866f"/>
+  </g>
+</svg>

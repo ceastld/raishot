@@ -1,0 +1,485 @@
+/* 独立长图导航列；尺寸映射与滚动同步由界面逻辑维护。 */
+.app,
+.titlebar,
+.toolbar,
+.workspace {
+  min-width: 0;
+  max-width: 100vw;
+}
+
+.workspace {
+  --tool-column: 72px;
+  --navigation-column: var(--overview-width, 280px);
+  --property-column: 294px;
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  grid-template-columns: var(--tool-column) var(--navigation-column) minmax(0, 1fr) var(--property-column);
+}
+
+.workspace > .tools,
+.workspace > .overview-pane,
+.workspace > .canvas-region,
+.workspace > .sidebar {
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace > .tools { grid-column: 1; overflow-x: hidden; }
+.workspace > .overview-pane { grid-column: 2; }
+.workspace > .canvas-region { grid-column: 3; }
+.workspace > .sidebar { grid-column: 4; }
+.workspace.properties-hidden { --property-column: 0px; }
+.workspace.overview-hidden { --navigation-column: 0px; }
+
+.overview-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  z-index: 4;
+}
+
+.overview-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 45px;
+  padding: 9px 10px 6px 13px;
+}
+
+.overview-header h2,
+.overview-header .heading {
+  min-width: 0;
+  margin: 0 auto 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.overview-header .icon-button {
+  width: 25px;
+  height: 25px;
+  color: var(--muted);
+}
+
+.overview-header .icon,
+.overview-header .native-icon { width: 14px; height: 14px; }
+
+.overview-modes {
+  flex: none;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  margin: 0 10px 11px;
+  background: var(--well);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.overview-modes button {
+  flex: 1;
+  min-width: 0;
+  height: 27px;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.overview-modes button:is(.active, .on, [aria-pressed="true"]) {
+  color: var(--fg);
+  background: var(--hover);
+  font-weight: 600;
+}
+
+.overview-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 8px;
+}
+
+.global-map {
+  position: relative;
+  align-self: stretch;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--well);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.global-map > img {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  opacity: .62;
+  pointer-events: none;
+}
+
+.global-crop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 1px;
+  border: 1px solid var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  pointer-events: none;
+}
+
+.global-viewport {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 18px;
+  border: 2px solid var(--blue);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--blue) 25%, transparent);
+  cursor: grab;
+  touch-action: none;
+  z-index: 2;
+}
+
+.global-viewport:active { cursor: grabbing; }
+
+/* 覆盖旧属性栏中缩略盒的固定高度；图像本身保持文档纵横比。 */
+.overview-pane .mini-well {
+  position: relative;
+  display: block;
+  align-self: stretch;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+  padding: 14px 22px;
+  margin: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  background: var(--well);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  touch-action: pan-y;
+}
+
+.overview-pane .minimap {
+  position: relative;
+  display: block;
+  min-height: 0;
+  max-height: none;
+  max-width: none;
+  margin: 0 auto;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+
+.overview-pane #mini-source {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.overview-pane #mini-annotations {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.overview-pane .mini-mask { pointer-events: none; }
+.overview-pane .mini-crop { border-color: var(--green); }
+.overview-pane .mini-viewport {
+  min-height: 5px;
+  border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 17%, transparent);
+  pointer-events: none;
+}
+
+.overview-pane .mini-rail {
+  left: -10px;
+  width: 2px;
+  background: color-mix(in srgb, var(--green) 60%, transparent);
+}
+
+.overview-pane .mini-handle {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  cursor: ns-resize;
+  touch-action: none;
+  z-index: 5;
+}
+
+.overview-pane #mini-top { left: -20px; right: auto; }
+.overview-pane #mini-bottom { left: auto; right: -20px; }
+
+.overview-pane .mini-handle::before {
+  position: absolute;
+  top: 8px;
+  left: 2px;
+  width: 16px;
+  height: 4px;
+  margin: 0;
+  border-radius: 2px;
+  background: var(--green);
+  box-shadow: 0 0 0 1px var(--panel);
+}
+
+.overview-pane .mini-handle:hover::before {
+  top: 7px;
+  height: 6px;
+  background: var(--green);
+}
+
+.overview-follow {
+  position: absolute;
+  left: 50%;
+  bottom: 88px;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: calc(100% - 36px);
+  min-height: 29px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.overview-follow .icon,
+.overview-follow .native-icon { width: 13px; height: 13px; }
+
+.overview-range {
+  flex: none;
+  min-height: 27px;
+  padding: 6px 12px 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-range strong { color: var(--fg); font-weight: 500; }
+
+.overview-footer {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 10px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.overview-footer .button {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 7px;
+  font-size: 10px;
+}
+#overview-crop-locators { display: flex; flex: 1 0 100%; gap: 6px; }
+#overview-crop-locators button { flex: 1; min-width: 0; padding: 4px 3px; border: 1px solid var(--border); border-radius: 4px; font-size: 10px; color: var(--muted); }
+.overview-footer > span { flex-basis: 100%; color: var(--muted); font-size: 10px; }
+.overview-footer > small { flex-basis: 100%; color: var(--faint); font-size: 10px; }
+
+.overview-footer .icon,
+.overview-footer .native-icon { width: 13px; height: 13px; }
+.overview-footer .hint,
+.overview-footer .overview-hint,
+.overview-footer p {
+  flex-basis: 100%;
+  margin: 1px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.overview-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  z-index: 12;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.overview-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: transparent;
+}
+
+.overview-resizer:hover::after,
+.overview-resizer:active::after,
+.overview-resizer.dragging::after { background: var(--green); }
+
+.navigation-controls {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 4px;
+  min-width: 0;
+  margin-right: 5px;
+}
+
+.navigation-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.navigation-controls button:is(.active, .on, [aria-pressed="true"]) {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.navigation-controls .icon,
+.navigation-controls .native-icon { width: 15px; height: 15px; }
+
+@media (max-width: 1279px) {
+  .workspace {
+    --tool-column: 64px;
+    --navigation-column: var(--overview-width, 260px);
+    --property-column: 0px;
+  }
+  .workspace > .sidebar {
+    display: none;
+    position: absolute;
+    grid-column: 1 / -1;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 280px;
+    max-width: calc(100% - var(--tool-column) - 8px);
+    z-index: 25;
+    box-shadow: var(--shadow);
+  }
+  .workspace.properties-open > .sidebar { display: flex; }
+}
+
+@media (max-width: 1000px) {
+  .workspace { --navigation-column: var(--overview-width, 220px); }
+  .toolbar .mode-label { display: none; }
+  .overview-header { padding-left: 10px; gap: 2px; }
+  .overview-header .icon-button { width: 23px; }
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    --tool-column: 54px;
+    --navigation-column: var(--overview-width, 180px);
+  }
+  .overview-header { padding-left: 9px; padding-right: 6px; }
+  .overview-header h2,
+  .overview-header .heading { font-size: 11px; }
+  .overview-header .icon-button { width: 21px; height: 23px; }
+  .overview-modes { margin-left: 8px; margin-right: 8px; }
+  .overview-modes button { padding: 0 3px; font-size: 10px; }
+  .overview-range { padding-left: 9px; padding-right: 9px; font-size: 9px; }
+  .overview-footer { padding-left: 8px; padding-right: 8px; gap: 4px; }
+  .overview-footer .button { padding: 0 4px; gap: 3px; }
+  .toolbar { padding-left: 7px; padding-right: 7px; min-width: 0; gap: 2px; }
+  .toolbar .mode-label,
+  .toolbar .view-button[data-view="actual"],
+  .toolbar .view-button[data-view="all"] { display: none; }
+  .toolbar .separator { margin-left: 3px; margin-right: 3px; }
+  .navigation-controls { gap: 3px; margin-right: 2px; }
+  .navigation-controls button { padding: 0 7px; gap: 4px; }
+}
+
+@media (max-width: 700px) {
+  .workspace { --navigation-column: 0px; }
+  .workspace > .overview-pane {
+    display: none;
+    position: absolute;
+    grid-column: 1 / -1;
+    top: 0;
+    bottom: 0;
+    left: var(--tool-column);
+    width: 240px;
+    max-width: calc(100% - var(--tool-column));
+    height: 100%;
+    z-index: 24;
+    box-shadow: var(--shadow);
+  }
+  .workspace.overview-open > .overview-pane { display: flex; }
+  .overview-resizer { display: none; }
+  .overview-header h2,
+  .overview-header .heading { font-size: 12px; }
+  .overview-header .icon-button { width: 25px; height: 25px; }
+  .overview-modes button { font-size: 11px; }
+  .overview-range { font-size: 10px; }
+}
+
+@media (max-width: 560px) {
+  .workspace { --tool-column: 46px; }
+  .toolbar .icon-button { width: 25px; height: 28px; }
+  .toolbar .view-button { padding-left: 5px; padding-right: 5px; font-size: 11px; }
+  .toolbar .zoom-label { width: 37px; font-size: 11px; }
+  .toolbar .separator { margin-left: 2px; margin-right: 2px; }
+  .navigation-controls button { height: 29px; padding: 0 6px; font-size: 10px; }
+  .navigation-controls .icon,
+  .navigation-controls .native-icon { width: 13px; height: 13px; }
+}
+
+/* 显式关闭优先于属性抽屉打开；总览在小屏由 overview-open 控制。 */
+.workspace.properties-hidden > .sidebar { display: none; }
+@media (min-width: 701px) {
+  .workspace.overview-hidden > .overview-pane { display: none; }
+}

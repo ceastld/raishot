@@ -1,0 +1,282 @@
+<title>选区条布局算法</title>
+<style>
+/* 布局：顶部场景与开关 → 1280×720 显示器舞台（按宽缩放，可拖选区）→ 候选打分表与规则说明。深色优先。 */
+:root {
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651; --hover: #303a45;
+  --selected: #28473d; --accent: #40ce9d; --page: #0f1317; --sel: #1498ff; --old: #ff5368;
+  --desk: #0c0e11; --desk-2: #15191e; --line: #2a3038;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --page: #e8edf1; color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --page: #e8edf1; color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); padding-block: 18px 40px; padding-inline: 16px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+h1 { font-size: 17px; font-weight: 600; margin: 0; text-wrap: balance; }
+h1 small { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 13px; }
+.tog { display: inline-flex; flex-wrap: wrap; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); }
+.tog button { height: 28px; padding: 0 11px; border-radius: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.tog button.on { background: var(--bg); color: var(--fg); font-weight: 600; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); }
+.checks label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+input[type=checkbox] { accent-color: var(--accent); }
+.stage-box { width: 100%; overflow: hidden; border-radius: 10px; border: 1px solid var(--border); }
+.stage { position: relative; width: 1280px; height: 720px; transform-origin: 0 0; overflow: hidden; background: var(--desk); user-select: none; touch-action: none; }
+.desk { position: absolute; inset: 0; background:
+  linear-gradient(var(--desk-2), var(--desk-2)) 60px 40px / 1160px 640px no-repeat; }
+.mask { position: absolute; background: rgba(0,0,0,.5); pointer-events: none; }
+.sel { position: absolute; border: 1.5px solid var(--sel); cursor: move; }
+.h8 { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 1.5px solid var(--sel); transform: translate(-50%,-50%); }
+.h8.c { cursor: nwse-resize; }
+.h8.c.tr, .h8.c.bl { cursor: nesw-resize; }
+.tb { position: absolute; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; padding: 0 12px; gap: 14px; color: var(--muted); font-size: 12px; }
+.tb i { width: 18px; height: 18px; border-radius: 4px; background: var(--hover); display: block; flex: none; }
+.tb .ok { background: var(--accent); }
+.zone { position: absolute; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); font-size: 11px; display: grid; place-items: center; }
+.ocr { position: absolute; background: var(--bg); border-left: 1px solid var(--border); color: var(--muted); font-size: 12px; padding: 14px; }
+.cand { position: absolute; border: 1px dashed rgba(137,151,166,.55); border-radius: 8px; pointer-events: none; font: 10px/1 var(--ui); color: var(--muted); }
+.cand span { position: absolute; left: 4px; top: -13px; white-space: nowrap; }
+.cand.bad { border-color: rgba(255,83,104,.35); }
+.bar { position: absolute; height: 34px; display: flex; align-items: center; gap: 2px; padding: 0 3px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0,0,0,.35); font: 12px/1 var(--ui); white-space: nowrap; color: var(--fg); z-index: 4; }
+.bar .b { height: 28px; padding: 0 7px; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; }
+.bar .st { background: var(--selected); color: var(--accent); font-weight: 600; }
+.bar .th { width: 14px; height: 10px; border-radius: 3px; background: var(--muted); }
+.bar .sp { width: 1px; height: 16px; background: var(--border); margin: 0 3px; }
+.ghost { position: absolute; height: 34px; border: 2px dashed var(--old); border-radius: 9px; z-index: 3; pointer-events: none; }
+.ghost span { position: absolute; left: 0; top: -18px; font-size: 11px; color: var(--old); white-space: nowrap; }
+.link { position: absolute; height: 0; border-top: 1px solid var(--accent); transform-origin: 0 0; pointer-events: none; z-index: 3; opacity: .7; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+.card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.card h3 { margin: 0 0 8px; font-size: 13.5px; }
+.card ol, .card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+.card li + li { margin-top: 3px; }
+.card b { color: var(--fg); font-weight: 600; }
+.tw { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--muted); font-weight: 400; }
+tr.win td { color: var(--accent); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 18px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>选区条布局算法<small>拖动选区或四角改大小；绿色为新算法结果，红色虚线为旧算法</small></h1>
+  </div>
+  <div class="top">
+    <div class="tog" id="scenes">
+      <button data-s="shot" class="on">截图里的情况</button>
+      <button data-s="normal">普通（工具栏在下）</button>
+      <button data-s="top">选区贴顶</button>
+      <button data-s="full">全屏选区</button>
+      <button data-s="narrow">窄选区</button>
+      <button data-s="ocr">右侧 OCR 面板</button>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="c-props"> 属性栏（绘制工具）</label>
+      <label><input type="checkbox" id="c-ocr"> OCR 面板</label>
+      <label><input type="checkbox" id="c-cand" checked> 显示候选</label>
+      <label><input type="checkbox" id="c-old" checked> 显示旧算法</label>
+    </div>
+  </div>
+  <div class="stage-box" id="box"><div class="stage" id="stage"></div></div>
+  <div class="legend">
+    <span><i style="background:var(--accent)"></i>新算法选中位置</span>
+    <span><i style="border:2px dashed var(--old)"></i>旧算法位置</span>
+    <span><i style="border:1px dashed var(--muted)"></i>可用候选（数字为得分，越小越好）</span>
+    <span><i style="border:1px dashed var(--old);opacity:.6"></i>被挡住的候选</span>
+  </div>
+  <div class="cols">
+    <div class="card"><h3>候选排名（前 8）</h3><div class="tw"><table id="rank"></table></div></div>
+    <div class="card"><h3>新算法规则</h3><ol>
+      <li><b>锚点是选区左上角。</b>每个候选的得分 = 条到锚点的最短距离 + 方位罚分，选最小的。</li>
+      <li><b>候选来自选区四周和障碍物边缘：</b>选区上方／下方／左外侧／右外侧／内侧左上，再加上紧贴主工具栏、属性栏、OCR 面板边缘的位置（叠在工具栏上方或接在它右侧）。</li>
+      <li><b>硬约束：</b>完全在显示器内（留 4px）；不与主工具栏、属性栏、OCR 面板相交（留 4px）；不能骑在选区边框上，要么在选区外留出控制点间距 8px，要么完全在选区内侧。</li>
+      <li><b>方位罚分：</b>上方 0，左外侧 24，下方 32，右外侧 40，压在选区内 400（挡内容，外面放不下时才用）；只省样式名的显示另加 8，只留缩略图另加 16。</li>
+      <li><b>修旧问题：</b>旧算法把 8 个控制点当障碍，贴着工具栏的位置常因与右上控制点差零点几像素相交被否决，于是退到屏幕角落。新算法改用“选区外留间距”的边带约束，不再单独避让控制点。</li>
+    </ol></div>
+  </div>
+</div>
+
+<script>
+const MON = { x: 0, y: 0, w: 1280, h: 720 };
+const H = 34, GAP = 4, EDGE = 8, MARGIN = 4;
+const W = { details: 268, compact: 214 };
+const TB = { w: 700, h: 48, reserve: 82 };
+const PEN = { above: 0, left: 24, below: 32, right: 40, inside: 400, stack: 0 };
+const SCENES = {
+  shot:   { sel: { x: 520, y: 470, w: 430, h: 236 }, props: false, ocr: false },
+  normal: { sel: { x: 300, y: 160, w: 520, h: 300 }, props: false, ocr: false },
+  top:    { sel: { x: 360, y: 0, w: 560, h: 380 }, props: false, ocr: false },
+  full:   { sel: { x: 0, y: 0, w: 1280, h: 720 }, props: false, ocr: false },
+  narrow: { sel: { x: 900, y: 260, w: 120, h: 90 }, props: true, ocr: false },
+  ocr:    { sel: { x: 640, y: 120, w: 420, h: 260 }, props: false, ocr: true },
+};
+const S = { sel: { ...SCENES.shot.sel }, props: false, ocr: false, cand: true, old: true };
+
+const R = (x, y, w, h) => ({ x, y, w, h });
+const right = r => r.x + r.w, bottom = r => r.y + r.h;
+const grow = (r, d) => R(r.x - d, r.y - d, r.w + 2 * d, r.h + 2 * d);
+const hits = (a, b) => Math.min(right(a), right(b)) - Math.max(a.x, b.x) > 0.01 && Math.min(bottom(a), bottom(b)) - Math.max(a.y, b.y) > 0.01;
+const inside = (a, b) => a.x >= b.x - 0.01 && a.y >= b.y - 0.01 && right(a) <= right(b) + 0.01 && bottom(a) <= bottom(b) + 0.01;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// 主工具栏：仿照 toolbar_layout::place_with_items——右对齐选区，下方放得下（含属性栏预留）就放下方，否则上方，再夹到屏内。
+function toolbar(sel) {
+  const group = TB.h + 8 + TB.reserve;
+  const belowFits = bottom(sel) + 10 + group <= bottom(MON) - 12;
+  const y0 = belowFits ? bottom(sel) + 10 : sel.y - TB.h - 10;
+  const above = !belowFits;
+  const x = clamp(right(sel) - TB.w, MON.x + 12, right(MON) - TB.w - 12);
+  const minY = MON.y + 12 + (above ? TB.reserve + 8 : 0);
+  const maxY = bottom(MON) - TB.h - 12 - (above ? 0 : TB.reserve + 8);
+  const y = clamp(y0, minY, Math.max(minY, maxY));
+  const main = R(x, y, TB.w, TB.h);
+  const props = above ? R(x, y - 8 - 44, 620, 44) : R(x, bottom(main) + 8, 620, 44);
+  return { main, props, above };
+}
+function obstacles(sel) {
+  const t = toolbar(sel), list = [{ r: t.main, n: "主工具栏" }];
+  if (S.props) list.push({ r: t.props, n: "属性栏" });
+  if (S.ocr) list.push({ r: R(right(MON) - 360, MON.y, 360, MON.h), n: "OCR 面板" });
+  return { t, list };
+}
+
+// ---------- 新算法 ----------
+function place(sel, obs) {
+  const home = { x: sel.x, y: sel.y };
+  const outer = grow(sel, EDGE), inner = grow(sel, -EDGE);
+  const screen = R(MON.x + MARGIN, MON.y + MARGIN, MON.w - 2 * MARGIN, MON.h - 2 * MARGIN);
+  const all = [];
+  for (const [display, w] of [["details", W.details], ["compact", W.compact]]) {
+    const cx = x => clamp(x, screen.x, right(screen) - w);
+    const cy = y => clamp(y, screen.y, bottom(screen) - H);
+    const add = (x, y, side, why) => all.push({ rect: R(cx(x), cy(y), w, H), side, why, display });
+    // 选区四周
+    const xsTop = [sel.x, right(sel) - w];
+    const ysSide = [sel.y, bottom(sel) - H];
+    for (const o of obs) { xsTop.push(right(o.r) + GAP, o.r.x - GAP - w); ysSide.push(bottom(o.r) + GAP, o.r.y - GAP - H); }
+    for (const x of xsTop) { add(x, sel.y - EDGE - H, "above", "选区上方"); add(x, bottom(sel) + EDGE, "below", "选区下方"); }
+    for (const y of ysSide) { add(sel.x - EDGE - w, y, "left", "选区左外侧"); add(right(sel) + EDGE, y, "right", "选区右外侧"); }
+    // 叠在障碍物上方／下方（与选区左缘对齐或接在障碍物旁）
+    for (const o of obs) for (const x of [sel.x, o.r.x, right(o.r) - w]) {
+      add(x, o.r.y - GAP - H, "stack", `${o.n}上方`); add(x, bottom(o.r) + GAP, "stack", `${o.n}下方`);
+    }
+    // 选区内侧（最后手段）
+    for (const x of [sel.x + EDGE, right(sel) - EDGE - w]) for (const y of [sel.y + EDGE, bottom(sel) - EDGE - H]) add(x, y, "inside", "选区内侧");
+  }
+  for (const c of all) {
+    const r = c.rect;
+    c.block = !inside(r, R(MON.x, MON.y, MON.w, MON.h)) ? "出屏"
+      : obs.find(o => hits(r, grow(o.r, GAP)))?.n
+      ?? (hits(r, outer) && !inside(r, inner) ? "压在选区边框" : null);
+    if (c.side === "inside" && !inside(r, inner)) c.block = c.block || "选区太小";
+    // 最短距离：锚点到条矩形
+    const dx = Math.max(r.x - home.x, 0, home.x - right(r)), dy = Math.max(r.y - home.y, 0, home.y - bottom(r));
+    const side = c.side === "stack" ? (r.y < sel.y ? "above" : r.y >= bottom(sel) ? "below" : r.x < sel.x ? "left" : "right") : c.side;
+    c.score = Math.round(Math.hypot(dx, dy) + PEN[side] + (c.display === "compact" ? 16 : 0));
+  }
+  const seen = new Set();
+  const uniq = all.filter(c => { const k = `${Math.round(c.rect.x)},${Math.round(c.rect.y)},${c.display}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  const ok = uniq.filter(c => !c.block).sort((a, b) => a.score - b.score);
+  return { win: ok[0] || null, ok, bad: uniq.filter(c => c.block) };
+}
+
+// ---------- 旧算法（capture_selection_bar_layout.rs 原样移植） ----------
+function oldPlace(sel, obs) {
+  const gap = 4.5 + 4, w = W.details, h = H;
+  const handles = [[0,0],[.5,0],[1,0],[0,.5],[1,.5],[0,1],[.5,1],[1,1]].map(([a, b]) => R(sel.x + a * sel.w - 4.5, sel.y + b * sel.h - 4.5, 9, 9));
+  const blocked = obs.map(o => o.r).concat(handles);
+  const overlap = p => blocked.reduce((s, r) => s + Math.max(0, Math.min(right(p), right(r) + 4) - Math.max(p.x, r.x - 4)) * Math.max(0, Math.min(bottom(p), bottom(r) + 4) - Math.max(p.y, r.y - 4)), 0);
+  const cx = x => clamp(x, MON.x, right(MON) - w), cy = y => clamp(y, MON.y, bottom(MON) - h);
+  const pref = cx(sel.x);
+  let xs = [pref, cx(right(sel) - w)];
+  for (const r of blocked) xs.push(cx(right(r) + 4), cx(r.x - 4 - w));
+  xs = [...new Set(xs.map(x => Math.round(x * 100) / 100))].sort((a, b) => Math.abs(a - pref) - Math.abs(b - pref) || a - b);
+  const cands = [];
+  for (const y of [sel.y - gap - h, bottom(sel) + gap]) if (y >= MON.y && y + h <= bottom(MON)) xs.forEach(x => cands.push(R(x, y, w, h)));
+  const L = cx(MON.x + 12), Rr = cx(right(MON) - w - 12), T = cy(MON.y + 12), B = cy(bottom(MON) - h - 12);
+  for (const [x, y] of [[L, T], [Rr, T], [L, B], [Rr, B]]) cands.push(R(x, y, w, h));
+  for (const r of blocked) for (const x of [L, Rr]) for (const y of [cy(r.y - h - 4), cy(bottom(r) + 4)]) cands.push(R(x, y, w, h));
+  let best = null, bo = Infinity;
+  for (const c of cands) { const o = overlap(c); if (o === 0) return c; if (o < bo) { bo = o; best = c; } }
+  return best;
+}
+
+// ---------- 渲染 ----------
+const stage = document.getElementById("stage");
+const pos = r => `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px`;
+function barHTML(r, display) {
+  return `<div class="bar" style="left:${r.x}px;top:${r.y}px;width:${r.w}px"><span class="b">431 × 232 ▾</span><span class="sp"></span>
+    <span class="b st"><span class="th"></span>${display === "details" ? "描边 " : ""}▾</span><span class="sp"></span><span class="b">⟳</span><span class="b">⋯</span></div>`;
+}
+function render() {
+  const sel = S.sel, { t, list } = obstacles(sel), res = place(sel, list), old = oldPlace(sel, list);
+  const m = [R(0, 0, MON.w, sel.y), R(0, bottom(sel), MON.w, MON.h - bottom(sel)), R(0, sel.y, sel.x, sel.h), R(right(sel), sel.y, MON.w - right(sel), sel.h)];
+  const hs = [[0,0,"tl"],[.5,0,""],[1,0,"tr"],[0,.5,""],[1,.5,""],[0,1,"bl"],[.5,1,""],[1,1,"br"]]
+    .map(([a, b, k]) => `<span class="h8 ${k ? "c " + k : ""}" data-h="${k}" style="left:${a * 100}%;top:${b * 100}%"></span>`).join("");
+  let html = `<div class="desk"></div>${m.map(r => `<div class="mask" style="${pos(r)}"></div>`).join("")}
+    <div class="sel" id="sel" style="${pos(sel)}">${hs}</div>
+    <div class="tb" style="${pos(t.main)}">${Array.from({ length: 16 }, (_, i) => `<i class="${i === 15 ? "ok" : ""}"></i>`).join("")}</div>
+    <div class="zone" style="${pos(t.props)}">${S.props ? "属性栏" : "属性栏预留区（不避让）"}</div>`;
+  if (S.ocr) html += `<div class="ocr" style="${pos(R(right(MON) - 360, 0, 360, MON.h))}">OCR 面板</div>`;
+  if (S.cand) {
+    html += res.ok.slice(1, 9).map(c => `<div class="cand" style="${pos(c.rect)}"><span>${c.score}</span></div>`).join("");
+    html += res.bad.filter(c => c.display === "details").slice(0, 12).map(c => `<div class="cand bad" style="${pos(c.rect)}"></div>`).join("");
+  }
+  if (S.old && old) html += `<div class="ghost" style="${pos(old)}"><span>旧算法</span></div>`;
+  if (res.win) html += barHTML(res.win.rect, res.win.display);
+  stage.innerHTML = html;
+  document.getElementById("rank").innerHTML = `<tr><th>#</th><th>位置</th><th>显示</th><th>x, y</th><th>得分</th></tr>` +
+    res.ok.slice(0, 8).map((c, i) => `<tr class="${i ? "" : "win"}"><td>${i + 1}</td><td>${c.why}</td><td>${c.display === "details" ? "带样式名" : "仅缩略图"}</td><td>${Math.round(c.rect.x)}, ${Math.round(c.rect.y)}</td><td>${c.score}</td></tr>`).join("");
+  fit();
+}
+function fit() {
+  const box = document.getElementById("box"), k = Math.min(1, box.clientWidth / MON.w);
+  stage.style.transform = `scale(${k})`; box.style.height = MON.h * k + "px"; stage.dataset.k = k;
+}
+
+// 拖动选区：主体移动，四角缩放
+let drag = null;
+stage.addEventListener("pointerdown", e => {
+  const s = e.target.closest("#sel"); if (!s) return;
+  const k = +stage.dataset.k, h = e.target.dataset.h || "";
+  drag = { h, x: e.clientX, y: e.clientY, k, start: { ...S.sel } };
+  stage.setPointerCapture(e.pointerId); e.preventDefault();
+});
+stage.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const dx = (e.clientX - drag.x) / drag.k, dy = (e.clientY - drag.y) / drag.k, s0 = drag.start, MIN = 40;
+  let { x, y, w, h } = s0;
+  if (!drag.h) { x = clamp(s0.x + dx, 0, MON.w - w); y = clamp(s0.y + dy, 0, MON.h - h); }
+  else {
+    if (drag.h.includes("l")) { x = clamp(s0.x + dx, 0, s0.x + s0.w - MIN); w = s0.x + s0.w - x; }
+    if (drag.h.includes("r")) w = clamp(s0.w + dx, MIN, MON.w - s0.x);
+    if (drag.h.includes("t")) { y = clamp(s0.y + dy, 0, s0.y + s0.h - MIN); h = s0.y + s0.h - y; }
+    if (drag.h.includes("b")) h = clamp(s0.h + dy, MIN, MON.h - s0.y);
+  }
+  S.sel = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) }; render();
+});
+stage.addEventListener("pointerup", () => { drag = null; });
+
+document.getElementById("scenes").addEventListener("click", e => {
+  const b = e.target.closest("button[data-s]"); if (!b) return;
+  document.querySelectorAll("#scenes button").forEach(x => x.classList.toggle("on", x === b));
+  const sc = SCENES[b.dataset.s]; S.sel = { ...sc.sel }; S.props = sc.props; S.ocr = sc.ocr;
+  document.getElementById("c-props").checked = S.props; document.getElementById("c-ocr").checked = S.ocr; render();
+});
+for (const [id, k] of [["c-props", "props"], ["c-ocr", "ocr"], ["c-cand", "cand"], ["c-old", "old"]])
+  document.getElementById(id).addEventListener("change", e => { S[k] = e.target.checked; render(); });
+addEventListener("resize", fit);
+render();
+</script>

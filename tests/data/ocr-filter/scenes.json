@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "annotation_policy": "在运行识别与过滤前按绘图语义标注。keep 是实际文字（即使与正文无关、低对比、小字或符号）；drop 是没有文字语义的图标、纹理和装饰；ignore 不计分。只评估被 OCR 识别出来的候选，不把未识别的杂项算作过滤成功。",
+  "split_policy": "按整个场景划分开发与留出；不同场景使用不同内容与布局，没有同一图像的缩放或模糊变体跨集合。所有留出结果只能在策略冻结后查看，修改策略后须另建留出集。",
+  "scenes": [
+    {
+      "id": "dev-article-light", "split": "development", "title": "浅色中英正文与工具图标", "size": [960, 560], "theme": "light",
+      "texts": [
+        {"at": [52, 38], "size": 30, "text": "城市阅读计划", "semantic": "中文标题"},
+        {"at": [52, 110], "size": 23, "text": "周末开放时间为上午九点至下午五点。", "semantic": "中文正文"},
+        {"at": [52, 155], "size": 23, "text": "请携带有效证件，并在入口完成登记。", "semantic": "中文正文"},
+        {"at": [52, 223], "size": 22, "text": "Reading brings people together.", "semantic": "英文正文"},
+        {"at": [52, 270], "size": 22, "text": "Borrow books and share your discoveries.", "semantic": "英文正文"},
+        {"at": [52, 420], "size": 16, "text": "广告：附近咖啡店今日营业", "semantic": "真实但无关的广告文字，必须保留"}
+      ],
+      "decorations": [{"kind": "icons", "box": [730, 105, 175, 235], "semantic": "工具按钮图标无文字"}, {"kind": "strokes", "box": [62, 344, 580, 38], "semantic": "装饰性碎线"}]
+    },
+    {
+      "id": "dev-dark-console", "split": "development", "title": "深色代码与标点", "size": [960, 590], "theme": "dark",
+      "texts": [
+        {"at": [44, 34], "size": 26, "text": "Build output", "semantic": "窗口标题"},
+        {"at": [44, 100], "size": 22, "font": "mono", "text": "fn main() -> Result<(), Error> {", "semantic": "代码含标点"},
+        {"at": [66, 146], "size": 22, "font": "mono", "text": "let path = \"./data/report_07.json\";", "semantic": "代码字符串"},
+        {"at": [66, 192], "size": 22, "font": "mono", "text": "if n <= 8 && ready { save(path)?; }", "semantic": "代码操作符"},
+        {"at": [44, 238], "size": 22, "font": "mono", "text": "}", "semantic": "独立闭合括号也是真实代码"},
+        {"at": [44, 332], "size": 17, "font": "mono", "text": "[INFO] completed: 24 files, 0 errors", "semantic": "小号日志文字"},
+        {"at": [44, 378], "size": 17, "text": "调试记录可安全删除。", "semantic": "中文日志"}
+      ],
+      "decorations": [{"kind": "texture", "box": [715, 110, 180, 235], "semantic": "无文本的线框纹理"}, {"kind": "icons", "box": [50, 465, 700, 65], "semantic": "底部工具图标"}]
+    },
+    {
+      "id": "dev-small-table", "split": "development", "title": "浅色表格短项与数字", "size": [880, 570], "theme": "light", "table": [38, 95, 790, 300, 4, 5],
+      "texts": [
+        {"at": [42, 33], "size": 26, "text": "仓库盘点", "semantic": "标题"},
+        {"at": [53, 112], "size": 18, "text": "名称", "semantic": "表头"}, {"at": [250, 112], "size": 18, "text": "规格", "semantic": "表头"}, {"at": [449, 112], "size": 18, "text": "数量", "semantic": "表头"}, {"at": [645, 112], "size": 18, "text": "状态", "semantic": "表头"},
+        {"at": [53, 172], "size": 17, "text": "螺母", "semantic": "双字短项"}, {"at": [250, 172], "size": 17, "text": "M6", "semantic": "规格短项"}, {"at": [449, 172], "size": 17, "text": "8", "semantic": "单字符数字"}, {"at": [645, 172], "size": 17, "text": "OK", "semantic": "英文短项"},
+        {"at": [53, 232], "size": 17, "text": "垫片", "semantic": "双字短项"}, {"at": [250, 232], "size": 17, "text": "A-2", "semantic": "符号短项"}, {"at": [449, 232], "size": 17, "text": "0", "semantic": "零也须保留"}, {"at": [645, 232], "size": 17, "text": "缺", "semantic": "单汉字短项"},
+        {"at": [53, 292], "size": 17, "text": "卡扣", "semantic": "双字短项"}, {"at": [250, 292], "size": 17, "text": "B", "semantic": "单字母短项"}, {"at": [449, 292], "size": 17, "text": "16", "semantic": "数字"}, {"at": [645, 292], "size": 17, "text": "新", "semantic": "单汉字短项"},
+        {"at": [42, 437], "size": 15, "text": "备注：数字零和字母 O 应按原图核对。", "semantic": "小字说明"}
+      ], "decorations": [{"kind": "barcode", "box": [525, 480, 280, 54], "semantic": "无编码文字的随机条纹"}]
+    },
+    {
+      "id": "dev-faint-notes", "split": "development", "title": "浅色低对比与轻微模糊", "size": [900, 540], "theme": "light", "blur": 0.55,
+      "texts": [
+        {"at": [52, 36], "size": 27, "text": "会议纪要", "semantic": "标题"},
+        {"at": [52, 113], "size": 22, "color": "#a3a7ad", "text": "下周完成第一轮用户访谈。", "semantic": "浅色正文，不因弱置信度删除"},
+        {"at": [52, 158], "size": 22, "color": "#979ca3", "text": "把异常情况记录在同一份表格里。", "semantic": "低对比正文"},
+        {"at": [52, 242], "size": 17, "color": "#9da2a8", "text": "Review pending items before Friday.", "semantic": "浅色英文小字"},
+        {"at": [52, 300], "size": 14, "text": "附件编号：2026-19B", "semantic": "小号真实文本"}
+      ], "decorations": [{"kind": "strokes", "box": [66, 380, 665, 50], "semantic": "表格下方装饰碎片"}, {"kind": "icons", "box": [750, 95, 100, 238], "semantic": "边栏图标"}]
+    },
+    {
+      "id": "dev-map-labels", "split": "development", "title": "独立短标签与地图线条", "size": [940, 620], "theme": "light",
+      "texts": [
+        {"at": [40, 34], "size": 27, "text": "园区导览", "semantic": "标题"},
+        {"at": [80, 135], "size": 21, "text": "北", "semantic": "独立方向汉字"}, {"at": [330, 140], "size": 20, "text": "A1", "semantic": "楼号"},
+        {"at": [610, 160], "size": 20, "text": "入口", "semantic": "地图短标签"}, {"at": [105, 340], "size": 20, "text": "P", "semantic": "停车文字标记"},
+        {"at": [365, 350], "size": 21, "text": "体育馆", "semantic": "地图名称"}, {"at": [680, 360], "size": 18, "text": "08:30", "semantic": "时间"},
+        {"at": [40, 535], "size": 16, "text": "Open every day. Please keep the paths clear.", "semantic": "页脚"}
+      ], "decorations": [{"kind": "map", "box": [45, 200, 820, 105], "semantic": "道路与楼宇线条没有文字"}, {"kind": "icons", "box": [130, 425, 620, 60], "semantic": "设施图标"}]
+    },
+    {
+      "id": "dev-glyph-decor", "split": "development", "title": "正文与近似字符的装饰碎片", "size": [980, 560], "theme": "dark",
+      "texts": [
+        {"at": [45, 35], "size": 28, "text": "快捷整理识别内容", "semantic": "标题"},
+        {"at": [45, 110], "size": 22, "text": "按住 Ctrl 可以追加选择多行。", "semantic": "正文"},
+        {"at": [45, 155], "size": 22, "text": "排除内容后仍可撤销并恢复。", "semantic": "正文"},
+        {"at": [45, 215], "size": 20, "text": "Keep short labels, numbers, and punctuation.", "semantic": "英文正文"},
+        {"at": [45, 440], "size": 17, "text": "推荐阅读：附近展览信息", "semantic": "无关推荐是真实文字"}
+      ], "decorations": [{"kind": "glyphs", "box": [60, 305, 815, 68], "semantic": "按线段生成的伪字形，非文字"}, {"kind": "icons", "box": [795, 85, 110, 175], "semantic": "装饰按钮"}]
+    },
+    {
+      "id": "dev-micro-ui", "split": "development", "title": "密集小字界面与缩小图", "size": [1100, 690], "theme": "light", "scale": 0.8,
+      "texts": [
+        {"at": [48, 40], "size": 30, "text": "Notification settings", "semantic": "标题"},
+        {"at": [48, 125], "size": 19, "text": "接收通知", "semantic": "设置项"}, {"at": [48, 178], "size": 17, "text": "仅在任务完成或失败时提醒。", "semantic": "小字正文"},
+        {"at": [48, 235], "size": 17, "text": "Schedule: Monday / Wednesday / Friday", "semantic": "英文设置内容"},
+        {"at": [48, 295], "size": 15, "text": "应用版本 0.4.14  ·  已连接", "semantic": "小字号版本信息"},
+        {"at": [48, 349], "size": 15, "text": "路径 C:/work/notes/final.txt", "semantic": "混合路径"},
+        {"at": [48, 520], "size": 17, "text": "1", "semantic": "页码"}, {"at": [150, 520], "size": 17, "text": "2", "semantic": "页码"}, {"at": [250, 520], "size": 17, "text": "3", "semantic": "页码"}
+      ], "decorations": [{"kind": "icons", "box": [800, 120, 210, 340], "semantic": "设置页边栏工具图标"}, {"kind": "texture", "box": [400, 450, 330, 120], "semantic": "卡片背景网格"}]
+    },
+    {
+      "id": "dev-receipt", "split": "development", "title": "小票金额与条码", "size": [700, 700], "theme": "light",
+      "texts": [
+        {"at": [90, 34], "size": 29, "text": "便利商店", "semantic": "店名"}, {"at": [65, 108], "size": 19, "text": "订单号 6731058", "semantic": "订单号"},
+        {"at": [65, 168], "size": 22, "text": "矿泉水", "semantic": "商品名"}, {"at": [430, 168], "size": 22, "text": "3.50", "semantic": "金额"},
+        {"at": [65, 220], "size": 22, "text": "面包", "semantic": "短商品名"}, {"at": [430, 220], "size": 22, "text": "8.00", "semantic": "金额"},
+        {"at": [65, 305], "size": 24, "text": "合计", "semantic": "合计字段"}, {"at": [405, 305], "size": 24, "text": "11.50", "semantic": "总金额"},
+        {"at": [65, 387], "size": 16, "text": "Thank you. Please keep this receipt.", "semantic": "英文小字"},
+        {"at": [65, 625], "size": 15, "text": "客服 400-123-6789", "semantic": "页脚电话"}
+      ], "decorations": [{"kind": "barcode", "box": [80, 470, 520, 105], "semantic": "没有字符的条码线"}]
+    },
+    {
+      "id": "holdout-research-dark", "split": "holdout", "title": "深色研究摘要与图表装饰", "size": [1000, 650], "theme": "dark",
+      "texts": [
+        {"at": [58, 42], "size": 31, "text": "实验观察记录", "semantic": "标题"},
+        {"at": [58, 125], "size": 24, "text": "不同光照条件下，叶片颜色变化明显。", "semantic": "正文"},
+        {"at": [58, 174], "size": 24, "text": "第二组样本保持相同温度和湿度。", "semantic": "正文"},
+        {"at": [58, 238], "size": 21, "text": "Control group: stable across all six trials.", "semantic": "英文正文"},
+        {"at": [58, 291], "size": 17, "text": "样本 ID: F-308 / n = 6", "semantic": "变量与编号"},
+        {"at": [58, 558], "size": 15, "text": "网页侧栏：登录后查看订阅", "semantic": "真实无关内容保留"}
+      ], "decorations": [{"kind": "chart", "box": [72, 365, 760, 130], "semantic": "不含轴标签的图表线条"}, {"kind": "icons", "box": [860, 100, 85, 210], "semantic": "侧栏图标"}]
+    },
+    {
+      "id": "holdout-travel-card", "split": "holdout", "title": "浅色行程卡与独立短项", "size": [930, 610], "theme": "light",
+      "texts": [
+        {"at": [45, 36], "size": 29, "text": "出行确认单", "semantic": "标题"}, {"at": [45, 112], "size": 20, "text": "站台", "semantic": "标签"}, {"at": [270, 112], "size": 24, "text": "7", "semantic": "单数字站台"},
+        {"at": [45, 176], "size": 20, "text": "车厢", "semantic": "标签"}, {"at": [270, 176], "size": 24, "text": "B", "semantic": "单字母车厢"},
+        {"at": [45, 240], "size": 20, "text": "座位", "semantic": "标签"}, {"at": [270, 240], "size": 24, "text": "03F", "semantic": "短编号"},
+        {"at": [45, 326], "size": 22, "text": "请在出发前二十分钟到达候车区。", "semantic": "正文"}, {"at": [45, 377], "size": 18, "text": "Departure 14:25  |  Gate C", "semantic": "英文时间"},
+        {"at": [45, 521], "size": 15, "text": "附近酒店推广", "semantic": "实际无关广告文字"}
+      ], "decorations": [{"kind": "icons", "box": [660, 110, 190, 235], "semantic": "旅行设施图标"}, {"kind": "strokes", "box": [70, 445, 750, 35], "semantic": "装饰分割线"}]
+    },
+    {
+      "id": "holdout-pale-caption", "split": "holdout", "title": "模糊浅字与小号图注", "size": [1000, 600], "theme": "light", "blur": 0.85,
+      "texts": [
+        {"at": [56, 40], "size": 28, "text": "观察与思考", "semantic": "标题"},
+        {"at": [56, 121], "size": 24, "color": "#9ca1a8", "text": "远处山脊逐渐隐入薄雾。", "semantic": "模糊浅色正文"},
+        {"at": [56, 173], "size": 24, "color": "#a4a8ae", "text": "记录环境，而不是只记录结论。", "semantic": "模糊浅色正文"},
+        {"at": [56, 247], "size": 16, "color": "#9299a0", "text": "Figure 3. Temperature measured at sunrise.", "semantic": "低对比英文图注"},
+        {"at": [56, 306], "size": 13, "text": "测量单位：摄氏度；误差 ±0.5", "semantic": "小字号单位与符号"}
+      ], "decorations": [{"kind": "texture", "box": [70, 405, 770, 110], "semantic": "网格和杂线"}, {"kind": "icons", "box": [865, 85, 80, 240], "semantic": "独立工具图标"}]
+    },
+    {
+      "id": "holdout-terminal-punctuation", "split": "holdout", "title": "终端命令与稀疏标点", "size": [1040, 650], "theme": "dark",
+      "texts": [
+        {"at": [42, 38], "size": 26, "text": "Deployment log", "semantic": "标题"},
+        {"at": [42, 114], "size": 21, "font": "mono", "text": "$ curl -I https://example.test/v2?a=1", "semantic": "命令与URL"},
+        {"at": [42, 166], "size": 21, "font": "mono", "text": "HTTP/2 200", "semantic": "协议短行"},
+        {"at": [42, 218], "size": 21, "font": "mono", "text": "{ \"ready\": true, \"count\": 3 }", "semantic": "JSON代码"},
+        {"at": [42, 270], "size": 21, "font": "mono", "text": "=> done();", "semantic": "符号密集代码"},
+        {"at": [42, 322], "size": 21, "font": "mono", "text": "[]", "semantic": "独立方括号仍是真实文字"},
+        {"at": [42, 520], "size": 16, "text": "重试间隔为三秒，最多执行五次。", "semantic": "中文小字"}
+      ], "decorations": [{"kind": "glyphs", "box": [58, 412, 835, 60], "semantic": "像字符的无语义线段"}, {"kind": "icons", "box": [875, 88, 115, 255], "semantic": "工具图标"}]
+    },
+    {
+      "id": "holdout-spreadsheet", "split": "holdout", "title": "财务表格与符号单元格", "size": [1050, 620], "theme": "light", "table": [35, 110, 975, 324, 5, 6],
+      "texts": [
+        {"at": [40, 35], "size": 28, "text": "月度费用核对", "semantic": "标题"},
+        {"at": [48, 127], "size": 19, "text": "科目", "semantic": "表头"}, {"at": [242, 127], "size": 19, "text": "预算", "semantic": "表头"}, {"at": [437, 127], "size": 19, "text": "实际", "semantic": "表头"}, {"at": [633, 127], "size": 19, "text": "差额", "semantic": "表头"}, {"at": [828, 127], "size": 19, "text": "说明", "semantic": "表头"},
+        {"at": [48, 181], "size": 17, "text": "交通", "semantic": "短项"}, {"at": [242, 181], "size": 17, "text": "500", "semantic": "数字"}, {"at": [437, 181], "size": 17, "text": "468", "semantic": "数字"}, {"at": [633, 181], "size": 17, "text": "+32", "semantic": "带符号金额"}, {"at": [828, 181], "size": 17, "text": "-", "semantic": "单横线是表格占位文字"},
+        {"at": [48, 235], "size": 17, "text": "办公", "semantic": "短项"}, {"at": [242, 235], "size": 17, "text": "80", "semantic": "数字"}, {"at": [437, 235], "size": 17, "text": "80", "semantic": "数字"}, {"at": [633, 235], "size": 17, "text": "0", "semantic": "单数字"}, {"at": [828, 235], "size": 17, "text": "Y", "semantic": "单字母"},
+        {"at": [48, 289], "size": 17, "text": "水电", "semantic": "短项"}, {"at": [242, 289], "size": 17, "text": "120", "semantic": "数字"}, {"at": [437, 289], "size": 17, "text": "136", "semantic": "数字"}, {"at": [633, 289], "size": 17, "text": "-16", "semantic": "负数"}, {"at": [828, 289], "size": 17, "text": "N", "semantic": "单字母"},
+        {"at": [40, 490], "size": 16, "text": "经办人：陈雨  /  审核：林舟", "semantic": "底部姓名"}
+      ], "decorations": [{"kind": "barcode", "box": [620, 536, 360, 48], "semantic": "随机条纹"}]
+    },
+    {
+      "id": "holdout-poster-icons", "split": "holdout", "title": "海报与大面积伪字形装饰", "size": [850, 780], "theme": "dark",
+      "texts": [
+        {"at": [54, 42], "size": 35, "text": "秋日自然课堂", "semantic": "海报标题"},
+        {"at": [54, 130], "size": 23, "text": "用观察发现身边的细节。", "semantic": "正文"},
+        {"at": [54, 187], "size": 21, "text": "10 月 26 日  09:00", "semantic": "日期与时间"},
+        {"at": [54, 244], "size": 21, "text": "Meet at the west entrance.", "semantic": "英文地址说明"},
+        {"at": [54, 586], "size": 17, "text": "报名截止：活动前一天", "semantic": "小字正文"},
+        {"at": [54, 680], "size": 15, "text": "协办单位：城市生活周刊", "semantic": "真实关联度弱的署名"}
+      ], "decorations": [{"kind": "glyphs", "box": [68, 350, 710, 80], "semantic": "纯装饰伪字形"}, {"kind": "icons", "box": [68, 460, 710, 65], "semantic": "活动图标"}]
+    },
+    {
+      "id": "holdout-zoomed-panel", "split": "holdout", "title": "独立放大设置面板", "size": [780, 470], "theme": "dark", "scale": 1.3,
+      "texts": [
+        {"at": [35, 27], "size": 23, "text": "Storage preferences", "semantic": "标题"},
+        {"at": [35, 93], "size": 18, "text": "自动保留最近三十天的文件", "semantic": "设置内容"},
+        {"at": [35, 141], "size": 15, "text": "缓存大小 256 MB", "semantic": "小字设置值"},
+        {"at": [35, 189], "size": 15, "text": "Export format: PNG / JPEG / WebP", "semantic": "枚举值"},
+        {"at": [35, 237], "size": 15, "text": "Folder: D:/images/2026/October", "semantic": "文件路径"},
+        {"at": [35, 382], "size": 13, "text": "帮助中心  ·  关于  ·  反馈", "semantic": "小字链接"}
+      ], "decorations": [{"kind": "icons", "box": [590, 80, 135, 235], "semantic": "开关图标"}, {"kind": "strokes", "box": [60, 309, 490, 34], "semantic": "装饰碎线"}]
+    },
+    {
+      "id": "holdout-geometry-only", "split": "holdout", "title": "无字图标与纹理负样本", "size": [940, 610], "theme": "light",
+      "texts": [],
+      "decorations": [{"kind": "icons", "box": [50, 40, 820, 75], "semantic": "没有文字的工具图标列"}, {"kind": "glyphs", "box": [75, 175, 760, 70], "semantic": "随机线段构成的伪字形"}, {"kind": "texture", "box": [80, 310, 310, 210], "semantic": "纹理"}, {"kind": "chart", "box": [470, 320, 360, 170], "semantic": "无轴标签图形"}]
+    }
+  ]
+}

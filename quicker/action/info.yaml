@@ -1,0 +1,9 @@
+$schema: quicker.action.info.v1
+title: 'raishot'
+icon: 'https://files.getquicker.net/_icons/D847D6E40A270EE9EF2F9297E9C9AA609FF0F0D9.png'
+description: '截图、标注、贴图、OCR、长截图与录屏；首次自动下载程序，右键可启动托盘。'
+contextMenu: |-
+  [fa:Solid_CropAlt]区域截图|region
+  [fa:Light_Desktop]启动托盘|tray
+  ----
+  [fa:Light_CheckCircle]检查程序文件|verify

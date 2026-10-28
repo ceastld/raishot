@@ -1,0 +1,2948 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>长截图 · 编辑与裁剪一体化</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #171b21;
+        --panel: #1e242c;
+        --well: #14181d;
+        --canvas: #101419;
+        --hover: #2b333d;
+        --border: #303943;
+        --fg: #dce5ed;
+        --muted: #8b9aa9;
+        --faint: #647381;
+        --green: #53d5a6;
+        --green-soft: #203c35;
+        --on-green: #10281f;
+        --blue: #81b7ee;
+        --red: #f27c81;
+        --shadow: 0 10px 40px #0006;
+        --ui:
+          "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          color-scheme: light;
+          --bg: #f3f5f7;
+          --panel: #fff;
+          --well: #e9edf1;
+          --canvas: #dce2e7;
+          --hover: #edf1f5;
+          --border: #d8dfe6;
+          --fg: #293744;
+          --muted: #647381;
+          --faint: #84919d;
+          --green: #177653;
+          --green-soft: #e2f3ea;
+          --on-green: #fff;
+          --blue: #247fc4;
+          --red: #c13d49;
+          --shadow: 0 10px 40px #1e304026;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 13px/1.5 var(--ui);
+        overflow: hidden;
+      }
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.32;
+        cursor: default;
+      }
+      button:hover:not(:disabled) {
+        background: var(--hover);
+      }
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 3px;
+      }
+      button,
+      button::after {
+        transition: background 0.12s;
+      }
+      svg.icon {
+        width: 18px;
+        height: 18px;
+        stroke: currentColor;
+        stroke-width: 1.65;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: none;
+      }
+      kbd {
+        font: 11px var(--ui);
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 4px;
+      }
+      button.primary {
+        background: var(--green);
+        color: var(--on-green);
+        font-weight: 600;
+      }
+      button.primary:hover {
+        filter: brightness(1.08);
+        background: var(--green);
+      }
+      .button {
+        height: 32px;
+        padding: 0 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border-radius: 6px;
+        white-space: nowrap;
+      }
+      .button.outlined {
+        border: 1px solid var(--border);
+      }
+      .icon-button {
+        width: 32px;
+        height: 32px;
+        border-radius: 5px;
+        display: inline-grid;
+        place-items: center;
+        flex: none;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .spacer {
+        flex: 1;
+      }
+      .separator {
+        height: 21px;
+        width: 1px;
+        background: var(--border);
+        margin: 0 8px;
+      }
+      .app {
+        height: 100dvh;
+        min-height: 480px;
+        display: grid;
+        grid-template-rows: 44px 48px minmax(0, 1fr) 28px;
+      }
+      .titlebar {
+        display: flex;
+        align-items: center;
+        padding: 0 17px;
+        gap: 10px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+      }
+      .doc-icon {
+        display: grid;
+        place-items: center;
+        width: 25px;
+        height: 25px;
+        color: var(--green);
+      }
+      .document-title {
+        font-weight: 600;
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .prototype-label {
+        font-size: 11px;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 6px;
+        white-space: nowrap;
+      }
+      .title-meta {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        padding: 0 13px 0 15px;
+        border-bottom: 1px solid var(--border);
+        gap: 3px;
+      }
+      .toolbar .mode-label {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-left: 9px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .mode-dot {
+        width: 6px;
+        height: 6px;
+        background: var(--green);
+        border-radius: 50%;
+      }
+      .view-button {
+        height: 29px;
+        padding: 0 9px;
+        border-radius: 5px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .view-button.on {
+        color: var(--fg);
+        background: var(--hover);
+      }
+      .zoom-label {
+        width: 52px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr) 270px;
+        min-height: 0;
+      }
+      .tools {
+        background: var(--panel);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 12px 5px;
+        gap: 5px;
+      }
+      .tool {
+        width: 50px;
+        min-height: 52px;
+        border-radius: 7px;
+        color: var(--muted);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        font-size: 10px;
+        position: relative;
+      }
+      .tool .icon {
+        width: 19px;
+        height: 19px;
+      }
+      .tool.active {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+      .tool.active::before {
+        position: absolute;
+        content: "";
+        left: -5px;
+        height: 20px;
+        width: 3px;
+        border-radius: 0 3px 3px 0;
+        background: var(--green);
+      }
+      .tool-separator {
+        height: 1px;
+        background: var(--border);
+        width: 28px;
+        margin: 7px 0;
+      }
+      .canvas-region {
+        position: relative;
+        min-width: 0;
+        overflow: hidden;
+        background: var(--canvas);
+      }
+      .viewport {
+        position: absolute;
+        inset: 0;
+        overflow: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border) transparent;
+        touch-action: none;
+      }
+      .stage {
+        position: relative;
+        min-width: 100%;
+        min-height: 100%;
+      }
+      .paper {
+        position: absolute;
+        box-shadow: 0 8px 35px #0005;
+      }
+      .surface {
+        position: absolute;
+        transform-origin: 0 0;
+        user-select: none;
+      }
+      .source-image {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .annotations {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .mask {
+        position: absolute;
+        pointer-events: none;
+        background: rgba(3, 8, 12, 0.73);
+      }
+      .crop-outline {
+        position: absolute;
+        border: 1.5px solid #64e1b6;
+        pointer-events: none;
+        box-shadow: 0 0 0 1px #071b14a6;
+      }
+      .crop-outline button {
+        pointer-events: auto;
+      }
+      .crop-caption {
+        position: absolute;
+        left: -1px;
+        top: -30px;
+        background: #224b3d;
+        color: #c4fbe6;
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 4px 4px 0 0;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .crop-caption .icon {
+        width: 13px;
+        height: 13px;
+      }
+      .handle {
+        position: absolute;
+        background: #c2f8e2;
+        border: 1px solid #205140;
+        box-shadow: 0 1px 4px #0005;
+        min-width: 9px;
+        min-height: 9px;
+        padding: 0;
+        border-radius: 2px;
+        touch-action: none;
+      }
+      .handle:hover {
+        background: white !important;
+      }
+      .handle[data-edge="n"],
+      .handle[data-edge="s"] {
+        width: 36px;
+        height: 7px;
+        left: calc(50% - 18px);
+        cursor: ns-resize;
+      }
+      .handle[data-edge="n"] {
+        top: -4px;
+      }
+      .handle[data-edge="s"] {
+        bottom: -4px;
+      }
+      .handle[data-edge="w"],
+      .handle[data-edge="e"] {
+        width: 7px;
+        height: 36px;
+        top: calc(50% - 18px);
+        cursor: ew-resize;
+      }
+      .handle[data-edge="w"] {
+        left: -4px;
+      }
+      .handle[data-edge="e"] {
+        right: -4px;
+      }
+      .handle[data-edge="nw"] {
+        left: -5px;
+        top: -5px;
+        cursor: nwse-resize;
+      }
+      .handle[data-edge="ne"] {
+        right: -5px;
+        top: -5px;
+        cursor: nesw-resize;
+      }
+      .handle[data-edge="sw"] {
+        left: -5px;
+        bottom: -5px;
+        cursor: nesw-resize;
+      }
+      .handle[data-edge="se"] {
+        right: -5px;
+        bottom: -5px;
+        cursor: nwse-resize;
+      }
+      .handle.selected {
+        outline: 2px solid #fff;
+        outline-offset: 3px;
+      }
+      .crop-guide {
+        position: absolute;
+        background: #ffffff25;
+        pointer-events: none;
+      }
+      .guide-v1 {
+        left: 33.333%;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+      }
+      .guide-v2 {
+        left: 66.666%;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+      }
+      .guide-h1 {
+        top: 33.333%;
+        left: 0;
+        right: 0;
+        height: 1px;
+      }
+      .guide-h2 {
+        top: 66.666%;
+        left: 0;
+        right: 0;
+        height: 1px;
+      }
+      .crop-outline:not(.dragging) .crop-guide {
+        display: none;
+      }
+      .edge-jump {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 6;
+        box-shadow: 0 3px 12px #0004;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--muted);
+        border-radius: 20px;
+        padding: 5px 11px;
+        font-size: 11px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .edge-jump .icon {
+        width: 13px;
+        height: 13px;
+      }
+      .edge-jump.top {
+        top: 12px;
+      }
+      .edge-jump.bottom {
+        bottom: 85px;
+      }
+      .crop-actions {
+        position: absolute;
+        z-index: 8;
+        bottom: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 8px;
+        white-space: nowrap;
+      }
+      .crop-actions .result-size {
+        padding: 0 11px 0 6px;
+        display: flex;
+        gap: 3px;
+        flex-direction: column;
+        border-right: 1px solid var(--border);
+        margin-right: 1px;
+        min-width: 124px;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .result-size small {
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .crop-actions kbd {
+        color: inherit;
+        opacity: 0.6;
+        border-color: currentColor;
+        font-size: 10px;
+      }
+      .marker {
+        position: absolute;
+        height: 1px;
+        background: #f1c571;
+        pointer-events: none;
+        z-index: 4;
+      }
+      .marker-label {
+        position: absolute;
+        right: 0;
+        bottom: 6px;
+        font-size: 11px;
+        background: #3e3321;
+        color: #ffe0a0;
+        border: 1px solid #7d6335;
+        border-radius: 3px;
+        padding: 2px 5px;
+      }
+      .marker-actions {
+        position: absolute;
+        z-index: 7;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        padding: 4px;
+        border-radius: 7px;
+        display: flex;
+        gap: 3px;
+        white-space: nowrap;
+      }
+      .marker-actions button {
+        height: 29px;
+        padding: 0 9px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .marker-actions .icon-button {
+        width: 28px;
+        padding: 0;
+      }
+      .annotation-input {
+        position: absolute;
+        z-index: 5;
+        min-width: 130px;
+        border: 1px solid var(--green);
+        background: #1a2420;
+        color: #a9f5d7;
+        padding: 5px 8px;
+        border-radius: 3px;
+        font-size: 18px;
+        outline: none;
+      }
+      .sidebar {
+        background: var(--panel);
+        border-left: 1px solid var(--border);
+        padding: 17px 17px 0;
+        overflow: auto;
+        scrollbar-width: thin;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .section-heading {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+      .section-heading h2 {
+        font-size: 12px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .section-heading .icon-button {
+        width: 25px;
+        height: 25px;
+        color: var(--muted);
+      }
+      .section-heading .icon {
+        width: 15px;
+        height: 15px;
+      }
+      .mini-well {
+        background: var(--well);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 14px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: clamp(200px, 34vh, 350px);
+        position: relative;
+        flex: none;
+      }
+      .minimap {
+        position: relative;
+        touch-action: none;
+        cursor: crosshair;
+        user-select: none;
+        box-shadow: 0 2px 10px #0004;
+      }
+      .minimap > img {
+        width: 100%;
+        height: 100%;
+        display: block;
+        pointer-events: none;
+      }
+      .mini-mask {
+        position: absolute;
+        background: #05090dbf;
+        pointer-events: none;
+      }
+      .mini-crop {
+        position: absolute;
+        border: 1px solid #64e1b6;
+        pointer-events: none;
+      }
+      .mini-viewport {
+        position: absolute;
+        border: 1.5px solid #96c9f8;
+        background: #78aee528;
+        pointer-events: none;
+        min-height: 5px;
+        z-index: 2;
+      }
+      .mini-rail {
+        position: absolute;
+        left: -13px;
+        width: 3px;
+        background: #64e1b688;
+        pointer-events: none;
+      }
+      .mini-handle {
+        position: absolute;
+        left: -19px;
+        width: 16px;
+        height: 12px;
+        background: transparent !important;
+        z-index: 3;
+        cursor: ns-resize;
+        touch-action: none;
+        padding: 0;
+      }
+      .mini-handle::before {
+        content: "";
+        display: block;
+        width: 15px;
+        height: 4px;
+        background: #64e1b6;
+        border-radius: 2px;
+        box-shadow: 0 0 0 1px #132e23;
+      }
+      .mini-handle:hover::before {
+        height: 6px;
+        background: #c2f8e2;
+      }
+      .mini-legend {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        font-size: 10px;
+        color: var(--muted);
+        margin: 10px 0 18px;
+      }
+      .legend-line {
+        width: 12px;
+        height: 2px;
+        background: var(--green);
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 5px;
+      }
+      .legend-window {
+        width: 12px;
+        height: 9px;
+        border: 1px solid var(--blue);
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 5px;
+      }
+      .inspector {
+        border-top: 1px solid var(--border);
+        padding: 17px 0;
+      }
+      .inspector .section-heading {
+        margin-bottom: 13px;
+      }
+      .reset-button {
+        font-size: 11px;
+        color: var(--muted);
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .crop-fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 13px 11px;
+      }
+      .field-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 0 0 5px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .locate {
+        width: 21px;
+        height: 18px;
+        display: inline-grid;
+        place-items: center;
+        border-radius: 3px;
+        color: var(--muted);
+      }
+      .locate .icon {
+        width: 12px;
+        height: 12px;
+      }
+      .number-field {
+        display: flex;
+        align-items: center;
+        height: 33px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 0 8px;
+      }
+      .number-field:focus-within {
+        border-color: var(--green);
+      }
+      .number-field input {
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        outline: 0;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .number-field span {
+        color: var(--faint);
+        font-size: 10px;
+        margin-left: 3px;
+      }
+      .number-field:has(input:invalid) {
+        border-color: var(--red);
+      }
+      .output-size {
+        display: flex;
+        align-items: center;
+        margin-top: 19px;
+        font-size: 11px;
+        color: var(--muted);
+        gap: 4px;
+      }
+      .output-size strong {
+        margin-left: auto;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--fg);
+        font-variant-numeric: tabular-nums;
+      }
+      .source-size {
+        font-size: 10px;
+        text-align: right;
+        color: var(--faint);
+        margin-top: 5px;
+      }
+      .inspector-note {
+        font-size: 11px;
+        color: var(--muted);
+        margin: 18px 0 0;
+        display: flex;
+        gap: 7px;
+        align-items: flex-start;
+        line-height: 1.7;
+      }
+      .inspector-note .icon {
+        width: 13px;
+        height: 13px;
+        margin-top: 3px;
+      }
+      .side-bottom {
+        margin-top: auto;
+        font-size: 10px;
+        color: var(--faint);
+        padding: 13px 0 16px;
+      }
+      .statusbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-top: 1px solid var(--border);
+        padding: 0 14px;
+        color: var(--muted);
+        font-size: 10px;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .statusbar .status-hint {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .coordinates {
+        font-variant-numeric: tabular-nums;
+      }
+      .toast {
+        position: absolute;
+        z-index: 15;
+        top: 15px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--panel);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        border-radius: 7px;
+        padding: 9px 15px;
+        white-space: nowrap;
+        max-width: 95%;
+        font-size: 12px;
+        pointer-events: none;
+      }
+      .toast.error {
+        color: var(--red);
+      }
+      .color-swatches {
+        display: flex;
+        gap: 9px;
+        flex-wrap: wrap;
+        margin: 14px 0 21px;
+      }
+      .swatch {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--swatch) !important;
+        border: 3px solid var(--panel);
+      }
+      .swatch.active {
+        outline: 1px solid var(--fg);
+        outline-offset: 1px;
+      }
+      .property-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 18px;
+      }
+      .property-row input[type="range"] {
+        width: 100%;
+        accent-color: var(--green);
+      }
+      .annotation-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        border-top: 1px solid var(--border);
+      }
+      .annotation-list button {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 9px;
+        text-align: left;
+        font-size: 12px;
+        padding: 8px;
+        border-radius: 5px;
+      }
+      .annotation-list button.selected {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+      .annotation-list .icon {
+        width: 14px;
+        height: 14px;
+      }
+      .empty-annotations {
+        font-size: 11px;
+        color: var(--faint);
+        padding: 12px 0;
+      }
+      .annotation-list-title {
+        font-size: 11px;
+        font-weight: 500;
+        margin: 24px 0 10px;
+        color: var(--muted);
+      }
+      dialog {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--panel);
+        color: var(--fg);
+        box-shadow: var(--shadow);
+        padding: 24px;
+        width: 500px;
+        max-width: calc(100vw - 40px);
+      }
+      dialog::backdrop {
+        background: #060b13aa;
+        backdrop-filter: blur(3px);
+      }
+      dialog h2 {
+        font-size: 17px;
+        margin: 0 0 5px;
+        font-weight: 600;
+      }
+      dialog p {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0 0 20px;
+      }
+      .dialog-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 20px;
+      }
+      .help-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+      }
+      .help-row:last-of-type {
+        border: 0;
+      }
+      .preview-well {
+        background: var(--well);
+        border: 1px solid var(--border);
+        padding: 16px;
+        text-align: center;
+        max-height: 52vh;
+        overflow: auto;
+        border-radius: 6px;
+      }
+      .preview-well img {
+        width: 150px;
+        height: auto;
+        box-shadow: 0 3px 15px #0004;
+      }
+      .warning {
+        font-size: 11px;
+        color: var(--red);
+        margin-top: 9px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (max-width: 1050px) {
+        .workspace {
+          grid-template-columns: 58px minmax(0, 1fr) 238px;
+        }
+        .sidebar {
+          padding-left: 13px;
+          padding-right: 13px;
+        }
+        .toolbar .mode-label {
+          display: none;
+        }
+        .title-meta {
+          display: none;
+        }
+        .toolbar .separator {
+          margin: 0 3px;
+        }
+        .crop-actions .result-size {
+          min-width: 108px;
+          font-size: 11px;
+          padding-right: 7px;
+        }
+        .crop-actions {
+          gap: 3px;
+        }
+        .crop-actions .button {
+          padding: 0 9px;
+        }
+        .crop-actions kbd {
+          display: none;
+        }
+      }
+      @media (max-width: 760px) {
+        .workspace {
+          grid-template-columns: 50px minmax(0, 1fr) 188px;
+        }
+        .tools {
+          padding: 10px 2px;
+        }
+        .tool {
+          width: 43px;
+        }
+        .sidebar {
+          padding: 12px 10px 0;
+        }
+        .mini-well {
+          height: 200px;
+          padding: 12px 18px;
+        }
+        .crop-fields {
+          gap: 9px 7px;
+        }
+        .crop-actions {
+          padding: 5px;
+          bottom: 12px;
+          flex-wrap: wrap;
+          justify-content: center;
+          width: calc(100% - 24px);
+          max-width: 330px;
+        }
+        .crop-actions .result-size {
+          width: 100%;
+          border: 0;
+          flex-direction: row;
+          justify-content: space-between;
+          margin: 0;
+          padding: 2px 5px;
+        }
+        .crop-actions .result-size small {
+          font-size: 10px;
+        }
+        .crop-actions .button {
+          flex: 1;
+        }
+        .titlebar {
+          padding: 0 8px;
+          gap: 5px;
+        }
+        .prototype-label {
+          display: none;
+        }
+        .titlebar .button {
+          font-size: 11px;
+          padding: 0 7px;
+          height: 29px;
+        }
+        .titlebar .icon {
+          width: 15px;
+        }
+        .toolbar {
+          padding: 0 7px;
+        }
+        .toolbar .view-button {
+          padding: 0 6px;
+        }
+        .view-button[data-view="actual"] {
+          display: none;
+        }
+        .toolbar .icon-button {
+          width: 27px;
+        }
+        .zoom-label {
+          width: 40px;
+        }
+        .side-bottom,
+        .titlebar .separator {
+          display: none;
+        }
+        .document-title {
+          max-width: 180px;
+          font-size: 11px;
+        }
+        .edge-jump.bottom {
+          bottom: 111px;
+        }
+        .output-size {
+          flex-wrap: wrap;
+        }
+        .output-size strong {
+          margin-left: 0;
+          width: 100%;
+        }
+        .inspector-note {
+          font-size: 10px;
+        }
+        .statusbar {
+          padding: 0 7px;
+        }
+        .coordinates {
+          display: none;
+        }
+      }
+      @media (max-width: 560px) {
+        .workspace {
+          grid-template-columns: 46px minmax(0, 1fr) 142px;
+        }
+        .sidebar {
+          padding: 10px 8px 0;
+        }
+        .crop-fields {
+          grid-template-columns: 1fr;
+        }
+        .number-field {
+          height: 29px;
+        }
+        .mini-well {
+          height: 164px;
+          padding: 11px 18px;
+        }
+        .mini-legend {
+          font-size: 9px;
+          gap: 6px;
+          flex-wrap: wrap;
+          margin-bottom: 12px;
+        }
+        .section-heading {
+          margin-bottom: 7px;
+        }
+        .section-heading h2 {
+          font-size: 11px;
+        }
+        .inspector {
+          padding-top: 11px;
+        }
+        .crop-fields {
+          gap: 5px;
+        }
+        .field-title {
+          margin-bottom: 2px;
+        }
+        .inspector-note,
+        .source-size {
+          display: none;
+        }
+        .toolbar .view-button[data-view="all"] {
+          display: none;
+        }
+        .titlebar [data-action="pin"],
+        .titlebar .title-icon-action {
+          display: none;
+        }
+        .titlebar .button {
+          padding: 0 6px;
+        }
+        .document-title {
+          max-width: 120px;
+        }
+        .tool {
+          width: 39px;
+          min-height: 48px;
+        }
+        .edge-jump {
+          font-size: 10px;
+          padding: 4px 6px;
+        }
+        .edge-jump .icon {
+          display: none;
+        }
+        .crop-actions .button {
+          font-size: 11px;
+        }
+        .crop-actions .result-size {
+          font-size: 10px;
+        }
+        .crop-actions .result-size small {
+          display: none;
+        }
+        .app {
+          grid-template-rows: 40px 42px minmax(0, 1fr) 25px;
+        }
+      }
+    </style>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="long-editor-annotations.css" />
+    <link rel="stylesheet" href="long-editor-navigation.css" />
+  </head>
+  <body>
+    <div class="app" id="long-editor">
+      <header class="titlebar">
+        <span class="doc-icon" data-icon="long"></span>
+        <span class="document-title" id="document-title"
+          >设计手记 · 长截图</span
+        >
+        <span class="title-meta" id="title-dimensions">1080 × 4320</span>
+        <span class="spacer"></span
+        ><span class="prototype-label">交互原型</span>
+        <button
+          class="icon-button title-icon-action"
+          data-action="open"
+          title="换一张图片"
+          aria-label="换一张图片"
+          data-icon="folder"
+        ></button>
+        <span class="separator"></span>
+        <button class="button" data-action="pin" title="预览贴图结果">
+          <span data-icon="pin"></span><span>贴图</span>
+        </button>
+        <button class="button" data-action="save" title="下载当前结果">
+          <span data-icon="save"></span><span>保存</span>
+        </button>
+        <button class="button primary" data-action="copy" id="copy-button">
+          <span data-icon="copy"></span><span id="copy-label">应用并复制</span>
+        </button>
+      </header>
+      <div class="toolbar">
+        <button
+          class="icon-button"
+          data-action="undo"
+          id="undo"
+          title="撤销 Ctrl+Z"
+          aria-label="撤销"
+          data-icon="undo"
+          disabled
+        ></button>
+        <button
+          class="icon-button"
+          data-action="redo"
+          id="redo"
+          title="重做 Ctrl+Shift+Z"
+          aria-label="重做"
+          data-icon="redo"
+          disabled
+        ></button>
+        <span class="separator"></span>
+        <span class="navigation-controls"><button class="view-button overview-toggle" data-action="toggle-overview" aria-pressed="true"><span class="native-icon" style="--tool-icon:url('icons/long-capture.svg')"></span>导航</button><button class="view-button properties-toggle" data-action="toggle-properties"><span class="native-icon" style="--tool-icon:url('icons/palette.svg')"></span>属性</button></span>
+        <span class="mode-label"
+          ><span class="mode-dot"></span
+          ><span id="mode-label">调整裁剪范围</span></span
+        >
+        <span class="spacer"></span>
+        <button class="view-button on" data-view="width">适合宽度</button>
+        <button class="view-button" data-view="all">查看全图</button>
+        <button class="view-button" data-view="actual">100%</button>
+        <span class="separator"></span>
+        <button
+          class="icon-button"
+          data-action="zoom-out"
+          aria-label="缩小"
+          data-icon="minus"
+        ></button>
+        <span class="zoom-label" id="zoom-label">50%</span>
+        <button
+          class="icon-button"
+          data-action="zoom-in"
+          aria-label="放大"
+          data-icon="plus"
+        ></button>
+      </div>
+      <main class="workspace">
+        <nav class="tools" aria-label="编辑工具">
+          <button class="tool" data-tool="select" title="选择 V">
+            <span data-icon="select"></span><span>选择</span>
+          </button>
+          <button class="tool active" data-tool="crop" title="裁剪 C">
+            <span data-icon="crop"></span><span>裁剪</span>
+          </button>
+          <div class="tool-separator"></div>
+          <button class="tool" data-tool="rect" title="矩形 R">
+            <span data-icon="rect"></span><span>矩形</span>
+          </button>
+          <button class="tool" data-tool="arrow" title="箭头 A">
+            <span data-icon="arrow"></span><span>箭头</span>
+          </button>
+          <button class="tool" data-tool="text" title="文字 T">
+            <span data-icon="text"></span><span>文字</span>
+          </button>
+          <button class="tool" data-tool="mosaic" title="马赛克 M">
+            <span data-icon="mosaic"></span><span>马赛克</span>
+          </button>
+          <span class="spacer"></span>
+          <button
+            class="icon-button"
+            data-action="help"
+            title="操作说明"
+            aria-label="操作说明"
+            data-icon="help"
+          ></button>
+        </nav>
+        <aside class="overview-pane" id="overview-pane" aria-label="长图导航">
+          <div class="overview-header"><h2>长图总览</h2><span class="spacer"></span><button class="icon-button" data-action="home" aria-label="前往开头" title="前往开头" data-icon="to-top"></button><button class="icon-button" data-action="end" aria-label="前往结尾" title="前往结尾" data-icon="to-bottom"></button><button class="icon-button" data-action="toggle-overview" aria-label="收起总览" title="收起总览" data-icon="close"></button></div>
+          <div class="overview-modes"><button data-overview-mode="readable" class="active" aria-pressed="true">可读导航</button><button data-overview-mode="whole" aria-pressed="false">整图</button></div>
+          <div class="overview-body"><div id="global-map" class="global-map" role="slider" tabindex="0" aria-label="整张长图位置轨道" aria-valuemin="0" aria-valuemax="4320" aria-valuenow="0"><img id="global-source" src="long-editor-sample.svg" alt="" draggable="false"><div id="global-crop" class="global-crop"></div><div id="global-viewport" class="global-viewport"></div></div>
+          <div class="mini-well" id="mini-well">
+            <div
+              class="minimap"
+              id="minimap"
+              aria-label="详细缩略图：滚轮浏览，点击定位，蓝框拖动导航，两侧绿色端点裁剪"
+            >
+              <img
+                id="mini-source"
+                src="long-editor-sample.svg"
+                alt="完整长图缩略图"
+                draggable="false"
+              />
+              <svg id="mini-annotations" aria-hidden="true"></svg>
+              <div class="mini-mask" id="mini-mask-top"></div>
+              <div class="mini-mask" id="mini-mask-bottom"></div>
+              <div class="mini-mask" id="mini-mask-left"></div>
+              <div class="mini-mask" id="mini-mask-right"></div>
+              <div class="mini-crop" id="mini-crop"></div>
+              <div class="mini-viewport" id="mini-viewport"></div>
+              <div class="mini-rail" id="mini-rail"></div>
+              <button
+                class="mini-handle"
+                id="mini-top"
+                data-mini-edge="n"
+                title="拖动调整顶部"
+                aria-label="总览顶部裁剪端点"
+              ></button
+              ><button
+                class="mini-handle"
+                id="mini-bottom"
+                data-mini-edge="s"
+                title="拖动调整底部"
+                aria-label="总览底部裁剪端点"
+              ></button>
+            </div>
+          </div>
+          </div>
+          <button id="overview-follow" class="overview-follow" data-action="follow-overview" hidden>回到当前画面</button>
+          <div class="overview-range" id="overview-range">0–1000 / 4320 px</div>
+          <div class="overview-footer"><div id="overview-crop-locators"><button data-action="jump-top">定位裁剪顶部</button><button data-action="jump-bottom">定位裁剪底部</button></div><span><i class="legend-line"></i>裁剪范围 <i class="legend-window"></i>当前画面</span><small>点击定位 · 拖动蓝框浏览</small></div>
+          <div class="overview-resizer" id="overview-resizer" role="separator" aria-label="调整总览宽度" aria-orientation="vertical" tabindex="0" title="拖动调整宽度，双击恢复"></div>
+        </aside>
+        <section class="canvas-region" aria-label="长截图画布">
+          <div
+            class="viewport"
+            id="viewport"
+            role="region"
+            aria-label="可滚动的长图，滚轮浏览，Ctrl 加滚轮缩放"
+          >
+            <div class="stage" id="stage">
+              <div class="paper" id="paper">
+                <div class="surface" id="surface">
+                  <img
+                    class="source-image"
+                    id="source"
+                    src="long-editor-sample.svg"
+                    alt="设计手记长网页示例"
+                    draggable="false"
+                  />
+                  <svg
+                    class="annotations"
+                    id="annotations"
+                    aria-label="图像上的标注"
+                  ></svg>
+                  <div class="mask" id="mask-top"></div>
+                  <div class="mask" id="mask-bottom"></div>
+                  <div class="mask" id="mask-left"></div>
+                  <div class="mask" id="mask-right"></div>
+                  <div class="crop-outline" id="crop-outline">
+                    <span class="crop-caption"
+                      ><span data-icon="crop"></span
+                      ><span id="crop-caption">保留区域</span></span
+                    >
+                    <span class="crop-guide guide-v1"></span
+                    ><span class="crop-guide guide-v2"></span
+                    ><span class="crop-guide guide-h1"></span
+                    ><span class="crop-guide guide-h2"></span>
+                    <button
+                      class="handle"
+                      data-edge="nw"
+                      aria-label="左上角裁剪"
+                    ></button
+                    ><button
+                      class="handle"
+                      data-edge="n"
+                      aria-label="顶部裁剪边"
+                    ></button
+                    ><button
+                      class="handle"
+                      data-edge="ne"
+                      aria-label="右上角裁剪"
+                    ></button>
+                    <button
+                      class="handle"
+                      data-edge="w"
+                      aria-label="左侧裁剪边"
+                    ></button
+                    ><button
+                      class="handle"
+                      data-edge="e"
+                      aria-label="右侧裁剪边"
+                    ></button>
+                    <button
+                      class="handle"
+                      data-edge="sw"
+                      aria-label="左下角裁剪"
+                    ></button
+                    ><button
+                      class="handle"
+                      data-edge="s"
+                      aria-label="底部裁剪边"
+                    ></button
+                    ><button
+                      class="handle"
+                      data-edge="se"
+                      aria-label="右下角裁剪"
+                    ></button>
+                  </div>
+                  <div class="marker" id="marker" hidden>
+                    <span class="marker-label" id="marker-label"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button
+            class="edge-jump top"
+            id="jump-top"
+            hidden
+            data-action="jump-top"
+          >
+            <span data-icon="up"></span>顶部在上方 · 定位
+          </button>
+          <button
+            class="edge-jump bottom"
+            id="jump-bottom"
+            data-action="jump-bottom"
+          >
+            <span data-icon="down"></span>底部在下方 · 定位
+          </button>
+          <div class="marker-actions" id="marker-actions" hidden>
+            <button data-action="mark-top">从这里开始</button
+            ><button data-action="mark-bottom">到这里结束</button
+            ><button
+              class="icon-button"
+              data-action="clear-marker"
+              aria-label="关闭定位线"
+              data-icon="close"
+            ></button>
+          </div>
+          <div class="crop-actions" id="crop-actions">
+            <span class="result-size"
+              ><small>裁剪预览</small
+              ><span id="crop-result">984 × 3840 px</span></span
+            >
+            <button class="button" data-action="cancel-crop">
+              取消 <kbd>Esc</kbd>
+            </button>
+            <button class="button primary" data-action="apply-crop">
+              应用裁剪 <kbd>↵</kbd>
+            </button>
+          </div>
+          <div
+            class="toast"
+            id="toast"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></div>
+        </section>
+        <aside class="sidebar"><div class="section-heading"><h2>编辑属性</h2><span class="spacer"></span><button class="icon-button" data-action="toggle-properties" aria-label="收起属性栏" title="收起属性栏" data-icon="close"></button></div>
+          <section class="inspector" id="crop-inspector">
+            <div class="section-heading">
+              <h2>裁去边缘</h2>
+              <span class="spacer"></span
+              ><button class="reset-button" data-action="reset-crop">
+                恢复原图范围
+              </button>
+            </div>
+            <div class="crop-fields">
+              <div>
+                <div class="field-title">
+                  <label for="trim-top">顶部</label
+                  ><button
+                    class="locate"
+                    data-locate="n"
+                    title="定位到顶部裁剪边"
+                    aria-label="定位顶部裁剪边"
+                    data-icon="target"
+                  ></button>
+                </div>
+                <div class="number-field">
+                  <input
+                    id="trim-top"
+                    data-trim="n"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="180"
+                  /><span>px</span>
+                </div>
+              </div>
+              <div>
+                <div class="field-title">
+                  <label for="trim-bottom">底部</label
+                  ><button
+                    class="locate"
+                    data-locate="s"
+                    title="定位到底部裁剪边"
+                    aria-label="定位底部裁剪边"
+                    data-icon="target"
+                  ></button>
+                </div>
+                <div class="number-field">
+                  <input
+                    id="trim-bottom"
+                    data-trim="s"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="300"
+                  /><span>px</span>
+                </div>
+              </div>
+              <div>
+                <div class="field-title">
+                  <label for="trim-left">左侧</label
+                  ><button
+                    class="locate"
+                    data-locate="w"
+                    title="定位到左侧裁剪边"
+                    aria-label="定位左侧裁剪边"
+                    data-icon="target"
+                  ></button>
+                </div>
+                <div class="number-field">
+                  <input
+                    id="trim-left"
+                    data-trim="w"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="48"
+                  /><span>px</span>
+                </div>
+              </div>
+              <div>
+                <div class="field-title">
+                  <label for="trim-right">右侧</label
+                  ><button
+                    class="locate"
+                    data-locate="e"
+                    title="定位到右侧裁剪边"
+                    aria-label="定位右侧裁剪边"
+                    data-icon="target"
+                  ></button>
+                </div>
+                <div class="number-field">
+                  <input
+                    id="trim-right"
+                    data-trim="e"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="48"
+                  /><span>px</span>
+                </div>
+              </div>
+            </div>
+            <div class="output-size">
+              <span>输出尺寸</span
+              ><strong id="output-size">984 × 3840 px</strong>
+            </div>
+            <div class="source-size" id="source-size">原图 1080 × 4320 px</div>
+            <div class="warning" id="size-warning" role="alert" hidden></div>
+            <p class="inspector-note">
+              <span data-icon="shield"></span
+              ><span>原图保留。应用后仍可重新裁剪，标注位置保持不变。</span>
+            </p>
+          </section>
+          <section class="inspector" id="annotation-inspector" hidden>
+            <div class="section-heading">
+              <h2 id="style-title">标注样式</h2>
+            </div>
+            <div class="color-swatches" aria-label="标注颜色">
+              <button
+                class="swatch active"
+                data-color="#ff8b7b"
+                style="--swatch: #ff8b7b"
+                aria-label="珊瑚红"
+              ></button
+              ><button
+                class="swatch"
+                data-color="#ffd273"
+                style="--swatch: #ffd273"
+                aria-label="黄色"
+              ></button
+              ><button
+                class="swatch"
+                data-color="#62deb0"
+                style="--swatch: #62deb0"
+                aria-label="绿色"
+              ></button
+              ><button
+                class="swatch"
+                data-color="#83baff"
+                style="--swatch: #83baff"
+                aria-label="蓝色"
+              ></button
+              ><button
+                class="swatch"
+                data-color="#c9a5ff"
+                style="--swatch: #c9a5ff"
+                aria-label="紫色"
+              ></button
+              ><button
+                class="swatch"
+                data-color="#f4f6f8"
+                style="--swatch: #f4f6f8"
+                aria-label="白色"
+              ></button>
+            </div>
+            <label class="property-row"
+              >粗细
+              <input
+                id="stroke"
+                type="range"
+                min="2"
+                max="14"
+                value="5"
+                aria-label="标注粗细"
+              /><span id="stroke-label">5</span></label
+            >
+            <p class="inspector-note" id="annotation-hint">
+              在画布上拖动绘制。裁剪只调整输出范围，不移动已有标注。
+            </p>
+            <h3 class="annotation-list-title">
+              画布标注 <span id="annotation-count">0</span>
+            </h3>
+            <ul class="annotation-list" id="annotation-list"></ul>
+            <div class="empty-annotations" id="empty-annotations">
+              还没有标注
+            </div>
+          </section>
+          <div class="side-bottom">
+            滚轮浏览 · Ctrl + 滚轮缩放<br />按住空格拖动，浏览长图任意位置
+          </div>
+        </aside>
+      </main>
+      <footer class="statusbar">
+        <span id="status-dimensions">1080 × 4320 px</span
+        ><span class="status-hint" id="status-hint"
+          >拖动四边裁剪 · 单击图片定位起止 · 滚轮浏览</span
+        ><span class="spacer"></span
+        ><span class="coordinates" id="coordinates">原图坐标</span>
+      </footer>
+    </div>
+    <input type="file" accept="image/*" id="file-input" hidden />
+    <dialog id="help-dialog">
+      <h2>在一个画面里完成</h2>
+      <p>裁剪范围与标注共用同一张原图，随时切换回来调整。</p>
+      <div class="help-row">
+        <span>主图精调四边 / 总览粗调起止</span><span>拖动端点</span>
+      </div>
+      <div class="help-row">
+        <span>滚到目标位置，单击图片设起止</span
+        ><span>从这里开始 / 到这里结束</span>
+      </div>
+      <div class="help-row">
+        <span>应用 / 取消裁剪草稿</span
+        ><span><kbd>Enter</kbd> / <kbd>Esc</kbd></span>
+      </div>
+      <div class="help-row">
+        <span>选中裁剪边后微调</span
+        ><span><kbd>方向键</kbd> 1 px · <kbd>Shift</kbd> 10 px</span>
+      </div>
+      <div class="help-row">
+        <span>浏览 / 缩放</span><span>滚轮 / <kbd>Ctrl</kbd> + 滚轮</span>
+      </div>
+      <div class="help-row">
+        <span>平移 / 前往首尾</span
+        ><span><kbd>空格</kbd> + 拖动 · <kbd>Home</kbd> / <kbd>End</kbd></span>
+      </div>
+      <div class="help-row">
+        <span>撤销 / 重做</span
+        ><span><kbd>Ctrl Z</kbd> / <kbd>Ctrl Shift Z</kbd></span>
+      </div>
+      <div class="dialog-footer">
+        <button class="button primary" data-action="close-help">
+          开始编辑
+        </button>
+      </div>
+    </dialog>
+    <dialog id="export-dialog">
+      <h2 id="export-title">复制预览</h2>
+      <p id="export-size"></p>
+      <div class="preview-well">
+        <img id="export-preview" alt="当前裁剪和标注的输出预览" />
+      </div>
+      <div class="dialog-footer">
+        <button class="button" data-action="close-export">返回编辑</button
+        ><button class="button primary" data-action="download">下载 PNG</button>
+      </div>
+    </dialog>
+    <script src="long-editor-tools.js"></script>
+    <script src="long-editor-renderer.js"></script>
+    <script src="long-editor-annotations.js"></script>
+    <script>
+      (() => {
+        const $ = (id) => document.getElementById(id),
+          root = $("long-editor");
+        const paths = {
+          long: "M6 3h10v18H6z M9 7h4 M9 11h4 M9 15h4",
+          folder: "M3 7V5h6l2 2h10v13H3z",
+          pin: "m9 3 8 0-1 6 3 4H6l3-4z M12 13v8",
+          save: "M5 3h12l4 4v14H3V3z M7 3v6h10V3 M7 21v-7h10v7",
+          copy: "M8 8h12v13H8z M16 8V3H3v13h5",
+          undo: "M9 5 4 10l5 5 M4 10h9a6 6 0 0 1 6 8",
+          redo: "m15 5 5 5-5 5 M20 10h-9a6 6 0 0 0-6 8",
+          minus: "M5 12h14",
+          plus: "M5 12h14 M12 5v14",
+          select: "m5 3 14 10-7 1-3 7z",
+          crop: "M7 2v15h15 M2 7h15v15",
+          rect: "M4 5h16v14H4z",
+          arrow: "m4 20 16-16 M9 4h11v11",
+          text: "M4 5V3h16v2 M12 3v18 M8 21h8",
+          mosaic:
+            "M3 3h6v6H3z M15 3h6v6h-6z M9 9h6v6H9z M3 15h6v6H3z M15 15h6v6h-6z",
+          help: "M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5 M12 17h.01 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
+          up: "m6 14 6-6 6 6",
+          down: "m6 10 6 6 6-6",
+          "to-top": "M5 4h14 M12 20V8 m-5 5 5-5 5 5",
+          "to-bottom": "M5 20h14 M12 4v12 m-5-5 5 5 5-5",
+          target: "M4 9V4h5 M15 4h5v5 M20 15v5h-5 M9 20H4v-5 M9 12h6 M12 9v6",
+          shield: "m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z m-4 9 3 3 5-6",
+          close: "m6 6 12 12 M18 6 6 18",
+          check: "m5 12 4 4L19 6",
+        };
+        const icon = (name) =>
+          `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.rect}"/></svg>`;
+        document
+          .querySelectorAll("[data-icon]")
+          .forEach((e) => (e.innerHTML = icon(e.dataset.icon)));
+        const state = {
+          w: 1080,
+          h: 4320,
+          applied: { x: 0, y: 0, w: 1080, h: 4320 },
+          draft: { x: 48, y: 180, w: 984, h: 3840 },
+          tool: "crop",
+          zoom: 0.5,
+          zoomMode: "width",
+          annotations: [],
+          history: [],
+          future: [],
+          selected: null,
+          selectedEdge: null,
+          marker: null,
+          color: "#ff8b7b",
+          stroke: 5,
+          space: false,
+          gesture: null,
+          pending: null,
+          source: "long-editor-sample.svg",
+          navigationMode: "readable",
+        };
+        let annotationUI;
+        const vp = $("viewport"),
+          stage = $("stage"),
+          paper = $("paper"),
+          surface = $("surface"),
+          mini = $("minimap");
+        let miniScale = 0.065,
+          toastTimer,
+          dragFrame = 0,
+          exportUrl = null,
+          localUrl = null,
+          exportBusy = false,
+          navigationCenter = null,
+          previousMiniScale = 0,
+          globalMetrics = { height: 0, thumb: 18, visible: 0 };
+        const clone = (o) => JSON.parse(JSON.stringify(o)),
+          clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+        const full = () => ({ x: 0, y: 0, w: state.w, h: state.h });
+        const minWidth = () => Math.min(64, state.w),
+          minHeight = () => Math.min(64, state.h);
+        const isCrop = () => state.tool === "crop";
+        const bounds = () => (isCrop() ? full() : state.applied);
+        const currentCrop = () => (isCrop() ? state.draft : state.applied);
+        const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+        const dirty = () => !same(state.draft, state.applied);
+        const dims = (r) => `${Math.round(r.w)} × ${Math.round(r.h)} px`;
+        const snapshot = () => ({
+          applied: clone(state.applied),
+          annotations: clone(state.annotations),
+          lasso: clone(state.lasso ?? null),
+        });
+        function remember() {
+          state.history.push(snapshot());
+          state.future = [];
+        }
+        function toast(message, error = false) {
+          clearTimeout(toastTimer);
+          $("toast").textContent = message;
+          $("toast").classList.toggle("error", error);
+          $("toast").hidden = false;
+          toastTimer = setTimeout(() => ($("toast").hidden = true), 2700);
+        }
+        function place(el, r, scale = 1) {
+          el.style.left = r.x * scale + "px";
+          el.style.top = r.y * scale + "px";
+          el.style.width = Math.max(0, r.w) * scale + "px";
+          el.style.height = Math.max(0, r.h) * scale + "px";
+        }
+        function originalPoint(e) {
+          const b = bounds(),
+            pr = paper.getBoundingClientRect();
+          return {
+            x: clamp(b.x + (e.clientX - pr.left) / state.zoom, 0, state.w),
+            y: clamp(b.y + (e.clientY - pr.top) / state.zoom, 0, state.h),
+          };
+        }
+        function center() {
+          const b = bounds();
+          return {
+            x:
+              b.x +
+              (vp.scrollLeft + vp.clientWidth / 2 - paper.offsetLeft) /
+                state.zoom,
+            y: b.y + (vp.scrollTop + vp.clientHeight / 2 - 72) / state.zoom,
+          };
+        }
+        function anchor(
+          p,
+          screen = { x: vp.clientWidth / 2, y: vp.clientHeight / 2 },
+        ) {
+          const b = bounds();
+          vp.scrollLeft =
+            paper.offsetLeft + (p.x - b.x) * state.zoom - screen.x;
+          vp.scrollTop = 72 + (p.y - b.y) * state.zoom - screen.y;
+          renderNavigation();
+        }
+        function fit(mode = state.zoomMode) {
+          const b = bounds();
+          if (mode === "width")
+            return clamp((vp.clientWidth - 144) / b.w, 0.04, 1);
+          if (mode === "all")
+            return clamp(
+              Math.min(
+                (vp.clientWidth - 144) / b.w,
+                (vp.clientHeight - 144) / b.h,
+              ),
+              0.025,
+              1,
+            );
+          return state.zoom;
+        }
+        function layout() {
+          const b = bounds();
+          if (state.zoomMode !== "manual") state.zoom = fit();
+          const width = Math.max(vp.clientWidth, b.w * state.zoom + 144);
+          stage.style.width = width + "px";
+          stage.style.height =
+            Math.max(vp.clientHeight, b.h * state.zoom + 144) + "px";
+          paper.style.left = (width - b.w * state.zoom) / 2 + "px";
+          paper.style.top = "72px";
+          paper.style.width = b.w * state.zoom + "px";
+          paper.style.height = b.h * state.zoom + "px";
+          paper.style.overflow = isCrop() ? "visible" : "hidden";
+          place(
+            surface,
+            { x: -b.x, y: -b.y, w: state.w, h: state.h },
+            state.zoom,
+          );
+          $("annotations").setAttribute("viewBox", `0 0 ${state.w} ${state.h}`);
+          $("zoom-label").textContent = Math.round(state.zoom * 100) + "%";
+          root
+            .querySelectorAll("[data-view]")
+            .forEach((e) =>
+              e.classList.toggle(
+                "on",
+                e.dataset.view === state.zoomMode ||
+                  (e.dataset.view === "actual" &&
+                    state.zoom === 1 &&
+                    state.zoomMode === "manual"),
+              ),
+            );
+          renderCrop();
+          renderNavigation();
+        }
+        function masks(prefix, c, scale) {
+          place($(prefix + "top"), { x: 0, y: 0, w: state.w, h: c.y }, scale);
+          place(
+            $(prefix + "bottom"),
+            { x: 0, y: c.y + c.h, w: state.w, h: state.h - c.y - c.h },
+            scale,
+          );
+          place($(prefix + "left"), { x: 0, y: c.y, w: c.x, h: c.h }, scale);
+          place(
+            $(prefix + "right"),
+            { x: c.x + c.w, y: c.y, w: state.w - c.x - c.w, h: c.h },
+            scale,
+          );
+        }
+        function renderCrop() {
+          const c = currentCrop(),
+            crop = isCrop();
+          [
+            "mask-top",
+            "mask-bottom",
+            "mask-left",
+            "mask-right",
+            "crop-outline",
+            "crop-actions",
+            "crop-inspector",
+          ].forEach((id) => ($(id).hidden = !crop));
+          $("annotation-inspector").hidden = crop;
+          masks("mask-", c, state.zoom);
+          place($("crop-outline"), c, state.zoom);
+          $("crop-caption").textContent = "保留区域";
+          $("crop-result").textContent = dims(c);
+          $("output-size").textContent = dims(c);
+          $("source-size").textContent = `原图 ${state.w} × ${state.h} px`;
+          $("title-dimensions").textContent = `${state.w} × ${state.h}`;
+          $("status-dimensions").textContent = dims(c);
+          $("copy-label").textContent = crop && dirty() ? "应用并复制" : "复制";
+          $("undo").disabled = !state.history.length;
+          $("redo").disabled = !state.future.length;
+          const values = {
+            n: c.y,
+            s: state.h - c.y - c.h,
+            w: c.x,
+            e: state.w - c.x - c.w,
+          };
+          document.querySelectorAll("[data-trim]").forEach((e) => {
+            if (document.activeElement !== e)
+              e.value = Math.round(values[e.dataset.trim]);
+            e.max =
+              e.dataset.trim === "n" || e.dataset.trim === "s"
+                ? state.h - minHeight()
+                : state.w - minWidth();
+          });
+          const over = c.w * c.h > 32000000 || Math.max(c.w, c.h) > 65535;
+          $("size-warning").hidden = !over;
+          $("size-warning").textContent = over
+            ? "超出输出上限，请缩小保留范围。"
+            : "";
+          $("mode-label").textContent = crop ? "调整裁剪范围" : "编辑标注";
+          $("status-hint").textContent = crop
+            ? "拖动四边裁剪 · 单击图片定位起止 · 滚轮浏览"
+            : "滚轮浏览 · 空格拖动画布 · C 重新裁剪";
+          root.querySelectorAll("[data-tool]").forEach((e) => {
+            const on = e.dataset.tool === state.tool;
+            e.classList.toggle("active", on);
+            e.setAttribute("aria-pressed", on);
+          });
+          root
+            .querySelectorAll(".handle")
+            .forEach((e) =>
+              e.classList.toggle(
+                "selected",
+                e.dataset.edge === state.selectedEdge,
+              ),
+            );
+          renderMarker();
+          renderNavigation();
+        }
+        function renderNavigation() {
+          const c = currentCrop(),
+            well = $("mini-well");
+          const vr = vp.getBoundingClientRect(),
+            pr = paper.getBoundingClientRect(),
+            b = bounds();
+          const x = clamp(
+              b.x + (vr.left - pr.left) / state.zoom,
+              b.x,
+              b.x + b.w,
+            ),
+            y = clamp(b.y + (vr.top - pr.top) / state.zoom, b.y, b.y + b.h);
+          const right = clamp(
+              b.x + (vr.right - pr.left) / state.zoom,
+              x,
+              b.x + b.w,
+            ),
+            bottom = clamp(
+              b.y + (vr.bottom - pr.top) / state.zoom,
+              y,
+              b.y + b.h,
+            );
+          if (well.clientWidth > 50 && well.clientHeight > 40) {
+            const padding = getComputedStyle(well);
+            const availableWidth = well.clientWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight);
+            miniScale = Math.max(0.001, availableWidth / state.w);
+            if (state.navigationMode === "whole") miniScale = Math.min(miniScale, Math.max(1, well.clientHeight - 28) / state.h);
+            mini.style.width = state.w * miniScale + "px";
+            mini.style.height = state.h * miniScale + "px";
+            place($("mini-crop"), c, miniScale);
+            masks("mini-mask-", c, miniScale);
+            place($("mini-viewport"), { x, y, w: right - x, h: bottom - y }, miniScale);
+            $("mini-rail").style.top = c.y * miniScale + "px";
+            $("mini-rail").style.height = c.h * miniScale + "px";
+            $("mini-top").style.top = c.y * miniScale - 8 + "px";
+            $("mini-bottom").style.top = (c.y + c.h) * miniScale - 8 + "px";
+            const current = (y + bottom) / 2;
+            if ((navigationCenter === null || Math.abs(current - navigationCenter) > 1 || Math.abs(previousMiniScale-miniScale) > .00001) && !["mini", "mini-trim"].includes(state.gesture?.kind)) followOverview(current);
+            navigationCenter = current;
+            previousMiniScale = miniScale;
+          }
+          $("mini-top").hidden = !isCrop();
+          $("mini-bottom").hidden = !isCrop();
+          $("overview-crop-locators").hidden = !isCrop();
+          $("overview-range").textContent = `${Math.round(y).toLocaleString()}–${Math.round(bottom).toLocaleString()} / ${state.h.toLocaleString()} px`;
+          $("mini-annotations").setAttribute("viewBox", `0 0 ${state.w} ${state.h}`);
+          const track = $("global-map"), height = track.clientHeight;
+          const visible = Math.min(b.h, vp.clientHeight / state.zoom);
+          const start = clamp(b.y + (vp.scrollTop - 72) / state.zoom, b.y, Math.max(b.y, b.y + b.h-visible));
+          const thumb = Math.min(height, Math.max(18, visible / state.h * height));
+          const top = state.h > visible ? start / (state.h-visible) * (height-thumb) : 0;
+          $("global-viewport").style.top = top + "px";
+          $("global-viewport").style.height = thumb + "px";
+          $("global-crop").style.top = c.y / state.h * height + "px";
+          $("global-crop").style.height = c.h / state.h * height + "px";
+          track.setAttribute("aria-valuemax", state.h);
+          track.setAttribute("aria-valuenow", Math.round(start));
+          track.setAttribute("aria-valuetext", $("overview-range").textContent);
+          globalMetrics = { height, thumb, visible };
+          root.querySelectorAll("[data-overview-mode]").forEach(button => {
+            const active = button.dataset.overviewMode === state.navigationMode;
+            button.classList.toggle("active", active);
+            button.setAttribute("aria-pressed", active);
+          });
+          const workspace = root.querySelector(".workspace");
+          const narrow = matchMedia("(max-width:700px)").matches;
+          const overviewVisible = narrow ? workspace.classList.contains("overview-open") : !workspace.classList.contains("overview-hidden");
+          const propertiesVisible = matchMedia("(max-width:1279px)").matches ? workspace.classList.contains("properties-open") : !workspace.classList.contains("properties-hidden");
+          root.querySelector(".overview-toggle").classList.toggle("on", overviewVisible);
+          root.querySelector(".overview-toggle").setAttribute("aria-pressed", overviewVisible);
+          root.querySelector(".properties-toggle").classList.toggle("on", propertiesVisible);
+          root.querySelector(".properties-toggle").setAttribute("aria-pressed", propertiesVisible);
+          updateOverviewFollow();
+          $("overview-follow").style.bottom = ($("overview-range").offsetHeight + root.querySelector(".overview-footer").offsetHeight + 10) + "px";
+          $("jump-top").hidden = !isCrop() || c.y >= y - 12 / state.zoom;
+          $("jump-bottom").hidden =
+            !isCrop() || c.y + c.h <= bottom - 70 / state.zoom;
+          renderMarkerPosition();
+        }
+        function followOverview(position = navigationCenter) {
+          const well = $("mini-well");
+          if (!well.clientHeight || position === null) return;
+          const mr = mini.getBoundingClientRect(), wr = well.getBoundingClientRect();
+          well.scrollTop = clamp(well.scrollTop + mr.top - wr.top + position * miniScale - well.clientHeight / 2, 0, Math.max(0, well.scrollHeight-well.clientHeight));
+          updateOverviewFollow();
+        }
+        function updateOverviewFollow() {
+          const well = $("mini-well"), view = $("mini-viewport").getBoundingClientRect(), wr = well.getBoundingClientRect();
+          $("overview-follow").hidden = !well.clientHeight || (view.top >= wr.top + 5 && view.bottom <= wr.bottom - 5);
+        }
+        function navigateGlobal(clientY, grab, metrics = globalMetrics) {
+          const track = $("global-map").getBoundingClientRect();
+          const fraction = clamp((clientY-track.top-grab) / Math.max(1, metrics.height-metrics.thumb), 0, 1);
+          anchor({ x: center().x, y: fraction*Math.max(0,state.h-metrics.visible)+metrics.visible/2 });
+        }
+        function toggleNavigationPanel(panel) {
+          const workspace = root.querySelector(".workspace"), p = center();
+          if (panel === "overview") {
+            if (matchMedia("(max-width:700px)").matches) { workspace.classList.toggle("overview-open"); workspace.classList.remove("properties-open"); }
+            else workspace.classList.toggle("overview-hidden");
+          } else if (matchMedia("(max-width:1279px)").matches) { workspace.classList.toggle("properties-open"); workspace.classList.remove("properties-hidden"); workspace.classList.remove("overview-open"); }
+          else workspace.classList.toggle("properties-hidden");
+          navigationCenter = null;
+          layout();
+          anchor(p);
+        }
+        function setOverviewWidth(width) {
+          const workspace = root.querySelector(".workspace"), p = center();
+          const sidebarWidth = matchMedia("(min-width:1280px)").matches && !workspace.classList.contains("properties-hidden") ? 294 : 0;
+          const max = Math.max(180, Math.min(420, workspace.clientWidth-root.querySelector(".tools").clientWidth-sidebarWidth-260));
+          workspace.style.setProperty("--overview-width", clamp(width, 180, max)+"px");
+          navigationCenter = null;
+          layout();
+          anchor(p);
+        }
+        function renderMarker() {
+          const c = state.draft,
+            m = $("marker");
+          m.hidden = !isCrop() || state.marker === null;
+          $("marker-actions").hidden = m.hidden;
+          if (m.hidden) return;
+          place(
+            m,
+            { x: c.x, y: state.marker, w: c.w, h: 1 / state.zoom },
+            state.zoom,
+          );
+          $("marker-label").textContent =
+            "Y " + Math.round(state.marker) + " px";
+          renderMarkerPosition();
+        }
+        function renderMarkerPosition() {
+          if ($("marker-actions").hidden) return;
+          const pr = paper.getBoundingClientRect(),
+            vr = vp.getBoundingClientRect(),
+            b = bounds(),
+            y = pr.top + (state.marker - b.y) * state.zoom - vr.top;
+          $("marker-actions").hidden = y < 0 || y > vp.clientHeight;
+          if ($("marker-actions").hidden) return;
+          const bar = $("marker-actions");
+          bar.style.top = clamp(y + 10, 12, vp.clientHeight - 145) + "px";
+          bar.style.left =
+            clamp(
+              (vp.clientWidth - bar.offsetWidth) / 2,
+              8,
+              vp.clientWidth - bar.offsetWidth - 8,
+            ) + "px";
+        }
+        function escapeText(t) {
+          return String(t).replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              })[c],
+          );
+        }
+        function annotationMarkup(a) {
+          return annotationUI.markup(a);
+        }
+        function annotationBox(a) {
+          return annotationUI.box(a);
+        }
+        function renderAnnotations() {
+          annotationUI.render();
+        }
+        function render() {
+          layout();
+          renderAnnotations();
+        }
+        function enterCrop() {
+          const p = center();
+          state.draft = clone(state.applied);
+          state.tool = "crop";
+          state.marker = null;
+          state.selectedEdge = null;
+          render();
+          anchor(p);
+        }
+        function changeTool(tool) {
+          if (state.gesture) cancelGesture();
+          if (tool === state.tool) return;
+          if (isCrop() && dirty()) {
+            toast("请先应用或取消当前裁剪");
+            if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
+              $("crop-actions").animate(
+                [
+                  { transform: "translateX(-50%) translateY(0)" },
+                  { transform: "translateX(-50%) translateY(-5px)" },
+                  { transform: "translateX(-50%) translateY(0)" },
+                ],
+                { duration: 200 },
+              );
+            return;
+          }
+          const p = center();
+          if (tool === "crop") {
+            enterCrop();
+            return;
+          }
+          state.tool = tool;
+          state.marker = null;
+          state.selectedEdge = null;
+          render();
+          anchor(p);
+        }
+        function applyCrop(notify = true) {
+          if (state.gesture) cancelGesture();
+          if (!isCrop()) return;
+          const p = center();
+          if (dirty()) {
+            remember();
+            state.applied = clone(state.draft);
+          }
+          state.tool = "select";
+          state.marker = null;
+          state.selectedEdge = null;
+          render();
+          anchor(p);
+          if (notify) toast("已应用裁剪 · Ctrl+Z 撤销");
+        }
+        function cancelCrop() {
+          if (state.gesture) {
+            cancelGesture();
+            return;
+          }
+          const p = center();
+          state.draft = clone(state.applied);
+          state.tool = "select";
+          state.marker = null;
+          state.selectedEdge = null;
+          render();
+          anchor(p);
+          toast("已取消本次裁剪");
+        }
+        function undo(redo = false) {
+          if (state.gesture) cancelGesture();
+          if (isCrop() && dirty()) {
+            toast("请先应用或取消当前裁剪");
+            return;
+          }
+          const from = redo ? state.future : state.history,
+            to = redo ? state.history : state.future;
+          if (!from.length) return;
+          const p = center();
+          to.push(snapshot());
+          const next = from.pop();
+          state.applied = next.applied;
+          state.annotations = next.annotations;
+          state.lasso = next.lasso ?? null;
+          annotationUI.historyRestored();
+          state.selection = [];
+          state.draft = clone(state.applied);
+          state.selected = null;
+          render();
+          anchor(p);
+          toast(redo ? "已重做" : "已撤销");
+        }
+        function setEdge(edge, value, base = state.draft) {
+          let x1 = base.x,
+            y1 = base.y,
+            x2 = x1 + base.w,
+            y2 = y1 + base.h;
+          if (edge.includes("n"))
+            y1 = clamp(Math.round(value.y ?? value), 0, y2 - minHeight());
+          if (edge.includes("s"))
+            y2 = clamp(Math.round(value.y ?? value), y1 + minHeight(), state.h);
+          if (edge.includes("w"))
+            x1 = clamp(Math.round(value.x ?? value), 0, x2 - minWidth());
+          if (edge.includes("e"))
+            x2 = clamp(Math.round(value.x ?? value), x1 + minWidth(), state.w);
+          state.draft = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+          renderCrop();
+        }
+        function locate(edge) {
+          const c = currentCrop(),
+            p = center();
+          if (edge === "n") p.y = c.y + (vp.clientHeight * 0.35) / state.zoom;
+          if (edge === "s")
+            p.y = c.y + c.h - (vp.clientHeight * 0.35) / state.zoom;
+          if (edge === "w") p.x = c.x + (vp.clientWidth * 0.35) / state.zoom;
+          if (edge === "e")
+            p.x = c.x + c.w - (vp.clientWidth * 0.35) / state.zoom;
+          anchor(p);
+          state.selectedEdge = edge;
+          renderCrop();
+        }
+        function zoomTo(z, point = center(), screen) {
+          state.zoomMode = "manual";
+          state.zoom = clamp(z, 0.025, 3);
+          layout();
+          anchor(point, screen);
+        }
+        function startGesture(e, g) {
+          if (e.button !== 0 && e.button !== 1) return;
+          state.gesture = {
+            ...g,
+            startClient: { x: e.clientX, y: e.clientY },
+            pointer: e.pointerId,
+            last: { x: e.clientX, y: e.clientY },
+          };
+          e.currentTarget.setPointerCapture(e.pointerId);
+          e.preventDefault();
+          if (g.kind === "trim") {
+            $("crop-outline").classList.add("dragging");
+            state.selectedEdge = g.edge;
+            renderCrop();
+            startAutoscroll();
+          }
+        }
+        function moveGesture(e) {
+          const g = state.gesture;
+          if (!g) return;
+          g.last = { x: e.clientX, y: e.clientY };
+          const p = originalPoint(e);
+          if (annotationUI.move(e, g, p)) return;
+          if (g.kind === "trim") {
+            setEdge(g.edge, p, g.base);
+            return;
+          }
+          if (g.kind === "pan") {
+            vp.scrollLeft = g.scroll.x - (e.clientX - g.startClient.x);
+            vp.scrollTop = g.scroll.y - (e.clientY - g.startClient.y);
+            return;
+          }
+          if (g.kind === "global") { navigateGlobal(e.clientY, g.grab, g.metrics); return; }
+          if (g.kind === "overview-resize") { setOverviewWidth(g.width + e.clientX-g.startClient.x); return; }
+          if (g.kind === "mini") {
+            const mr = mini.getBoundingClientRect(),
+              y = clamp((e.clientY - mr.top) / miniScale, 0, state.h);
+            anchor({ x: center().x, y: y + g.grab });
+            return;
+          }
+          if (g.kind === "mini-trim") {
+            const mr = mini.getBoundingClientRect(),
+              y = (e.clientY - mr.top) / miniScale;
+            setEdge(g.edge, y, g.base);
+            return;
+          }
+          if (g.kind === "crop-move") {
+            const dx = Math.round(p.x - g.start.x),
+              dy = Math.round(p.y - g.start.y);
+            if (
+              Math.hypot(
+                e.clientX - g.startClient.x,
+                e.clientY - g.startClient.y,
+              ) > 4
+            )
+              g.moved = true;
+            if (g.moved) {
+              state.draft = {
+                ...g.base,
+                x: clamp(g.base.x + dx, 0, state.w - g.base.w),
+                y: clamp(g.base.y + dy, 0, state.h - g.base.h),
+              };
+              renderCrop();
+            }
+            return;
+          }
+        }
+        function finishGesture(e) {
+          const g = state.gesture;
+          if (!g) return;
+          if (annotationUI.finish(e, g)) {
+            state.gesture = null;
+            renderCrop();
+            renderAnnotations();
+            return;
+          }
+          if (g.kind === "crop-move" && !g.moved) {
+            state.marker = Math.round(originalPoint(e).y);
+            renderMarker();
+          }
+          state.gesture = null;
+          stopAutoscroll();
+          $("crop-outline").classList.remove("dragging");
+          renderCrop();
+          renderAnnotations();
+        }
+        function cancelGesture() {
+          const g = state.gesture;
+          if (!g) return;
+          annotationUI.cancel(g);
+          if (g.base && ["trim", "mini-trim", "crop-move"].includes(g.kind))
+            state.draft = clone(g.base);
+          state.pending = null;
+          state.gesture = null;
+          stopAutoscroll();
+          $("crop-outline").classList.remove("dragging");
+          render();
+        }
+        function startAutoscroll() {
+          if (dragFrame) return;
+          const tick = () => {
+            const g = state.gesture;
+            if (!g || g.kind !== "trim") {
+              dragFrame = 0;
+              return;
+            }
+            const r = vp.getBoundingClientRect(),
+              margin = 48,
+              speed = (y) =>
+                y < r.top + margin
+                  ? -clamp((r.top + margin - y) / 3, 0, 18)
+                  : y > r.bottom - margin
+                    ? clamp((y - r.bottom + margin) / 3, 0, 18)
+                    : 0;
+            const dy = speed(g.last.y);
+            if (dy) {
+              vp.scrollTop += dy;
+              setEdge(
+                g.edge,
+                originalPoint({ clientX: g.last.x, clientY: g.last.y }),
+                g.base,
+              );
+            }
+            dragFrame = requestAnimationFrame(tick);
+          };
+          dragFrame = requestAnimationFrame(tick);
+        }
+        function stopAutoscroll() {
+          cancelAnimationFrame(dragFrame);
+          dragFrame = 0;
+        }
+        vp.addEventListener("pointerdown", (e) => {
+          if (e.target.closest("input,textarea,select") || state.gesture)
+            return;
+          if (e.button === 1 || state.space) {
+            startGesture(e, {
+              kind: "pan",
+              scroll: { x: vp.scrollLeft, y: vp.scrollTop },
+            });
+            return;
+          }
+          if (e.button !== 0) return;
+          const p = originalPoint(e),
+            pr = paper.getBoundingClientRect();
+          if (
+            e.clientX < pr.left ||
+            e.clientX > pr.right ||
+            e.clientY < pr.top ||
+            e.clientY > pr.bottom
+          )
+            return;
+          if (isCrop()) {
+            const handle = e.target.closest("[data-edge]");
+            startGesture(
+              e,
+              handle
+                ? {
+                    kind: "trim",
+                    edge: handle.dataset.edge,
+                    base: clone(state.draft),
+                  }
+                : {
+                    kind: "crop-move",
+                    base: clone(state.draft),
+                    start: p,
+                    moved: false,
+                  },
+            );
+            return;
+          }
+          annotationUI.begin(e, p);
+        });
+        vp.addEventListener("pointermove", (e) => {
+          $("coordinates").textContent =
+            `X ${Math.round(originalPoint(e).x)} · Y ${Math.round(originalPoint(e).y)}`;
+          moveGesture(e);
+        });
+        vp.addEventListener("pointerup", finishGesture);
+        vp.addEventListener("pointercancel", cancelGesture);
+        vp.addEventListener("lostpointercapture", () => {
+          if (state.gesture) cancelGesture();
+        });
+        mini.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          const edge = e.target.closest("[data-mini-edge]");
+          if (edge && isCrop()) {
+            state.selectedEdge = edge.dataset.miniEdge;
+            startGesture(e, {
+              kind: "mini-trim",
+              edge: edge.dataset.miniEdge,
+              base: clone(state.draft),
+            });
+            return;
+          }
+          const mr = mini.getBoundingClientRect(),
+            y = (e.clientY - mr.top) / miniScale,
+            view = $("mini-viewport").getBoundingClientRect(),
+            inView = e.clientY >= view.top && e.clientY <= view.bottom;
+          const grab = inView ? center().y - y : 0;
+          if (!inView) anchor({ x: center().x, y });
+          startGesture(e, { kind: "mini", grab });
+        });
+        mini.addEventListener("pointermove", moveGesture);
+        mini.addEventListener("pointerup", finishGesture);
+        mini.addEventListener("pointercancel", cancelGesture);
+        mini.addEventListener("lostpointercapture", () => {
+          if (state.gesture) cancelGesture();
+        });
+        $("mini-well").addEventListener("scroll", updateOverviewFollow, { passive:true });
+        const globalMap = $("global-map");
+        globalMap.addEventListener("pointerdown", e => {
+          if (e.button !== 0) return;
+          const knob = $("global-viewport").getBoundingClientRect();
+          const inside = e.clientY >= knob.top && e.clientY <= knob.bottom;
+          const metrics = {...globalMetrics}, grab = inside ? e.clientY-knob.top : metrics.thumb/2;
+          if (!inside) navigateGlobal(e.clientY, grab, metrics);
+          startGesture(e, {kind:"global",grab,metrics});
+        });
+        globalMap.addEventListener("pointermove", moveGesture);
+        globalMap.addEventListener("pointerup", finishGesture);
+        globalMap.addEventListener("pointercancel", cancelGesture);
+        globalMap.addEventListener("lostpointercapture", () => { if (state.gesture) cancelGesture(); });
+        globalMap.addEventListener("keydown", e => {
+          if (!["ArrowDown","ArrowUp","Home","End","PageDown","PageUp"].includes(e.key)) return;
+          e.preventDefault(); e.stopPropagation();
+          const current = center(), step = globalMetrics.visible*(e.shiftKey?1:.2);
+          current.y = e.key === "Home" ? 0 : e.key === "End" ? state.h : current.y+(["ArrowDown","PageDown"].includes(e.key)?1:-1)*(e.key.startsWith("Page")?globalMetrics.visible*.8:step);
+          anchor(current);
+        });
+        const navigationResizer = $("overview-resizer");
+        navigationResizer.addEventListener("pointerdown", e => { if(e.button===0) startGesture(e,{kind:"overview-resize",width:$("overview-pane").getBoundingClientRect().width}); });
+        navigationResizer.addEventListener("pointermove", moveGesture);
+        navigationResizer.addEventListener("pointerup", finishGesture);
+        navigationResizer.addEventListener("pointercancel", cancelGesture);
+        navigationResizer.addEventListener("lostpointercapture", () => { if (state.gesture) cancelGesture(); });
+        navigationResizer.addEventListener("dblclick", () => { const p=center();root.querySelector(".workspace").style.removeProperty("--overview-width");navigationCenter=null;layout();anchor(p); });
+        navigationResizer.addEventListener("keydown", e => { if(["ArrowLeft","ArrowRight"].includes(e.key)){ e.preventDefault();e.stopPropagation();setOverviewWidth($("overview-pane").getBoundingClientRect().width+(e.key==="ArrowRight"?16:-16)); } });
+        vp.addEventListener(
+          "scroll",
+          () => {
+            renderNavigation();
+            if (state.marker !== null) {
+              $("marker-actions").hidden = false;
+              renderMarkerPosition();
+            }
+          },
+          { passive: true },
+        );
+        vp.addEventListener(
+          "wheel",
+          (e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              const vr = vp.getBoundingClientRect();
+              zoomTo(
+                state.zoom * Math.exp(-e.deltaY * 0.002),
+                originalPoint(e),
+                { x: e.clientX - vr.left, y: e.clientY - vr.top },
+              );
+            }
+          },
+          { passive: false },
+        );
+        document.querySelectorAll("[data-trim]").forEach((input) => {
+          input.addEventListener("focus", () => {
+            state.selectedEdge = input.dataset.trim;
+            renderCrop();
+          });
+          input.addEventListener("input", () => {
+            const value = Number(input.value);
+            if (input.value === "" || !Number.isFinite(value) || value < 0)
+              return;
+            const edge = input.dataset.trim,
+              c = state.draft,
+              limit =
+                edge === "n"
+                  ? c.y + c.h - minHeight()
+                  : edge === "s"
+                    ? state.h - c.y - minHeight()
+                    : edge === "w"
+                      ? c.x + c.w - minWidth()
+                      : state.w - c.x - minWidth();
+            input.setCustomValidity(value > limit ? `最多 ${limit} px` : "");
+            if (value > limit) return;
+            setEdge(
+              edge,
+              edge === "s"
+                ? state.h - value
+                : edge === "e"
+                  ? state.w - value
+                  : value,
+            );
+          });
+          input.addEventListener("change", () => {
+            input.setCustomValidity("");
+            const c = state.draft;
+            input.value = Math.round(
+              {
+                n: c.y,
+                s: state.h - c.y - c.h,
+                w: c.x,
+                e: state.w - c.x - c.w,
+              }[input.dataset.trim],
+            );
+          });
+        });
+        document.addEventListener("click", (e) => {
+          const tool = e.target.closest("[data-tool]");
+          if (tool) {
+            changeTool(tool.dataset.tool);
+            return;
+          }
+          const overviewMode = e.target.closest("[data-overview-mode]");
+          if (overviewMode) { state.navigationMode=overviewMode.dataset.overviewMode;navigationCenter=null;renderNavigation();return; }
+          const view = e.target.closest("[data-view]");
+          if (view) {
+            const p = center();
+            state.zoomMode =
+              view.dataset.view === "actual" ? "manual" : view.dataset.view;
+            if (view.dataset.view === "actual") state.zoom = 1;
+            layout();
+            anchor(p);
+            return;
+          }
+          const loc = e.target.closest("[data-locate]");
+          if (loc) {
+            locate(loc.dataset.locate);
+            return;
+          }
+          const swatch = e.target.closest("[data-color]");
+          if (swatch) {
+            state.color = swatch.dataset.color;
+            document
+              .querySelectorAll("[data-color]")
+              .forEach((b) => b.classList.toggle("active", b === swatch));
+            return;
+          }
+          const selected = e.target.closest("[data-select]");
+          if (selected) {
+            state.selected = Number(selected.dataset.select);
+            const a = state.annotations.find((a) => a.id === state.selected),
+              b = annotationBox(a);
+            anchor({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
+            renderAnnotations();
+            return;
+          }
+          const action = e.target.closest("[data-action]")?.dataset.action;
+          if (!action) return;
+          switch (action) {
+            case "toggle-overview": toggleNavigationPanel("overview"); break;
+            case "toggle-properties": toggleNavigationPanel("properties"); break;
+            case "follow-overview": followOverview(); break;
+            case "undo":
+              undo();
+              break;
+            case "redo":
+              undo(true);
+              break;
+            case "zoom-out":
+              zoomTo(state.zoom / 1.2);
+              break;
+            case "zoom-in":
+              zoomTo(state.zoom * 1.2);
+              break;
+            case "apply-crop":
+              applyCrop();
+              break;
+            case "cancel-crop":
+              cancelCrop();
+              break;
+            case "reset-crop":
+              state.draft = full();
+              state.selectedEdge = null;
+              renderCrop();
+              toast("已恢复原图范围，应用后生效");
+              break;
+            case "jump-top":
+              locate("n");
+              break;
+            case "jump-bottom":
+              locate("s");
+              break;
+            case "home":
+              anchor({ x: center().x, y: bounds().y });
+              break;
+            case "end":
+              anchor({ x: center().x, y: bounds().y + bounds().h });
+              break;
+            case "mark-top":
+              if (state.marker > state.draft.y + state.draft.h - minHeight()) {
+                toast("起点需要在终点上方", true);
+                break;
+              }
+              setEdge("n", state.marker);
+              state.marker = null;
+              renderMarker();
+              break;
+            case "mark-bottom":
+              if (state.marker < state.draft.y + minHeight()) {
+                toast("终点需要在起点下方", true);
+                break;
+              }
+              setEdge("s", state.marker);
+              state.marker = null;
+              renderMarker();
+              break;
+            case "clear-marker":
+              state.marker = null;
+              renderMarker();
+              break;
+            case "help":
+              $("help-dialog").showModal();
+              break;
+            case "close-help":
+              $("help-dialog").close();
+              break;
+            case "close-export":
+              $("export-dialog").close();
+              break;
+            case "open":
+              $("file-input").click();
+              break;
+            case "copy":
+            case "pin":
+            case "save":
+              output(action);
+              break;
+            case "download":
+              download();
+              break;
+          }
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.repeat && e.key === "Escape") return;
+          if (e.target.matches("input,textarea,select")) return;
+          if (document.querySelector("dialog[open]")) return;
+          if (e.code === "Space") {
+            state.space = true;
+            vp.style.cursor = "grab";
+            e.preventDefault();
+            return;
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            if (state.gesture) {
+              cancelGesture();
+              return;
+            }
+            if (isCrop()) {
+              if (state.marker !== null) {
+                state.marker = null;
+                renderMarker();
+              } else cancelCrop();
+            } else {
+              annotationUI.keydown(e);
+            }
+            return;
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+            e.preventDefault();
+            undo(e.shiftKey);
+            return;
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+            e.preventDefault();
+            undo(true);
+            return;
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+            e.preventDefault();
+            output("save");
+            return;
+          }
+          if (e.key === "Enter" && isCrop()) {
+            e.preventDefault();
+            applyCrop();
+            return;
+          }
+          if (annotationUI.keydown(e)) {
+            e.preventDefault();
+            return;
+          }
+          if (e.key === "Home" || e.key === "End") {
+            e.preventDefault();
+            anchor({
+              x: center().x,
+              y: e.key === "Home" ? bounds().y : bounds().y + bounds().h,
+            });
+            return;
+          }
+          if (e.key === "PageDown" || e.key === "PageUp") {
+            e.preventDefault();
+            vp.scrollTop +=
+              (e.key === "PageDown" ? 1 : -1) * vp.clientHeight * 0.8;
+            return;
+          }
+          if (isCrop() && state.selectedEdge && e.key.startsWith("Arrow")) {
+            e.preventDefault();
+            const edge = state.selectedEdge,
+              vertical = ["ArrowUp", "ArrowDown"].includes(e.key),
+              side = vertical
+                ? edge.includes("n")
+                  ? "n"
+                  : edge.includes("s")
+                    ? "s"
+                    : null
+                : edge.includes("w")
+                  ? "w"
+                  : edge.includes("e")
+                    ? "e"
+                    : null;
+            if (!side) return;
+            const delta =
+                (e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : -1) *
+                (e.shiftKey ? 10 : 1),
+              c = state.draft,
+              value =
+                side === "n"
+                  ? c.y
+                  : side === "s"
+                    ? c.y + c.h
+                    : side === "w"
+                      ? c.x
+                      : c.x + c.w;
+            setEdge(side, value + delta);
+            return;
+          }
+          if (
+            (e.key === "Delete" || e.key === "Backspace") &&
+            state.selected !== null &&
+            !isCrop()
+          ) {
+            e.preventDefault();
+            remember();
+            state.annotations = state.annotations.filter(
+              (a) => a.id !== state.selected,
+            );
+            state.selected = null;
+            renderCrop();
+            renderAnnotations();
+            return;
+          }
+          if (e.ctrlKey || e.metaKey || e.altKey) return;
+          const shortcuts = {
+            v: "select",
+            c: "crop",
+            r: "rect",
+            a: "arrow",
+            t: "text",
+            m: "mosaic",
+          };
+          if (shortcuts[e.key.toLowerCase()])
+            changeTool(shortcuts[e.key.toLowerCase()]);
+        });
+        document.addEventListener("keyup", (e) => {
+          if (e.code === "Space") {
+            state.space = false;
+            vp.style.cursor = "";
+          }
+        });
+        window.addEventListener("blur", () => {
+          state.space = false;
+          vp.style.cursor = "";
+          cancelGesture();
+        });
+        async function output(action) {
+          if (state.gesture) cancelGesture();
+          if (exportBusy) return;
+          annotationUI.prepareOutput();
+          if (
+            currentCrop().w * currentCrop().h > 32000000 ||
+            Math.max(currentCrop().w, currentCrop().h) > 65535
+          ) {
+            toast("请先缩小裁剪范围，再输出", true);
+            return;
+          }
+          if (isCrop()) applyCrop(false);
+          exportBusy = true;
+          try {
+            if (!$("source").complete) await $("source").decode();
+            const c = state.applied,
+              canvas = document.createElement("canvas");
+            canvas.width = c.w;
+            canvas.height = c.h;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage($("source"), c.x, c.y, c.w, c.h, 0, 0, c.w, c.h);
+            if (state.annotations.length) {
+              const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${state.w}" height="${state.h}" viewBox="0 0 ${state.w} ${state.h}">${annotationUI.exportMarkup()}</svg>`,
+                url = URL.createObjectURL(
+                  new Blob([svg], { type: "image/svg+xml" }),
+                );
+              try {
+                const image = new Image();
+                image.src = url;
+                await image.decode();
+                ctx.drawImage(image, c.x, c.y, c.w, c.h, 0, 0, c.w, c.h);
+              } finally {
+                URL.revokeObjectURL(url);
+              }
+            }
+            annotationUI.applyExportMask(ctx, c);
+            const blob = await new Promise((resolve) =>
+              canvas.toBlob(resolve, "image/png"),
+            );
+            if (!blob) throw Error("图像生成失败");
+            if (exportUrl) URL.revokeObjectURL(exportUrl);
+            exportUrl = URL.createObjectURL(blob);
+            $("export-preview").src = exportUrl;
+            $("export-size").textContent =
+              `${dims(c)} · ${state.annotations.length} 个标注`;
+            $("export-title").textContent =
+              action === "copy"
+                ? "复制预览"
+                : action === "pin"
+                  ? "贴图预览"
+                  : "保存预览";
+            $("export-dialog").showModal();
+          } catch (error) {
+            toast("暂时无法生成预览：" + error.message, true);
+          } finally {
+            exportBusy = false;
+          }
+        }
+        function download() {
+          if (!exportUrl) return;
+          const a = document.createElement("a");
+          a.href = exportUrl;
+          a.download = "长截图.png";
+          a.click();
+        }
+        $("file-input").addEventListener("change", async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          if (state.gesture) cancelGesture();
+          const url = URL.createObjectURL(file),
+            image = new Image();
+          try {
+            image.src = url;
+            await image.decode();
+            if (!image.naturalWidth || !image.naturalHeight)
+              throw Error("尺寸无效");
+            if (image.naturalWidth * image.naturalHeight > 100000000)
+              throw Error("请选择 1 亿像素以内的图片");
+            if (localUrl) URL.revokeObjectURL(localUrl);
+            localUrl = url;
+            state.source = url;
+            state.w = image.naturalWidth;
+            state.h = image.naturalHeight;
+            state.applied = full();
+            state.draft = full();
+            state.annotations = [];
+            annotationUI.reset();
+            state.history = [];
+            state.future = [];
+            state.marker = null;
+            state.selected = null;
+            state.tool = "crop";
+            state.zoomMode = "width";
+            $("source").src = url;
+            $("mini-source").src = url;
+            $("global-source").src = url;
+            navigationCenter = null;
+            $("mini-well").scrollTop = 0;
+            $("document-title").textContent = file.name;
+            $("source").alt = file.name;
+            render();
+            vp.scrollTop = 0;
+            toast("已打开图片");
+          } catch (error) {
+            URL.revokeObjectURL(url);
+            toast("无法打开图片：" + error.message, true);
+          }
+          e.target.value = "";
+        });
+        annotationUI = window.LongEditorAnnotations.create({
+          state,
+          root,
+          $,
+          clone,
+          clamp,
+          remember,
+          renderCrop,
+          render,
+          anchor,
+          center,
+          startGesture,
+          cancelGesture,
+          toast,
+          escapeText,
+          changeTool,
+          originalPoint,
+          renderAnnotations,
+        });
+        new ResizeObserver(() => {
+          const p = center();
+          layout();
+          anchor(p);
+        }).observe(vp);
+        render();
+        vp.scrollTop = 0;
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,211 @@
+{
+  "scenes": [
+    {
+      "id": "recording",
+      "title": "录屏 · 待录与录制",
+      "summary": "快捷键由录屏工具栏接收；文本输入、输入法、原生保存框优先。待录、倒计时、录制中各有不同合同。",
+      "shortcuts": [
+        {"keys":["F9"],"action":"开始 / 停止录制","when":"待录、倒计时或录制中；工具栏拥有键盘","detail":"裸键；倒计时中按下会取消开始；预览阶段不生效。长按只处理首按。","source":"src/recording_shortcuts.rs:77"},
+        {"keys":["F10","Space"],"action":"暂停 / 继续录制","when":"录制中","detail":"倒计时与待录中无效；要求无修饰键。","source":"src/recording_shortcuts.rs:85"},
+        {"keys":["Esc"],"action":"逐层关闭 / 停止","when":"录屏工具栏拥有键盘","detail":"先关闭弹层，再收起录制标注；否则录制中停止、倒计时中取消、待录中关闭。","source":"src/recording_shortcuts.rs:88"}
+      ],
+      "interactions": [
+        {"name":"录制范围","gesture":"拖动边框 / 角点","result":"待录时移动或调整录制区域，拖动时显示尺寸；录制后的范围按当前阶段限制。","source":"src/recording_view.rs:2030"},
+        {"name":"帧率","gesture":"点击帧率按钮并选择","result":"选择 5 / 16 / 24 / 30 / 60 FPS；默认 30。","source":"src/recording_options.rs:11"},
+        {"name":"格式与延迟","gesture":"点击录制格式按钮","result":"高清 MP4、压缩 MP4、GIF；可设置 0 / 1 / 2 / 3 / 5 / 10 秒延迟。默认压缩 MP4、无延迟。","source":"src/recording_view.rs:2626"},
+        {"name":"声音","gesture":"点击声音按钮","result":"独立开关系统音频与麦克风；GIF 不支持音频；使用系统默认设备。","source":"src/recording_view.rs:3494"},
+        {"name":"按键、鼠标与光标","gesture":"点击输入显示按钮","result":"开关按键、鼠标点击 / 滚轮、录制光标与打字过滤；密码框不展示按键。","source":"src/recording_view.rs:3535"},
+        {"name":"开始 / 停止、暂停 / 继续","gesture":"点击主录制按钮或暂停按钮","result":"与 F9 / F10 走相同录制流程。停止后整理文件并进入预览。","source":"src/recording_view.rs:2683"},
+        {"name":"标注","gesture":"点击标注按钮","result":"展开录制标注栏；再次点击或 Esc 收起，录制继续。","source":"src/recording_view.rs:2735"},
+        {"name":"显示 / 隐藏标注","gesture":"点击眼睛按钮","result":"切换标注在录像中的显示；保留标注文档，可再次显示。","source":"src/recording_view.rs:2755"},
+        {"name":"悬停说明与消息","gesture":"悬停可用按钮 / 点击消息条","result":"按钮显示小气泡；不可用按钮或下拉打开时不出气泡。进度、警告与错误按消息条展示。","source":"src/recording_view.rs:601"},
+        {"name":"关闭","gesture":"点击关闭按钮","result":"录制中停止并关闭，成品留在历史；普通 Esc 停止后仍可预览。","source":"src/recording_view.rs:2779"}
+      ]
+    },
+    {
+      "id": "recording-markup",
+      "title": "录屏 · 标注层",
+      "summary": "标注只接收自己的绘图输入；Esc 取消手势或退出绘图，录像继续。",
+      "shortcuts": [
+        {"keys":["Ctrl+Z"],"action":"撤销标注","when":"录制绘图层拥有键盘","detail":"仅撤销标注文档。","source":"src/recording_live_annotation.rs:100"},
+        {"keys":["Ctrl+Y","Ctrl+Shift+Z"],"action":"重做标注","when":"录制绘图层拥有键盘","detail":"无额外 Alt / Win。","source":"src/recording_live_annotation.rs:101"},
+        {"keys":["Delete","Backspace"],"action":"删除选中标注","when":"录制绘图层拥有键盘且已有选中对象","detail":"无修饰键。","source":"src/recording_live_annotation.rs:102"},
+        {"keys":["Shift+Delete"],"action":"清空标注","when":"录制绘图层拥有键盘","detail":"清空可撤销。","source":"src/recording_live_annotation.rs:103"},
+        {"keys":["F9"],"action":"停止录像","when":"录制绘图层拥有键盘","detail":"停止录制并进入后续输出流程。","source":"src/recording_annotation_view.rs:418"},
+        {"keys":["F10"],"action":"暂停 / 继续录像","when":"录制绘图层拥有键盘","detail":"Space 不属于绘图层的全局快捷键。","source":"src/recording_annotation_view.rs:424"},
+        {"keys":["Esc"],"action":"取消绘图 / 退出标注","when":"录制绘图层拥有键盘","detail":"有手势先取消手势；无手势时退出绘图，录像继续。","source":"src/recording_annotation_view.rs:409"}
+      ],
+      "interactions": [
+        {"name":"选择、矩形、箭头、画笔、荧光笔","gesture":"点击标注栏工具后在区域内拖动","result":"切换工具并绘制；选择工具可编辑现有标注。","source":"src/recording_view.rs:2805"},
+        {"name":"颜色、粗细、透明度","gesture":"点击颜色样式按钮 / 色点 / 拖滑杆","result":"点击样式即时生效；调整选中对象或当前绘制样式。","source":"src/recording_view.rs:2863"},
+        {"name":"撤销、重做、删除、清空","gesture":"点击对应图标","result":"与标注键盘命令共用文档操作。","source":"src/recording_view.rs:2887"},
+        {"name":"完成标注","gesture":"点击对勾","result":"收起标注层，录像继续。","source":"src/recording_view.rs:2940"}
+      ]
+    },
+    {
+      "id": "recording-preview",
+      "title": "录屏 · 预览输出",
+      "summary": "录像已落入本机录屏目录；预览可播放、调速、混音、转 GIF、另存或复制文件。",
+      "shortcuts": [
+        {"keys":["Space"],"action":"播放 / 暂停预览","when":"预览阶段且工具栏拥有键盘","detail":"要求无修饰键。","source":"src/recording_shortcuts.rs:86"},
+        {"keys":["Ctrl+C"],"action":"复制录屏文件","when":"预览就绪，无弹层、转换、混音或保存对话框","detail":"复制独立持久成品的文件引用；关闭或重新录制后仍能粘贴。","source":"src/recording_view.rs:1988"},
+        {"keys":["Ctrl+S"],"action":"另存为","when":"预览就绪且仅按 Ctrl","detail":"系统保存框初始目录为 %USERPROFILE%\\Videos；按当前音量生成成品。","source":"src/recording_view.rs:1923"},
+        {"keys":["Enter"],"action":"完成并关闭","when":"预览就绪、无弹层或输出忙态","detail":"文件保留在录屏历史；混音设置在完成时写入 MP4。","source":"src/recording_shortcuts.rs:96"},
+        {"keys":["Esc"],"action":"关闭弹层 / 关闭预览","when":"预览工具栏拥有键盘","detail":"先关弹层；输出进行中按关闭等待当前提交。","source":"src/recording_shortcuts.rs:88"}
+      ],
+      "interactions": [
+        {"name":"时间轴","gesture":"点击或拖动进度条","result":"跳转预览位置。","source":"src/recording_view.rs:3190"},
+        {"name":"播放速度","gesture":"点击倍速按钮","result":"改变预览播放速度。","source":"src/recording_view.rs:3226"},
+        {"name":"音量混合","gesture":"点击混音按钮、调节系统音频 / 麦克风滑杆","result":"预览立即应用；保存、复制或完成时按当前音量写入 MP4。","source":"src/recording_view.rs:3588"},
+        {"name":"转为 GIF / 取消转换","gesture":"点击 GIF 按钮","result":"从录制成品转换，忙碌时可取消转换；不覆盖未知同名文件。","source":"src/recording_view.rs:3289"},
+        {"name":"保存、复制文件、完成","gesture":"点击输出按钮","result":"分别另存、将文件放入剪贴板、保留历史并关闭。","source":"src/recording_view.rs:3327"},
+        {"name":"录屏历史","gesture":"点击历史按钮","result":"打开主界面的统一历史页。","source":"src/recording_view.rs:2018"},
+        {"name":"重新录制","gesture":"点击重新录制","result":"删除本次自有原片并返回录制准备；已另存或已复制的独立成品保留。","source":"src/recording_view.rs:1786"}
+      ]
+    },
+    {
+      "id": "recognition",
+      "title": "OCR · 选字与查找",
+      "summary": "截图、图片编辑器和贴图均可在原图选字；文字键优先于绘图键。输入法、菜单、参数框与全文输入器优先处理输入。",
+      "shortcuts": [
+        {"keys":["Ctrl+A"],"action":"全选识别文字","when":"有效原位 OCR 层","detail":"不选择标注对象。","source":"src/capture_ocr_overlay.rs:874"},
+        {"keys":["Ctrl+C"],"action":"复制所选文字","when":"有效 OCR 选字","detail":"成功后保持界面；自动复制重试状态且无选字时可重试全文并结束截图。","source":"src/capture_ocr_overlay.rs:884"},
+        {"keys":["Ctrl+Shift+C"],"action":"复制全部识别文字","when":"有效原位 OCR 层","detail":"复制原文全文。","source":"src/capture_ocr_overlay.rs:881"},
+        {"keys":["Ctrl+Alt+C"],"action":"按段落复制所选","when":"已有有效文字选择","detail":"合并同段折行；代码、表格、多栏等保持必要分行。","source":"src/capture_ocr_overlay.rs:880"},
+        {"keys":["Ctrl+F"],"action":"打开查找","when":"有效 OCR 层，非输入法合成","detail":"输入仅预览命中；点“选中”才替换实际文字选择。","source":"src/ocr_find_ui.rs:291"},
+        {"keys":["F3","Shift+F3"],"action":"下一处 / 上一处命中","when":"查找栏已打开","detail":"可持续导航；查找输入框内 Enter / Shift+Enter 也可导航。","source":"src/ocr_find_ui.rs:292"},
+        {"keys":["Enter","Shift+Enter"],"action":"下一处 / 上一处命中","when":"查找输入框有焦点","detail":"该输入焦点下不输出图片。","source":"src/ocr_find_ui.rs:294"},
+        {"keys":["Shift+Left","Shift+Right"],"action":"按完整字素扩选","when":"已有可信 OCR 停点或选择","detail":"固定锚点，不拆组合音标、emoji 或 CRLF。","source":"src/capture_ocr_overlay.rs:298"},
+        {"keys":["Home","End","Shift+Home","Shift+End"],"action":"到识别行首 / 行尾或扩选","when":"已有可信停点","detail":"依据识别阅读顺序。","source":"src/capture_ocr_overlay.rs:302"},
+        {"keys":["Ctrl+Left","Ctrl+Right","Ctrl+Shift+Left","Ctrl+Shift+Right"],"action":"按词移动 / 扩选","when":"已有可信 OCR 停点","detail":"非空选择先折叠；无可信词边界时按完整字素推进。","source":"src/capture_ocr_overlay.rs:290"},
+        {"keys":["Shift+Up","Shift+Down"],"action":"跨识别行扩选","when":"有可信相邻识别行","detail":"保留物理列；几何不可信时保持选择。","source":"src/capture_ocr_overlay.rs:300"},
+        {"keys":["Ctrl+Home","Ctrl+End","Ctrl+Shift+Home","Ctrl+Shift+End"],"action":"全文首尾移动 / 扩选","when":"有效原位 OCR 层","detail":"Shift 保留原选择锚点。","source":"src/capture_ocr_overlay.rs:294"},
+        {"keys":["H","U","W","D"],"action":"高亮 / 下划线 / 波浪线 / 删除线","when":"已有非空且具备可信字形定位的选择","detail":"再次同类同色标记取消该范围；查找输入框里这些键输入文字。","source":"src/capture_ocr_overlay.rs:885"},
+        {"keys":["Ctrl+Z","Ctrl+Y","Ctrl+Shift+Z"],"action":"撤销 / 重做标记","when":"原位 OCR 层","detail":"与标注文档历史共用。","source":"src/capture_ocr_overlay.rs:896"},
+        {"keys":["Enter"],"action":"复制图片","when":"原位 OCR 层拥有焦点且无子输入器","detail":"输出图片及持久标记；普通截图完成后关闭，图片编辑器保持自身合同。","source":"src/capture_ocr_overlay.rs:894"},
+        {"keys":["Y"],"action":"翻译图片","when":"原位 OCR 层","detail":"翻译文本按段落落为图片上的文字标注。","source":"src/capture_ocr_overlay.rs:895"},
+        {"keys":["Ctrl+S","Ctrl+Shift+S"],"action":"保存 / 快速保存图像","when":"有效 OCR 层","detail":"识别面板、查找与临时高亮不进入图像；持久标记进入输出。","source":"src/capture_ocr_overlay.rs:910"},
+        {"keys":["Esc"],"action":"逐层取消识别交互","when":"OCR 交互层","detail":"敏感候选、查找栏和菜单先关闭；随后清除文字选择，再退出文字层。","source":"src/capture_ocr_overlay.rs:862"}
+      ],
+      "interactions": [
+        {"name":"选字","gesture":"在原图识别文字上拖动 / 双击词 / 三击行","result":"按字素与识别阅读方向选择；可复制或持久标记。","source":"src/capture_ocr_overlay.rs:366"},
+        {"name":"段落、逐行、表格、译文","gesture":"点击右侧结果面板页签","result":"切换结果组织方式；译文页进入时发起翻译，整张表格识别后可默认进表格。","source":"src/capture_ocr_panel.rs:1223"},
+        {"name":"图文联动","gesture":"悬停原图文字 / 面板行；单击行，Shift 合并","result":"双向高亮和滚入可见；再次点击同行取消选择。","source":"src/capture_ocr_panel_click.rs:1"},
+        {"name":"复制结果","gesture":"点击面板底部主复制按钮 / 双击行或段落","result":"普通截图中复制成功后关闭；复制表格 / 译文的专用按钮保持界面。","source":"src/capture_ocr_result_click.rs:1"},
+        {"name":"标记浮条","gesture":"选字后点击复制、四种标记或颜色点","result":"修改持久标记；没有完整定位的选择可复制但不可标记。","source":"src/capture_ocr_panel.rs:2074"},
+        {"name":"查找条","gesture":"输入关键词，点击前后、选中、标记类型或全部标记","result":"按字面精确匹配；全部标记需所有命中定位可信且不超过 512 处，否则整批拒绝。","source":"src/ocr_find_ui.rs:639"},
+        {"name":"重识别此行","gesture":"选中一条可信行后点击行尾按钮","result":"用原识别输入重新识别整行；候选可选字、复制、重试或丢弃，不直接覆盖原正文。","source":"src/capture_ocr_local_retry.rs:1"},
+        {"name":"识别层与敏感文字","gesture":"切换底栏识别层开关 / 点击盾牌","result":"控制原图识别带或查看敏感候选；面板与预览不进入输出。","source":"src/capture_ocr_panel.rs:1965"},
+        {"name":"更多与编辑全文","gesture":"点击面板标题栏相应按钮","result":"打开全文输入器，或翻译所选 / 全文、重识别全部、图片翻译、复制图片。","source":"src/capture_ocr_panel.rs:1"}
+      ]
+    },
+    {
+      "id": "ocr-editor",
+      "title": "OCR · 全文与只读结果",
+      "summary": "全文输入器先接收文字键；控件文字的只读面板、局部重识别候选另有复制合同。",
+      "shortcuts": [
+        {"keys":["Ctrl+A","Ctrl+C","Ctrl+X","Ctrl+V"],"action":"全选 / 复制 / 剪切 / 粘贴正文","when":"可编辑 OCR 全文拥有焦点","detail":"全文无选字时仍按全文合同复制；输入法优先。","source":"src/text_input.rs:270"},
+        {"keys":["Ctrl+Z","Ctrl+Y","Ctrl+Shift+Z"],"action":"撤销 / 重做正文编辑","when":"可编辑 OCR 全文","detail":"不透传到截图文档。","source":"src/text_input.rs:306"},
+        {"keys":["Enter","Shift+Enter"],"action":"插入换行","when":"可编辑 OCR 全文","detail":"不触发复制图片；Ctrl+Enter 不作为这里的输出命令。","source":"src/text_input.rs:317"},
+        {"keys":["Left","Right","Up","Down","Home","End","Shift+方向键","Ctrl+Home","Ctrl+End"],"action":"移动停点 / 扩展选择","when":"可编辑 OCR 全文","detail":"Shift 扩选；Home/End 为视觉行，Ctrl+Home/End 为全文。","source":"src/text_input.rs:331"},
+        {"keys":["Backspace","Delete"],"action":"删除正文","when":"可编辑 OCR 全文","detail":"保持完整字素。","source":"src/text_input.rs:325"},
+        {"keys":["Enter","Ctrl+C"],"action":"复制选中或全文","when":"控件文字的只读结果面板","detail":"有非空选择复制所选，否则复制全文；成功保持截图打开。全文按钮才会复制后关闭。","source":"src/capture_text_result.rs:145"},
+        {"keys":["Ctrl+A"],"action":"全选只读结果","when":"控件文字或局部重识别候选","detail":"只选择面板文字。","source":"src/capture_text_result.rs:148"},
+        {"keys":["Esc"],"action":"关闭只读结果 / 候选","when":"只读文字面板","detail":"不把候选回写为原正文。","source":"src/capture_view.rs:6764"}
+      ],
+      "interactions": [
+        {"name":"编辑全文","gesture":"在全文输入区输入、拖选、复制或粘贴","result":"正文可编辑；修改会使旧表格与定位失效，重新识别后恢复资格。","source":"src/text_input.rs:250"},
+        {"name":"控件文字的全文按钮","gesture":"点击复制全文","result":"成功复制完整正文后关闭截图；失败保留面板供重试。","source":"src/capture_view.rs:6764"},
+        {"name":"局部候选","gesture":"拖选；靠正文上下边缘继续拖动；复制 / 重试 / 丢弃","result":"候选支持边缘自动滚动与只读导航；复制成功保留当前界面，原正文与标记保持。","source":"src/capture_ocr_local_retry.rs:1"}
+      ]
+    },
+    {
+      "id": "qr-translation",
+      "title": "二维码与图片翻译",
+      "summary": "二维码悬浮入口基于冻结底图自动扫描；翻译按已配置服务发送文字或整图，结果需要另行复制或保存才成为输出文件。",
+      "shortcuts": [
+        {"keys":["Y"],"action":"翻译图片","when":"截图或图片编辑器的图片翻译入口可用","detail":"自动引擎按配置选百度整图或本机 OCR + 文字翻译；没有 OCR 结果时先识别。","source":"src/capture_image_translate.rs:83"},
+        {"keys":["Esc"],"action":"先取消整图翻译请求","when":"百度整图翻译进行中","detail":"只取消当前请求，不直接退出截图。","source":"src/capture_image_translate.rs:53"}
+      ],
+      "interactions": [
+        {"name":"二维码悬浮按钮","gesture":"选区稳定后悬停码中心按钮","result":"显示复制、打开链接和查看全文；只扫描冻结底图选区，不含标注；自动扫描上限900万像素。","source":"src/capture_qr.rs:1"},
+        {"name":"二维码弹层固定","gesture":"单击中心按钮 / 点击空白处","result":"单击固定弹层；点击其它位置收起。","source":"src/capture_qr.rs:275"},
+        {"name":"二维码打开","gesture":"双击链接码按钮 / 点击在浏览器中打开","result":"将 http(s) 或可规范化 www 链接交系统浏览器，成功后结束截图；文本码双击只固定弹层。","source":"src/capture_qr.rs:275"},
+        {"name":"二维码复制与全文","gesture":"点击复制链接 / 内容，或在结果面板查看","result":"复制解码文本到剪贴板，或展示完整结果；复制与打开分别执行。","source":"src/capture_qr.rs:549"},
+        {"name":"图片翻译入口","gesture":"点击识别下拉的图片翻译 / OCR 更多中的翻译图片","result":"本机排版路线将文字段落发送翻译服务，背景取色和排版在本机；百度路线发送当前图片。","source":"src/capture_image_translate.rs:83"}
+      ]
+    },
+    {
+      "id": "main",
+      "title": "主界面 · 贴图与历史",
+      "summary": "设置窗兼主界面。贴图、截图历史和录屏集中管理；历史页快捷键与编辑会话不同。",
+      "shortcuts": [
+        {"keys":["Ctrl+F"],"action":"聚焦历史搜索","when":"历史页","detail":"按标题、日期、尺寸等现有字段筛选。","source":"src/main_history.rs:501"},
+        {"keys":["F5"],"action":"刷新历史","when":"历史页","detail":"重新扫描截图、贴图记录和录屏。","source":"src/main_history.rs:505"},
+        {"keys":["Left","Right","Up","Down","Home","End"],"action":"选择相邻 / 首末历史项","when":"历史页且搜索框无焦点","detail":"上下按网格行导航；支持按住连续移动。","source":"src/main_history.rs:536"},
+        {"keys":["Enter"],"action":"打开当前历史项","when":"已有选择且搜索框无焦点","detail":"截图贴出、已关闭贴图恢复、录屏由系统播放器打开；屏上贴图提示去贴图页管理。","source":"src/main_history.rs:291"},
+        {"keys":["Ctrl+C"],"action":"复制历史项","when":"历史页且搜索框无焦点","detail":"截图复制图片；录屏复制文件；按所选条目能力执行。","source":"src/main_history.rs:334"},
+        {"keys":["Delete"],"action":"删除历史项","when":"历史页已选择可删除条目","detail":"先隐藏并提供 10 秒撤销；屏幕上仍打开的贴图须先关闭。","source":"src/main_history.rs:401"},
+        {"keys":["Ctrl+Z"],"action":"撤销待提交删除","when":"历史页且搜索框无焦点，10 秒撤销期内","detail":"恢复当前批次的待删除条目；窗口销毁时待删除会提交。","source":"src/main_history.rs:443"},
+        {"keys":["Esc"],"action":"退出当前搜索 / 选择","when":"历史页","detail":"先清查询，空查询时退回列表焦点，再取消条目选择。","source":"src/main_history.rs:511"}
+      ],
+      "interactions": [
+        {"name":"侧栏","gesture":"点击贴图、历史或设置分类","result":"在同一主窗口切换；设置分常规、截图、贴图、翻译、快捷键、保存、工具栏。","source":"src/settings_view.rs:42"},
+        {"name":"历史筛选与详情","gesture":"搜索、点击类型筛选、选中卡片 / 详情按钮","result":"统一展示截图、文字/图片贴图和录屏；详情按条目提供贴出、编辑、复制、定位与删除。","source":"src/main_history.rs:579"},
+        {"name":"历史卡片","gesture":"单击选择 / 双击打开","result":"截图贴图、关闭记录恢复、录屏交给系统播放器。","source":"src/main_history.rs:880"},
+        {"name":"布局图","gesture":"单击贴图块、拖动、点击屏外“调回”","result":"在屏幕标出贴图、移动位置或移回主屏中央。","source":"src/main_pins.rs:1140"},
+        {"name":"分组","gesture":"点击切换；双击名称改名；拖动排序或拖入移组；加号新建","result":"切换屏幕贴图组并维护工作区分组；只有空组可删除。","source":"src/main_pins.rs:996"},
+        {"name":"贴图行操作","gesture":"点击显示、锁定、穿透、标出、关闭 / 打开","result":"即时控制对应贴图；关闭可恢复，不等同于从历史删除。","source":"src/main_pins.rs:1423"},
+        {"name":"最近关闭 / 启动时恢复","gesture":"点击关闭记录 / 底部开关","result":"恢复最近关闭贴图，或设置下次启动是否恢复工作区。","source":"src/main_pins.rs:1666"}
+      ]
+    },
+    {
+      "id": "settings",
+      "title": "设置 · 录键与参数",
+      "summary": "只有全局截图、剪贴板贴图和快捷动作热键可录制；会话内快捷键固定。部分设置即选即存，保存规则与高级翻译服务用草稿应用。",
+      "shortcuts": [
+        {"keys":["Esc"],"action":"取消快捷键录制","when":"设置中的快捷键框正在录制","detail":"保留原快捷键。","source":"src/settings_hotkey.rs:109"},
+        {"keys":["Backspace"],"action":"停用快捷键","when":"快捷键框正在录制且无修饰键","detail":"等同清除按钮；冲突或注册失败保留旧值并就近说明。","source":"src/settings_hotkey.rs:120"},
+        {"keys":["Up","Down","Left","Right","Enter","Space","Esc"],"action":"选择目标语言 / 关闭菜单","when":"翻译目标语言下拉打开","detail":"方向键在两列移动，Enter/Space 选中，Esc 关闭且不改值。","source":"src/settings_translation.rs:522"}
+      ],
+      "interactions": [
+        {"name":"快捷键框","gesture":"点击录制；× 清除；↺ 恢复默认","result":"配置截图、剪贴板贴图或最多 16 个快捷动作的全局热键；托盘注册回执自动更新。","source":"src/settings_hotkey.rs:321"},
+        {"name":"快捷动作","gesture":"启用、新建、编辑动作","result":"选择采集源、先编辑与否、最多三个步骤、历史策略；失败从失败步骤重试。","source":"src/settings_quick_actions.rs:1"},
+        {"name":"语言、主题、译成","gesture":"点击选项 / 目标语言","result":"即选即存；译成“自动”时中文译英文，其它译简体中文。","source":"src/settings_translation.rs:423"},
+        {"name":"翻译高级","gesture":"展开服务 / 图片翻译，编辑后应用或取消","result":"服务字段是草稿，与已保存值不同时出现操作条；保存设置不发送翻译请求。","source":"src/settings_translation.rs:409"},
+        {"name":"保存规则","gesture":"设置目录、模板、日期、PNG/JPEG/BMP与质量，点击应用","result":"改变后续保存面板和快速保存默认值；恢复默认先改草稿。","source":"src/settings_save.rs:141"},
+        {"name":"保存面板","gesture":"修改目录 / 文件名 / 格式，选择最近目录，保存或取消","result":"保存成功才更新最近目录；“记住”开启时同步保存规则；同名可覆盖或保留两份；原始编辑文件受保护。","source":"src/save_panel.rs:312"},
+        {"name":"工具栏配置","gesture":"显示 / 隐藏 / 排序工具","result":"截图与贴图共用顺序；数字槽位跟随当前工具顺序，不固定对应工具。","source":"src/settings_toolbar.rs:1"}
+      ]
+    }
+  ],
+  "flows": [
+    {"id":"image-copy","title":"复制图片","from":"截图 / 图片编辑 / 贴图","trigger":"Ctrl+C 或完成动作中的复制","to":"Windows 剪贴板：PNG、DIBV5 与兼容 DIB","conditions":"完成动作可自定义；OCR 选字、取色和输入框会优先接键","detail":"截图与贴图复制可附带私有落点元数据；透明通道由 PNG/DIBV5 保留，兼容 DIB 使用白底。","source":"src/export.rs:714"},
+    {"id":"image-save","title":"保存图片","from":"截图 / 图片编辑 / 贴图 / 长图","trigger":"Ctrl+S 或保存按钮","to":"保存面板选定的目录与文件名","conditions":"编码就绪、有效路径；编辑原始文件禁止同路径覆盖","detail":"支持 PNG/JPEG/BMP；同名提示覆盖或保留两份；成功后才写最近目录。记住规则默认开启；取消不提交规则。","source":"src/save_panel.rs:312"},
+    {"id":"quick-save","title":"快速保存图片","from":"截图 / 图片编辑 / 贴图 / 快捷动作","trigger":"Ctrl+Shift+S 或快速保存步骤","to":"save.json 中的默认目录，缺省 %USERPROFILE%\\Pictures\\RaiShot","conditions":"有效配置、渲染和编码成功","detail":"按日期、时间、宽高模板生成名称；同名追加 (1)、(2)…，保留原文件。是否写截图历史由调用方和历史开关决定。","source":"src/save_workflow.rs:40"},
+    {"id":"capture-history","title":"截图历史副本","from":"成功完成的截图图像输出","trigger":"历史策略允许且“记录历史”已开启","to":"%LOCALAPPDATA%\\RaiShot\\history\\shot-*.png","conditions":"历史默认关闭；仅文字动作默认不写截图历史","detail":"以 PNG 保存；保留上限 50 张、256 MiB、30 天，写入后清理超限旧记录。它独立于用户另存的文件。","source":"src/history.rs:332"},
+    {"id":"pin-persist","title":"贴图自动保存与恢复","from":"屏幕上的图片 / 文字 / 矢量贴图","trigger":"初次贴出、内容安静约 750ms、持续调整最长约3秒后，以及关闭收尾","to":"%LOCALAPPDATA%\\RaiShot\\pin-workspace\\workspace.json 与 pins\\","conditions":"宿主未处于处理 / 草稿等不安全阶段","detail":"保存内容与位置、分组、模式、标题等元数据；关闭记录最多保留20条。启动恢复默认开启，关闭窗口与删除记录是不同操作。","source":"src/pin_autosave.rs:4"},
+    {"id":"long-copy","title":"长截图完成 / 复制","from":"长截图采集面板","trigger":"✓、Enter 或 Ctrl+C","to":"Windows 图片剪贴板；历史开关开时另写 history\\","conditions":"输出就绪，先收尾采集；超过3200万像素应先裁剪","detail":"完成成功结束采集；失败保留面板可重试。剪贴板附带原选区和方向，便于再贴图定位。","source":"src/long_output.rs:115"},
+    {"id":"long-save","title":"长截图保存","from":"长截图采集 / 调整","trigger":"Ctrl+S 或保存","to":"保存面板选择的文件","conditions":"采集收尾并得到可用图像","detail":"保存取消返回面板，成功结束采集；当前 long_output 的保存分支未额外调用截图 history 写入。","source":"src/long_output.rs:130"},
+    {"id":"ocr-copy","title":"识别与复制文字 / 表格","from":"本机 OCR 或控件文字结果","trigger":"复制所选 / 全文 / 段落 / 表格 / 译文","to":"Windows 文本剪贴板；表格复制可同时提供 TSV 与 HTML","conditions":"结果与来源有效；输入框与候选拥有自己的复制路线","detail":"普通选择复制后保持界面；普通截图结果主按钮或全文自动复制成功可结束截图。失败保留正文、选择、范围与标记供重试。","source":"src/capture_ocr_overlay.rs:880"},
+    {"id":"recording-create","title":"录屏先落库","from":"录制中的桌面区域与可选音轨","trigger":"停止录制","to":"%LOCALAPPDATA%\\RaiShot\\recordings\\录屏_日期_时间.mp4 或 .gif","conditions":"无须先点另存；文件名冲突自动另选","detail":"成品先落本机录屏目录；预览、关闭和完成后保留原片。GIF 使用中间 MP4 转换。","source":"src/recording.rs:309"},
+    {"id":"recording-save","title":"录屏另存","from":"录屏预览成品与当前音量混合设置","trigger":"Ctrl+S / 保存","to":"系统保存框所选文件，初始目录 %USERPROFILE%\\Videos","conditions":"预览就绪；无转换、混音或其它保存占用","detail":"同目录暂存完成编码后再提交目标；取消或失败保留原片和预览。另存与本机录屏库原片分别存在。","source":"src/recording_view.rs:1923"},
+    {"id":"recording-copy","title":"录屏复制文件","from":"录屏预览","trigger":"Ctrl+C / 复制文件","to":"recordings\\ 下的独立持久成品 → Windows 文件剪贴板","conditions":"当前输出及音量快照仍有效","detail":"复制的是可粘贴的文件引用；再次复制可复用同一有效成品；关闭或重录不会删已发布复制文件。","source":"src/recording_view.rs:1247"},
+    {"id":"history-delete","title":"删除统一历史","from":"主界面历史页的当前条目","trigger":"Delete / 删除按钮","to":"先从列表隐藏，10秒后提交","conditions":"屏上贴图须先关闭；10秒内 Ctrl+Z 可撤销","detail":"截图历史直接删除自有 PNG；贴图忘记记录并清理资源；录屏移入系统回收站。窗口关闭也提交待删除条目。","source":"src/library.rs:530"},
+    {"id":"settings-write","title":"设置保存","from":"主界面各设置页","trigger":"即时选择或点击应用","to":"%LOCALAPPDATA%\\RaiShot 下分领域 JSON","conditions":"语言 / 主题 / 译成即时保存；高级翻译服务和保存规则需应用","detail":"设置只存本机，settings.json 包含配置的翻译地址、模型和百度凭据字段。语法损坏先备份后用默认；读取失败产生的临时默认不得覆盖原配置。","source":"src/preferences.rs:94"},
+    {"id":"capture-to-pin","title":"截图转为可编辑贴图","from":"截图选区、冻结底图与矢量标注文档","trigger":"T / 贴图按钮；空闲且选区有效时的中键贴图","to":"屏幕贴图窗口 → pin-workspace 持久化","conditions":"先结束可提交内容，已有有效输出范围；贴图显示确认后回收截图会话","detail":"交接冻结图像及文档，贴图仍保留可编辑标注；不先另存到默认图片目录，也不把工具栏等界面写入图片。后续复制、保存与拖出时才渲染用户图片。","source":"src/capture_pin_output.rs:195"},
+    {"id":"image-editor-flow","title":"图片编辑器输入与原图保护","from":"打开文件 / --edit-file 路径 / 长图标注 / 贴图文档","trigger":"打开图片或进入编辑","to":"内存图片与可编辑文档 → 剪贴板 / 新文件 / 贴图；贴图编辑可回交文档","conditions":"原图后台解码；保存面板和快速保存均传入受保护原始路径","detail":"原图始终不改写；同路径保存被拒绝并要求新文件名。Ctrl+C 输出当前渲染图片，Ctrl+S 打开保存面板，Ctrl+Shift+S 按默认规则新建文件。","source":"src/image_editor.rs:1"},
+    {"id":"long-crop-output","title":"长图裁剪窗出口的当前差异","from":"采集面板点裁剪进入的长图调整窗","trigger":"复制 / 保存 / 贴图 / 标注 / 继续采集","to":"剪贴板 / 保存面板 / 屏幕贴图 / 图片编辑器 / 原采集面板","conditions":"与采集面板的直接完成出口分开；条带可保持未整体物化直到需要导出","detail":"当前裁剪窗复制调用 copy_image，未附带新的落点元数据；此窗直接贴图仍固定初始位置 (100,100)。采集面板直接复制或贴图已使用原选区与方向定位。继续采集返回原会话；标注进入图片编辑器并结束采集。","source":"src/long_editor.rs:1133"},
+    {"id":"recording-discard","title":"录屏关闭、取消与重录","from":"待录 / 倒计时 / 正式录制 / 预览","trigger":"Esc、关闭按钮、取消 GIF 转换、重新录制","to":"按阶段保留或丢弃本会话文件","conditions":"倒计时取消丢弃准备输出；录制中 Esc 是停止，关闭按钮是停止后关闭；预览关闭保留成品","detail":"重录删除当前自有原片及本会话 GIF，清理辅助轨道后返回待录。已另存文件与独立复制成品保留。取消 GIF 转换保留录制原片；关闭完成后清理中间片与分轨。","source":"src/recording_view.rs:1668"},
+    {"id":"translate-flow","title":"翻译数据去向","from":"OCR 文字 / 待翻译图片","trigger":"译文页、识别并翻译、翻译所选 / 全文、Y 图片翻译","to":"配置的翻译接口 → 内存译文 / 文本标注；百度路线发送图片至其接口","conditions":"本机 OCR 自身在本机识别；翻译服务开启并配置","detail":"本机排版路线只发段落文字，原图取色与排版在本机；百度整图路线发图。图片翻译按目标语言与原文的会话缓存不写磁盘；需用户复制或保存才形成外部输出。","source":"src/image_translate.rs:1"}
+  ],
+  "storage": [
+    {"title":"默认数据根目录","path":"%LOCALAPPDATA%\\RaiShot\\","contents":"设置、历史、贴图工作区、录屏与 OCR 缓存","when":"按功能写入；RUSTSHOT_DATA_DIR 可显式覆盖，旧品牌目录可迁移或暂沿用","source":"src/preferences.rs:89"},
+    {"title":"默认快速保存目录","path":"%USERPROFILE%\\Pictures\\RaiShot\\","contents":"按保存规则输出的图片文件","when":"快速保存；用户可在保存设置修改","source":"src/preferences.rs:68"},
+    {"title":"截图历史","path":"%LOCALAPPDATA%\\RaiShot\\history\\shot-*.png","contents":"输出后的 PNG 副本，不是编辑源文档","when":"默认关闭；开启后由输出调用方写入，限50张 / 256MiB / 30天","source":"src/history.rs:332"},
+    {"title":"贴图工作区","path":"%LOCALAPPDATA%\\RaiShot\\pin-workspace\\","contents":"workspace.json 元数据；pins\\ 中的 PNG、.original.png；.runtime\\ 中运行锁与暂存","when":"自动持久化与恢复；最近关闭最多20条","source":"src/pin_workspace.rs:1177"},
+    {"title":"录屏库","path":"%LOCALAPPDATA%\\RaiShot\\recordings\\","contents":"MP4 / GIF 成品、当前流程需要的中间片、独立复制成品","when":"录屏停止或生成复制文件；另存初始目录为用户 Videos","source":"src/recording.rs:309"},
+    {"title":"设置文件","path":"%LOCALAPPDATA%\\RaiShot\\*.json","contents":"settings.json、toolbar.json、tool-presets.json、selection-style.json、quick_actions.json、save.json、recording.json","when":"按设置领域保存；save.json 同时记最多12个成功保存的最近目录","source":"src/save_store.rs:14"},
+    {"title":"OCR 运行缓存","path":"%LOCALAPPDATA%\\RaiShot\\ocr\\<固定清单版本>\\","contents":"ORT、本机检测 / 分类 / 识别模型、字典和按需表格结构模型","when":"首次 OCR / 表格识别按需准备，固定大小与 SHA 校验后复用","source":"src/ppocr/assets.rs:354"}
+  ]
+}

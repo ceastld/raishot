@@ -1,0 +1,260 @@
+<title>OCR 面板页签与对照开关</title>
+<style>
+/* 布局：三套方案并排，每块面板按真实尺寸（宽 340、页眉 44、底栏 52）复刻；控件样式沿用 ocr-panel.html。 */
+:root {
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --selected: #28473d; --accent: #40ce9d; --accent-fg: #0e1d17;
+  --page: #0f1317; --field: #161a20;
+  --shadow: 0 16px 40px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .3);
+  --seg-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+    --hover: #eaf0f3; --selected: #dcefe7; --accent: #126d4e; --accent-fg: #ffffff;
+    --page: #e8edf1; --field: #ffffff;
+    --shadow: 0 14px 36px rgba(24, 36, 48, .18), 0 2px 6px rgba(24, 36, 48, .08);
+    --seg-shadow: 0 1px 2px rgba(24, 36, 48, .12);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+  --hover: #eaf0f3; --selected: #dcefe7; --accent: #126d4e; --accent-fg: #ffffff;
+  --page: #e8edf1; --field: #ffffff;
+  --shadow: 0 14px 36px rgba(24, 36, 48, .18), 0 2px 6px rgba(24, 36, 48, .08);
+  --seg-shadow: 0 1px 2px rgba(24, 36, 48, .12);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); padding: 18px 16px 48px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.i.s { width: 15px; height: 15px; }
+
+.wrapper { max-width: 1140px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.top h1 { font-size: 17px; font-weight: 600; margin: 0; }
+.top h1 span { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 14px; }
+.ctrls { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.tog { display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); }
+.tog button { height: 26px; padding: 0 12px; border-radius: 6px; font-size: 13px; color: var(--muted); }
+.tog button:hover { color: var(--fg); }
+.tog button.on { background: var(--bg); color: var(--fg); font-weight: 600; box-shadow: var(--seg-shadow); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, var(--pw, 340px)); justify-content: center; gap: 28px; }
+.col { display: flex; flex-direction: column; gap: 10px; }
+.col h2 { margin: 0; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.col h2 em { font-style: normal; font-size: 11.5px; font-weight: 600; color: var(--accent); background: var(--selected); padding: 1px 7px; border-radius: 10px; }
+.col p { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+
+/* ---------- 面板 ---------- */
+.panel { font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; width: var(--pw, 340px); height: 540px; display: flex; flex-direction: column; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; }
+.p-head { display: flex; align-items: center; gap: 2px; padding: 0 8px 0 14px; height: 44px; flex: none; }
+.p-title { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
+.p-title b { font-size: 15px; font-weight: 600; }
+.p-title span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ib { width: 30px; height: 30px; border-radius: 6px; display: grid; place-items: center; color: var(--fg); transition: background-color .12s, color .12s; }
+.ib:hover { background: var(--hover); }
+.ib.on { background: var(--selected); color: var(--accent); }
+.ib-sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+
+/* A：下划线页签 */
+.tabs { display: flex; align-items: stretch; height: 34px; padding: 0 8px 0 6px; border-bottom: 1px solid var(--border); flex: none; }
+.tabs .t { position: relative; padding: 0 9px; font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; transition: color .12s; }
+.tabs .t:hover { color: var(--fg); }
+.tabs .t.on { color: var(--fg); font-weight: 600; }
+.tabs .t.on::after { content: ""; position: absolute; left: 9px; right: 9px; bottom: -1px; height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); }
+.tabs .fill { flex: 1; }
+/* A2 / A3：页签撑满整行、行高 40，悬停有底色，点击区域整格可点 */
+.tabs.big { height: 40px; padding: 0 6px; gap: 2px; }
+.tabs.big .t { flex: 1 1 0; justify-content: center; padding: 0 6px; font-size: 13.5px; }
+.tabs.big .t::before { content: ""; position: absolute; inset: 5px 0; border-radius: 6px; background: transparent; transition: background-color .12s; z-index: 0; }
+.tabs.big .t:hover::before { background: var(--hover); }
+.tabs.big .t .lbl { position: relative; display: inline-flex; align-items: center; gap: 5px; }
+.tabs.big .t.on::after { left: 50%; right: auto; width: 28px; margin-left: -14px; height: 2.5px; }
+.tabs.big .chip { flex: none; margin-left: 4px; }
+.tabs.big .vsep { width: 1px; height: 18px; background: var(--border); align-self: center; margin: 0 4px 0 6px; flex: none; }
+.tabs.big .ib { align-self: center; flex: none; }
+.tabs.fit .t { font-size: 13px; padding: 0 4px; }
+.tabs.fit .t .lbl { display: inline-grid; }
+.tabs.fit .t .lbl > * { grid-area: 1 / 1; text-align: center; }
+.tabs.fit .t .lbl .w { font-weight: 600; visibility: hidden; }
+.tabs.fit .t .lbl .v { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.tabs.fit .t.on .v { font-weight: 600; }
+.tabs.fit .t.on { font-weight: 400; }
+.chip.icon { width: 28px; padding: 0; justify-content: center; }
+.chip { align-self: center; height: 24px; padding: 0 8px 0 6px; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); transition: background-color .12s, color .12s; }
+.chip:hover { background: var(--hover); color: var(--fg); }
+.chip.on { background: var(--selected); color: var(--accent); }
+
+/* B / C：分段控件，按文字宽度分配 */
+.seg { margin: 0 12px; display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--hover); flex: none; }
+.seg button { flex: 1 1 auto; height: 26px; padding: 0 8px; border-radius: 6px; font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; transition: color .12s; }
+.seg button:hover { color: var(--fg); }
+.seg button.on { background: var(--bg); color: var(--fg); font-weight: 600; box-shadow: var(--seg-shadow); }
+.dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+
+/* B：译文工具行 */
+.sub { display: flex; align-items: center; gap: 8px; margin: 10px 14px 0; flex: none; font-size: 12px; color: var(--muted); }
+.sub .lang { display: inline-flex; align-items: center; gap: 5px; }
+.sub .fill { flex: 1; }
+.mseg { display: inline-flex; padding: 2px; gap: 2px; border-radius: 7px; background: var(--hover); }
+.mseg button { height: 22px; padding: 0 9px; border-radius: 5px; font-size: 12px; color: var(--muted); }
+.mseg button:hover { color: var(--fg); }
+.mseg button.on { background: var(--bg); color: var(--fg); font-weight: 600; box-shadow: var(--seg-shadow); }
+
+/* 正文 */
+.body { flex: 1; min-height: 0; overflow: auto; padding: 8px 6px 10px; scrollbar-width: thin; }
+.para { padding: 7px 8px; border-radius: 6px; cursor: pointer; transition: background-color .12s; }
+.para:hover { background: var(--hover); }
+.para + .para { margin-top: 2px; }
+.bi .para + .para { margin-top: 6px; }
+.para .src { font-size: 12px; line-height: 1.55; color: var(--muted); margin-bottom: 3px; }
+.para .dst { font-size: 13.5px; line-height: 1.6; }
+.empty { padding: 10px 10px; font-size: 12.5px; color: var(--muted); }
+
+.p-foot { height: 52px; flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 12px; border-top: 1px solid var(--border); }
+.btn { height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--border); font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; transition: background-color .12s; }
+.btn:hover { background: var(--hover); }
+.btn.pri { height: 32px; padding: 0 14px; border-color: transparent; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.btn.pri:hover { background: var(--accent); filter: brightness(1.06); }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-rows" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M7 9h6M7 15h10"/><path d="M3.5 12h17" opacity=".55"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<div class="wrapper">
+  <div class="top">
+    <h1>OCR 面板页签与对照开关<span>面板用 GPUI 同款 Segoe UI，切英文和宽度检查溢出</span></h1>
+    <div class="ctrls">
+      <div class="tog" id="pw"><button data-v="340">宽 340</button><button data-v="320">320</button><button data-v="300">300</button></div>
+      <div class="tog" id="lang"><button data-v="zh">中文界面</button><button data-v="en">English</button></div>
+      <div class="tog" id="theme"><button data-v="system">跟随系统</button><button data-v="dark">深色</button><button data-v="light">浅色</button></div>
+    </div>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+const S = { lang: "en", theme: "system", pw: "340" };
+const P = { A2: { tab: "tr", src: true }, A4: { tab: "tr", src: true }, A3: { tab: "tr", src: true } };
+const T = (zh, en) => (S.lang === "zh" ? zh : en);
+const icon = (id, s) => `<svg class="i${s ? " s" : ""}"><use href="#i-${id}"/></svg>`;
+const TABS = [["para", "段落", "Paragraphs"], ["line", "逐行", "Lines"], ["tbl", "表格", "Table"], ["tr", "译文", "Translation"]];
+const PARAS = [
+  ["*History change review finished", "*历史变更审阅已完成"],
+  ["Moves the entry to “Data management” inside the existing settings window instead of a separate popup.", "会把入口改为“数据管理”，并放到现有设置窗口内展示，不再单独弹窗。"],
+  ["Paste and drag-out keep the original vector document.", "粘贴和拖出时保留原始矢量文档。"],
+];
+const INFO = {
+  A2: ["现状（A2）", "", "英文四个页签加“Source”文字按钮超出 340，右侧被裁掉；选中项变粗还会让英文页签宽度跳一下。"],
+  A4: ["A2 自适应", "推荐", "页签 13px；中文保留“对照”文字，英文只留同一图标（悬停提示 Show source），选中态不变。选中加粗的宽度预先占好，切页不抖。英文 300 宽仍放得下。"],
+  A3: ["始终图标（A3）", "", "中英文都只用图标，最省空间、两种语言一致；中文下“对照”含义要靠悬停提示。"],
+};
+
+function head(k) {
+  const p = P[k];
+  const extra = k === "C" && p.tab === "tr"
+    ? `<button class="ib${p.src ? " on" : ""}" data-src title="${T("对照原文", "Show source")}">${icon("rows")}</button><span class="ib-sep"></span>`
+    : "";
+  return `<div class="p-head">
+    <div class="p-title"><b>${T("文字", "Text")}</b><span>${T("16 行", "16 lines")}</span></div>
+    ${extra}
+    <button class="ib" title="${T("查找", "Find")}">${icon("search")}</button>
+    <button class="ib" title="${T("编辑全文", "Edit full text")}">${icon("pen")}</button>
+    <button class="ib" title="${T("更多", "More")}">${icon("more")}</button>
+    <button class="ib" title="${T("关闭 · Esc", "Close · Esc")}">${icon("close")}</button>
+  </div>`;
+}
+function tabLabel(k, [id, zh, en]) {
+  const badge = id === "tr" && P[k].tab !== "tr" ? `<span class="dot"></span>` : "";
+  return T(zh, en) + badge;
+}
+function strip(k) {
+  const p = P[k];
+  if (k === "A4") {
+    const tip = T("在每段译文上方显示原文", "Show source above each paragraph");
+    const hide = p.tab !== "tr" ? ' style="visibility:hidden"' : "";
+    const compact = S.lang === "en";
+    const chip = `<button class="chip${compact ? " icon" : ""}${p.src ? " on" : ""}" data-src title="${tip}"${hide}>${icon("rows", 1)}${compact ? "" : "对照"}</button>`;
+    return `<div class="tabs big fit">${TABS.map((t) => { const l = T(t[1], t[2]); return `<button class="t${p.tab === t[0] ? " on" : ""}" data-tab="${t[0]}"><span class="lbl"><span class="w">${l}</span><span class="v">${tabLabel(k, t)}</span></span></button>`; }).join("")}${chip}</div>`;
+  }
+  if (k === "A2" || k === "A3") {
+    const tip = T("在每段译文上方显示原文", "Show the original above each paragraph");
+    // 开关位始终占位，切页时页签宽度不变、不在鼠标下跳动；非译文页只隐藏。
+    const hide = p.tab !== "tr" ? ' style="visibility:hidden"' : "";
+    const tail = k === "A2"
+      ? `<button class="chip${p.src ? " on" : ""}" data-src title="${tip}"${hide}>${icon("rows", 1)}${T("对照", "Source")}</button>`
+      : `<span class="vsep"${hide}></span><button class="ib${p.src ? " on" : ""}" data-src title="${T("对照原文", "Show source")}"${hide}>${icon("rows")}</button>`;
+    return `<div class="tabs big">${TABS.map((t) => `<button class="t${p.tab === t[0] ? " on" : ""}" data-tab="${t[0]}"><span class="lbl">${tabLabel(k, t)}</span></button>`).join("")}${tail}</div>`;
+  }
+  if (k === "A") {
+    const chip = p.tab === "tr"
+      ? `<button class="chip${p.src ? " on" : ""}" data-src title="${T("在每段译文上方显示原文", "Show the original above each paragraph")}">${icon("rows", 1)}${T("对照", "Source")}</button>`
+      : "";
+    return `<div class="tabs">${TABS.map((t) => `<button class="t${p.tab === t[0] ? " on" : ""}" data-tab="${t[0]}">${tabLabel(k, t)}</button>`).join("")}<span class="fill"></span>${chip}</div>`;
+  }
+  let html = `<div class="seg">${TABS.map((t) => `<button class="${p.tab === t[0] ? "on" : ""}" data-tab="${t[0]}">${tabLabel(k, t)}</button>`).join("")}</div>`;
+  if (k === "B" && p.tab === "tr") {
+    html += `<div class="sub">
+      <span class="lang">${T("英语", "English")}${icon("arrow", 1)}${T("中文", "Chinese")}</span><span class="fill"></span>
+      <span class="mseg"><button class="${p.src ? "" : "on"}" data-srcv="0">${T("译文", "Only")}</button><button class="${p.src ? "on" : ""}" data-srcv="1">${T("对照", "Bilingual")}</button></span>
+    </div>`;
+  }
+  return html;
+}
+function body(k) {
+  const p = P[k];
+  if (p.tab !== "tr") return `<div class="body"><div class="empty">${T("（其它页签内容略）", "(other tabs omitted)")}</div></div>`;
+  const rows = PARAS.map(([en, zh]) => {
+    const [src, dst] = S.lang === "zh" ? [en, zh] : [zh, en];
+    return `<div class="para">${p.src ? `<div class="src">${src}</div>` : ""}<div class="dst">${dst}</div></div>`;
+  }).join("");
+  return `<div class="body${p.src ? " bi" : ""}"${k === "A" ? ' style="padding-top:10px"' : ""}>${rows}</div>`;
+}
+function panel(k) {
+  return `<div class="panel" data-k="${k}">${head(k)}${strip(k)}${body(k)}
+    <div class="p-foot"><button class="btn">${T("复制原文", "Copy source")}</button><button class="btn pri">${T("复制译文", "Copy translation")}</button></div></div>`;
+}
+function draw() {
+  document.getElementById("grid").innerHTML = Object.keys(P).map((k) => {
+    const [title, tag, desc] = INFO[k];
+    return `<div class="col"><h2>${k} · ${title}${tag ? `<em>${tag}</em>` : ""}</h2>${panel(k)}<p>${desc}</p></div>`;
+  }).join("");
+  document.documentElement.style.setProperty("--pw", S.pw + "px");
+  for (const g of ["lang", "theme", "pw"]) {
+    document.querySelectorAll(`#${g} button`).forEach((b) => b.classList.toggle("on", b.dataset.v === S[g]));
+  }
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const host = b.closest(".panel");
+  if (host) {
+    const p = P[host.dataset.k];
+    if (b.dataset.tab) p.tab = b.dataset.tab;
+    if (b.hasAttribute("data-src")) p.src = !p.src;
+    if (b.dataset.srcv) p.src = b.dataset.srcv === "1";
+  } else if (b.closest("#pw")) {
+    S.pw = b.dataset.v;
+  } else if (b.closest("#lang")) {
+    S.lang = b.dataset.v;
+  } else if (b.closest("#theme")) {
+    S.theme = b.dataset.v;
+    if (S.theme === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.dataset.theme = S.theme;
+  }
+  draw();
+});
+draw();
+</script>

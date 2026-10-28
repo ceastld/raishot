@@ -1,0 +1,266 @@
+<title>选区外观条 · 分裂下拉</title>
+<style>
+/* 布局：顶部方案切换 → 1000×560 冻结桌面舞台（按宽度缩放）→ 方案要点。深色优先，配色沿用 GPUI Palette。 */
+:root {
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --hover-2: #3a4653; --selected: #28473d; --selected-2: #31574a; --accent: #40ce9d;
+  --page: #0f1317; --sel: #1498ff; --desk: #0c0e11; --desk-2: #15191e; --desk-line: #2a3038;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3; --hover-2: #dde5ea;
+  --selected: #dcefe7; --selected-2: #c9e6da; --accent: #126d4e; --page: #e8edf1; color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3; --hover-2: #dde5ea;
+  --selected: #dcefe7; --selected-2: #c9e6da; --accent: #126d4e; --page: #e8edf1; color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); padding-block: 18px 40px; padding-inline: 16px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+h1 { font-size: 17px; font-weight: 600; margin: 0; text-wrap: balance; }
+h1 small { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 13px; }
+.tog { margin-left: auto; display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); flex-wrap: wrap; }
+.tog button { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.tog button.on { background: var(--bg); color: var(--fg); font-weight: 600; }
+.stage-box { width: 100%; overflow: hidden; border-radius: 10px; border: 1px solid var(--border); }
+.stage { position: relative; width: 1000px; height: 560px; transform-origin: 0 0; overflow: hidden; background: var(--desk); user-select: none; }
+.desk { position: absolute; inset: 0; width: 1000px; height: 560px; color: #aab4bf; font: 13px/1.5 var(--ui); }
+.desk .win { position: absolute; left: 30px; top: 24px; width: 940px; height: 512px; background: var(--desk-2); border: 1px solid var(--desk-line); border-radius: 8px; overflow: hidden; }
+.desk .side { position: absolute; left: 0; top: 0; bottom: 0; width: 180px; border-right: 1px solid var(--desk-line); padding: 16px 14px; display: flex; flex-direction: column; gap: 14px; font-size: 12.5px; color: #8e99a5; }
+.desk .main { position: absolute; left: 210px; right: 28px; top: 28px; display: flex; flex-direction: column; gap: 12px; }
+.desk .main .h { font-size: 19px; color: #e6edf3; font-weight: 600; }
+.desk .card { border: 1px solid var(--desk-line); border-radius: 6px; padding: 10px 12px; background: #1a1f25; }
+.desk .chart { height: 130px; border-radius: 6px; background: linear-gradient(180deg,#1c2b38,#17202a); position: relative; }
+.desk .chart span { position: absolute; bottom: 0; width: 28px; border-radius: 3px 3px 0 0; background: #2f7fb8; }
+.mask { position: absolute; inset: 0; background: rgba(0,0,0,.5); pointer-events: none; }
+.sel { position: absolute; }
+.edge { position: absolute; inset: 0; border: 1.5px solid var(--sel); pointer-events: none; }
+.h8 { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 1.5px solid var(--sel); transform: translate(-50%,-50%); }
+
+/* ---------- 条 ---------- */
+.bar { position: absolute; z-index: 5; display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 5px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0,0,0,.35); font: 13px/1 var(--ui); white-space: nowrap; color: var(--fg); }
+.bb { height: 30px; min-width: 30px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.bb:hover { background: var(--hover); }
+.bb.on { background: var(--selected); color: var(--accent); }
+.bb.open { background: var(--hover); }
+.num { font-variant-numeric: tabular-nums; }
+.sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex: none; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.s { width: 11px; height: 11px; stroke-width: 2; }
+
+/* 分裂按钮：主体切换开关，右侧窄箭头打开该效果的参数 */
+.split { display: inline-flex; align-items: center; height: 30px; border-radius: 6px; position: relative; }
+.split .main, .split .arrow { height: 30px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
+.split .main { width: 30px; border-radius: 6px 0 0 6px; }
+.split .arrow { width: 16px; border-radius: 0 6px 6px 0; color: var(--muted); }
+/* B1 连体：整组共用底色，箭头与主体之间一条细分隔 */
+.v-B1 .split:hover { background: var(--hover); }
+.v-B1 .split .main:hover, .v-B1 .split .arrow:hover { background: var(--hover-2); }
+.v-B1 .split.on { background: var(--selected); color: var(--accent); }
+.v-B1 .split.on .arrow { color: var(--accent); }
+.v-B1 .split.on .main:hover, .v-B1 .split.on .arrow:hover { background: var(--selected-2); }
+.v-B1 .split .arrow::before { content: ""; position: absolute; left: 30px; top: 8px; bottom: 8px; width: 1px; background: currentColor; opacity: 0; }
+.v-B1 .split:hover .arrow::before, .v-B1 .split.on .arrow::before { opacity: .28; }
+.v-B1 .split.open { background: var(--hover); box-shadow: inset 0 0 0 1px var(--border); }
+.v-B1 .split.on.open { background: var(--selected); box-shadow: inset 0 0 0 1px var(--accent); }
+/* B2 分离：只有主体有选中底色，箭头是独立的小按钮 */
+.v-B2 .split { gap: 1px; }
+.v-B2 .split .main { border-radius: 6px; }
+.v-B2 .split .arrow { border-radius: 5px; width: 15px; }
+.v-B2 .split .main:hover, .v-B2 .split .arrow:hover { background: var(--hover); }
+.v-B2 .split.on .main { background: var(--selected); color: var(--accent); }
+.v-B2 .split.open .arrow { background: var(--hover); color: var(--fg); }
+/* B3 悬停显箭头：平时只看到图标，悬停或打开时右侧长出箭头 */
+.v-B3 .split .arrow { width: 0; overflow: hidden; transition: width .12s; }
+.v-B3 .split:hover .arrow, .v-B3 .split.open .arrow, .v-B3 .split:focus-within .arrow { width: 16px; }
+.v-B3 .split .main { border-radius: 6px; }
+.v-B3 .split:hover .main, .v-B3 .split.open .main { border-radius: 6px 0 0 6px; }
+.v-B3 .split:hover { background: var(--hover); }
+.v-B3 .split .arrow:hover { background: var(--hover-2); }
+.v-B3 .split.on { background: var(--selected); color: var(--accent); }
+.v-B3 .split.on .arrow { color: var(--accent); }
+.v-B3 .split.open { box-shadow: inset 0 0 0 1px var(--border); }
+
+/* ---------- 弹层：每个效果一张小卡，锚在对应按钮下方 ---------- */
+.pop { position: absolute; z-index: 6; width: 236px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 16px 40px rgba(0,0,0,.5); font: 12px/1.4 var(--ui); display: flex; flex-direction: column; }
+.pop::before { content: ""; position: absolute; top: -6px; left: var(--tip, 20px); width: 10px; height: 10px; background: var(--bg); border-left: 1px solid var(--border); border-top: 1px solid var(--border); transform: rotate(45deg); }
+.ph { display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 10px 0 12px; border-bottom: 1px solid var(--border); }
+.ph b { font-size: 13px; font-weight: 600; }
+.pbody { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pbody.dim .pr, .pbody.dim .seg { opacity: .45; }
+.pr { display: grid; grid-template-columns: 34px 1fr 54px; align-items: center; gap: 8px; min-height: 26px; }
+.pr > span:first-child { color: var(--muted); font-size: 11.5px; }
+.pr .cl { grid-column: 2 / 4; display: flex; gap: 6px; align-items: center; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+.nb { height: 24px; border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: flex-end; gap: 2px; padding: 0 6px; }
+.nb i { font-style: normal; color: var(--muted); font-size: 10.5px; }
+.sw { width: 30px; height: 17px; border-radius: 9px; background: var(--border); position: relative; transition: background .12s; }
+.sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: transform .12s; }
+.sw.on { background: var(--accent); }
+.sw.on::after { transform: translateX(13px); }
+.cs { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--border); }
+.cs.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+.seg { display: flex; background: var(--hover); border-radius: 6px; padding: 2px; }
+.seg button { flex: 1; height: 24px; border-radius: 4px; color: var(--muted); }
+.seg button.on { background: var(--bg); color: var(--fg); }
+.hint { color: var(--muted); font-size: 11.5px; }
+
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.note { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.note h3 { margin: 0 0 6px; font-size: 13.5px; }
+.note ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+.note li + li { margin-top: 3px; }
+.note.cur { border-color: var(--accent); }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>选区外观条 · 每个按钮右侧下拉<small>点图标开关效果，点右侧箭头只调这一项</small></h1>
+    <div class="tog" id="variants">
+      <button data-v="A">现状 · 共用下拉</button>
+      <button data-v="B1" class="on">B1 · 连体分裂</button>
+      <button data-v="B2">B2 · 分离小箭头</button>
+      <button data-v="B3">B3 · 悬停显箭头</button>
+    </div>
+  </div>
+  <div class="stage-box" id="box"><div class="stage" id="stage"></div></div>
+  <div class="notes" id="notes"></div>
+</div>
+
+<script>
+const S = { v: "B1", open: "corner",
+  on: { corner: true, shadow: false, border: false },
+  radius: 12, blur: 10, op: 36, sc: "#000000", bw: 2, bc: "#ffffff", inside: false };
+const SEL = { x: 300, y: 150, w: 495, h: 314 };
+const DPI = 1.62;
+const px = v => Math.round(v * DPI);
+const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`;
+// 图标与 assets/icons 下 finish-*.svg、reselect.svg、more.svg 一致（24 网格缩到 16）
+const ic = {
+  chev: '<svg class="i s" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>',
+  corner: '<svg class="i" viewBox="0 0 24 24"><path d="M5 19.5V12a7.5 7.5 0 0 1 7.5-7.5h7"/></svg>',
+  shadow: '<svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="13" height="13" rx="2.5"/><path d="M20 8v9.5a2.5 2.5 0 0 1-2.5 2.5H8" stroke-opacity=".55"/></svg>',
+  border: '<svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><rect x="8" y="8" width="8" height="8" rx="1" stroke-dasharray="2 2" stroke-opacity=".6"/></svg>',
+  reselect: '<svg class="i" viewBox="0 0 24 24"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m8 0h4v-4M8 8h8v8H8z"/></svg>',
+  more: '<svg class="i" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></g></svg>',
+};
+const EFFECT = { corner: "圆角", shadow: "阴影", border: "边框" };
+const deskHTML = `<div class="desk"><div class="win">
+  <div class="side"><span>概览</span><span>截图记录</span><span>快捷键</span><span>OCR 引擎</span><span>贴图</span><span>导出</span></div>
+  <div class="main"><div class="h">本周截图统计</div>
+    <div class="card">完成 128 次截图 · 贴图 34 · OCR 52 次，平均冻结 196ms</div>
+    <div class="chart">${[40,70,55,95,80,110,65,100].map((h,i)=>`<span style="left:${24+i*48}px;height:${h}px"></span>`).join("")}</div>
+    <div class="card">长截图 6 · 录屏 3 · 二维码识别 9</div>
+    <div class="card">上次导出：D:\\截图\\2026-10-14 15.42.png</div>
+  </div></div></div>`;
+
+function param(label, key, min, max, unit = "px") {
+  return `<div class="pr"><span>${label}</span>
+    <input type="range" id="r-${key}" data-k="${key}" min="${min}" max="${max}" value="${S[key]}">
+    <span class="nb num">${S[key]}<i>${unit}</i></span></div>`;
+}
+function colors(which) {
+  const list = which === "bc" ? ["#ffffff", "#000000", "#4291ff", "#ff5368"] : ["#000000", "#ffffff", "#4291ff", "#ff5368"];
+  return `<div class="pr"><span>颜色</span><div class="cl">${list.map(c => `<button class="cs ${S[which]===c?"on":""}" data-c="${c}" data-w="${which}" style="background:${c}" aria-label="颜色 ${c}"></button>`).join("")}</div></div>`;
+}
+function body(k) {
+  if (k === "corner") return param("半径", "radius", 2, 40);
+  if (k === "shadow") return param("扩散", "blur", 2, 40) + param("浓度", "op", 0, 100, "%") + colors("sc");
+  return param("粗细", "bw", 1, 8)
+    + `<div class="seg"><button data-in="0" class="${S.inside?"":"on"}">外侧</button><button data-in="1" class="${S.inside?"on":""}">内侧</button></div>` + colors("bc");
+}
+// 分裂方案：一张卡只放一个效果；拖动参数会自动打开该效果
+function popOne(k) {
+  return `<div class="ph"><b>${EFFECT[k]}</b><button class="sw ${S.on[k]?"on":""}" data-t="${k}" aria-label="${EFFECT[k]}开关"></button></div>
+    <div class="pbody ${S.on[k]?"":"dim"}">${body(k)}${S.on[k] ? "" : `<div class="hint">调参数会自动打开${EFFECT[k]}</div>`}</div>`;
+}
+// 现状：一张卡放三项
+function popAll() {
+  return ["corner","shadow","border"].map((k, i) => `<div class="ph" style="${i ? "border-top:1px solid var(--border)" : ""}"><b>${EFFECT[k]}</b><button class="sw ${S.on[k]?"on":""}" data-t="${k}"></button></div>
+    <div class="pbody ${S.on[k]?"":"dim"}" style="${S.on[k] ? "" : "display:none"}">${body(k)}</div>`).join("");
+}
+
+const sizeChip = () => `<button class="bb num" title="点击输入精确位置和尺寸">${px(SEL.w)} × ${px(SEL.h)}${ic.chev}</button>`;
+const tail = `<span class="sep"></span><button class="bb" title="重新选择">${ic.reselect}</button><button class="bb" title="更多">${ic.more}</button>`;
+function bar() {
+  if (S.v === "A") return `${sizeChip()}<span class="sep"></span>
+    ${["corner","shadow","border"].map(k => `<button class="bb ${S.on[k]?"on":""}" data-t="${k}" title="${EFFECT[k]}">${ic[k]}</button>`).join("")}
+    <button class="bb ${S.open?"open":""}" data-open="all" style="min-width:22px;padding:0 4px" title="外观参数">${ic.chev}</button>${tail}`;
+  return `${sizeChip()}<span class="sep"></span>
+    ${["corner","shadow","border"].map(k => `<span class="split ${S.on[k]?"on":""} ${S.open===k?"open":""}" data-anchor="${k}">
+      <button class="main" data-t="${k}" title="${EFFECT[k]}：开 / 关">${ic[k]}</button>
+      <button class="arrow" data-open="${k}" title="${EFFECT[k]}参数" aria-label="${EFFECT[k]}参数">${ic.chev}</button></span>`).join("")}${tail}`;
+}
+
+function render() {
+  const r = S.on.corner ? S.radius : 0, o = S.on.border && !S.inside ? S.bw : 0;
+  const frame = `<div style="position:absolute;inset:${-o}px;border-radius:${r ? r + o : 0}px;pointer-events:none;${S.on.shadow ? `box-shadow:0 ${S.blur/3}px ${S.blur}px ${rgba(S.sc, S.op/100)};` : ""}${S.on.border ? `border:${S.bw}px solid ${S.bc};` : ""}"></div>`;
+  const hs = [[0,0],[.5,0],[1,0],[0,.5],[1,.5],[0,1],[.5,1],[1,1]].map(([a,b])=>`<span class="h8" style="left:${a*100}%;top:${b*100}%"></span>`).join("");
+  const top = SEL.y - 48, left = SEL.x;
+  const stage = document.getElementById("stage");
+  stage.innerHTML = deskHTML + `<div class="mask"></div>
+    <div class="sel" style="left:${SEL.x}px;top:${SEL.y}px;width:${SEL.w}px;height:${SEL.h}px">
+      <div style="position:absolute;inset:0;overflow:hidden;border-radius:${r}px"><div style="position:absolute;left:${-SEL.x}px;top:${-SEL.y}px">${deskHTML}</div></div>${frame}
+      <div class="edge"></div>${hs}</div>
+    <div class="bar v-${S.v}" id="bar" style="left:${left}px;top:${top}px">${bar()}</div>
+    ${S.open ? `<div class="pop" id="pop">${S.open === "all" ? popAll() : popOne(S.open)}</div>` : ""}`;
+  placePop();
+  renderNotes(); fit();
+}
+// 弹层左缘对齐触发按钮，小三角指向箭头
+function placePop() {
+  const pop = document.getElementById("pop"); if (!pop) return;
+  const stage = document.getElementById("stage"), k = stageScale();
+  const anchor = S.open === "all" ? stage.querySelector('[data-open="all"]') : stage.querySelector(`[data-anchor="${S.open}"]`);
+  const sr = stage.getBoundingClientRect(), ar = anchor.getBoundingClientRect(), br = document.getElementById("bar").getBoundingClientRect();
+  const ax = (ar.left - sr.left) / k, aw = ar.width / k;
+  const left = S.open === "all" ? ax + aw - 236 + 20 : ax - 6;
+  pop.style.left = left + "px";
+  pop.style.top = (br.bottom - sr.top) / k + 8 + "px";
+  pop.style.setProperty("--tip", (ax + aw - 10 - left - 5) + "px");
+}
+
+function renderNotes() {
+  const cur = v => S.v === v ? "cur" : "";
+  document.getElementById("notes").innerHTML = `
+    <div class="note ${cur("A")}"><h3>现状 · 共用下拉</h3><ul><li>三个开关后跟一个箭头，参数全挤在一张卡里</li><li>只想调阴影浓度，也要先找到卡里对应的段落</li><li>箭头离圆角最远，看不出它管哪个</li></ul></div>
+    <div class="note ${cur("B1")}"><h3>B1 · 连体分裂（推荐）</h3><ul><li>开关与箭头是一个整体：开启时整块变绿，归属一眼可见</li><li>点图标切换开关，点箭头只弹这一项的参数卡</li><li>每组宽 46px，三组比现状多约 20px</li><li>与尺寸胶囊「802 × 508 ⌄」同一套语言</li></ul></div>
+    <div class="note ${cur("B2")}"><h3>B2 · 分离小箭头</h3><ul><li>箭头是独立小按钮，选中色只在图标上</li><li>点击区更清楚，但视觉上更碎</li></ul></div>
+    <div class="note ${cur("B3")}"><h3>B3 · 悬停显箭头</h3><ul><li>平时和现状一样紧凑，悬停时右侧长出箭头</li><li>可发现性差，条宽会随悬停跳动；GPUI 需额外悬停状态</li></ul></div>
+    <div class="note"><h3>共同规则</h3><ul><li>参数卡锚在对应按钮下，小三角指向箭头；再点同一箭头或点空白处关闭</li><li>卡片标题行带开关；在关闭状态下拖参数自动打开该效果</li><li>滚轮在箭头上调主参数（半径／扩散／粗细）可作为后续增强</li></ul></div>`;
+}
+const stageScale = () => Math.min(1, document.getElementById("box").clientWidth / 1000);
+function fit() {
+  const k = stageScale();
+  document.getElementById("stage").style.transform = `scale(${k})`;
+  document.getElementById("box").style.height = 560 * k + "px";
+}
+
+document.getElementById("variants").addEventListener("click", e => {
+  const b = e.target.closest("button[data-v]"); if (!b) return;
+  document.querySelectorAll("#variants button").forEach(x => x.classList.toggle("on", x === b));
+  S.v = b.dataset.v; S.open = null; render();
+});
+const stage = document.getElementById("stage");
+stage.addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) { if (!e.target.closest(".pop")) { S.open = null; render(); } return; }
+  const d = b.dataset;
+  if (d.open) S.open = S.open === d.open ? null : d.open;
+  else if (d.t) S.on[d.t] = !S.on[d.t];
+  else if (d.c) S[d.w] = d.c;
+  else if (d.in) { S.inside = d.in === "1"; S.on.border = true; }
+  render();
+});
+const OWNER = { radius: "corner", blur: "shadow", op: "shadow", bw: "border" };
+stage.addEventListener("input", e => {
+  const k = e.target.dataset.k; if (!k) return;
+  S[k] = +e.target.value; S.on[OWNER[k]] = true;
+  const id = e.target.id; render(); document.getElementById(id)?.focus();
+});
+addEventListener("resize", () => { fit(); placePop(); });
+render();
+</script>

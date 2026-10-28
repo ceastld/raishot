@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RaiShot 主界面原型</title>
+<style>
+/* 主界面原型：页面本身即主窗口。深色优先，跟随系统；配色沿用 GPUI Palette 与 settings_widgets::Surface。 */
+:root {
+  --page: #171b21; --side: #13171c; --card: #20262e; --raised: #37404b; --line: #2f3741; --track: #191d23;
+  --nav-hover: #1f252c; --nav-sel: #27303a; --fg: #d9e2e9; --muted: #8997a6; --faint: #5d6977; --border: #3d4651;
+  --hover: #2a323c; --accent: #40ce9d; --accent-soft: rgba(64,206,157,.16); --on-accent: #0d1f18;
+  --warn: #e6b450; --danger: #ef6b6b; --menu: #252c35; --screen: #0e1115; --scrim: rgba(0,0,0,.62);
+  --shadow: 0 12px 32px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3);
+  --ui: "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --page: #f3f6f9; --side: #eaeff3; --card: #ffffff; --raised: #ffffff; --line: #e3e8ed; --track: #eef2f5;
+  --nav-hover: #e1e8ee; --nav-sel: #d8e1e8; --fg: #374351; --muted: #667482; --faint: #9aa6b2; --border: #dce3e9;
+  --hover: #eaf0f3; --accent: #126d4e; --accent-soft: rgba(18,109,78,.1); --on-accent: #ffffff;
+  --warn: #a8740c; --danger: #c43d3d; --menu: #ffffff; --screen: #dfe5ea; --scrim: rgba(20,30,40,.45);
+  --shadow: 0 12px 32px rgba(30,45,60,.16), 0 2px 6px rgba(30,45,60,.1); color-scheme: light; } }
+:root[data-theme="light"] {
+  --page: #f3f6f9; --side: #eaeff3; --card: #ffffff; --raised: #ffffff; --line: #e3e8ed; --track: #eef2f5;
+  --nav-hover: #e1e8ee; --nav-sel: #d8e1e8; --fg: #374351; --muted: #667482; --faint: #9aa6b2; --border: #dce3e9;
+  --hover: #eaf0f3; --accent: #126d4e; --accent-soft: rgba(18,109,78,.1); --on-accent: #ffffff;
+  --warn: #a8740c; --danger: #c43d3d; --menu: #ffffff; --screen: #dfe5ea; --scrim: rgba(20,30,40,.45);
+  --shadow: 0 12px 32px rgba(30,45,60,.16), 0 2px 6px rgba(30,45,60,.1); color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--fg); font: 14px/1.45 var(--ui); overflow: hidden; user-select: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+input { font: inherit; color: inherit; }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+.app { display: grid; grid-template-columns: var(--side-w, 200px) 1fr; grid-template-rows: 40px 1fr; height: 100vh; }
+/* 标题栏 */
+.titlebar { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding-left: 16px; border-bottom: 1px solid var(--line); background: var(--side); }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; width: calc(var(--side-w, 200px) - 16px); flex: none; }
+.brand .logo { width: 18px; height: 18px; border-radius: 5px; background: linear-gradient(135deg, var(--accent), #2a8bd6); }
+.search { flex: 0 1 420px; height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 6px; background: var(--track); border: 1px solid var(--line); color: var(--muted); }
+.search:focus-within { border-color: var(--accent); }
+.search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 13px; }
+.search kbd { font: 11px var(--ui); color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.titlebar .spacer { flex: 1; }
+.winbtns { display: flex; height: 100%; }
+.winbtns span { width: 46px; display: grid; place-items: center; color: var(--muted); }
+.winbtns span:hover { background: var(--hover); }
+.winbtns span.x:hover { background: #c42b1c; color: #fff; }
+.theme-switch { display: flex; gap: 2px; padding: 2px; background: var(--track); border-radius: 6px; border: 1px solid var(--line); }
+.theme-switch button { font-size: 12px; padding: 1px 8px; border-radius: 4px; color: var(--muted); }
+.theme-switch button.on { background: var(--nav-sel); color: var(--fg); }
+.proto-tag { font-size: 11px; color: var(--faint); }
+
+/* 侧栏 */
+.side { background: var(--side); border-right: 1px solid var(--line); padding: 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.nav { height: 36px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 6px; color: var(--fg); font-weight: 600; font-size: 14px; position: relative; text-align: left; width: 100%; }
+.nav:hover { background: var(--nav-hover); }
+.nav.on { background: var(--nav-sel); }
+.nav.on::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--accent); }
+.nav .count { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--muted); }
+.nav .chev { margin-left: auto; color: var(--muted); transition: transform .15s; }
+.nav.open .chev { transform: rotate(90deg); }
+.side-sep { height: 1px; background: var(--line); margin: 8px 4px; }
+.sub { display: none; flex-direction: column; gap: 1px; }
+.sub.open { display: flex; }
+.sub .nav { height: 30px; padding-left: 40px; font-weight: 500; font-size: 13px; color: var(--muted); }
+.sub .nav.on { color: var(--fg); }
+.side-foot { margin-top: auto; padding: 8px 6px 2px; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+.side-foot .bar { height: 4px; background: var(--track); border-radius: 2px; overflow: hidden; }
+.side-foot .bar i { display: block; height: 100%; width: 38%; background: var(--accent); }
+
+/* 内容 */
+.main { position: relative; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.page { display: none; flex: 1; min-height: 0; flex-direction: column; }
+.page.on { display: flex; }
+.page-head { display: flex; align-items: center; gap: 12px; padding: 14px 24px 10px; flex: none; }
+.page-head h1 { margin: 0; font-size: 20px; font-weight: 600; }
+.page-head .sub-title { color: var(--muted); font-size: 13px; }
+.page-head .grow { flex: 1; }
+.btn { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 6px; font-size: 13px; color: var(--fg); border: 1px solid var(--line); background: var(--card); white-space: nowrap; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
+.btn.ghost { border-color: transparent; background: none; }
+.btn.ghost:hover { background: var(--hover); }
+.iconbtn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: var(--muted); }
+.iconbtn:hover { background: var(--hover); color: var(--fg); }
+.iconbtn.on { color: var(--accent); }
+
+/* 贴图页 */
+.pins-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 24px 16px; gap: 12px; }
+.screenmap { position: relative; flex: none; height: var(--map-h, 230px); background: var(--track); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.screenmap .legend { position: absolute; left: 12px; bottom: 8px; font-size: 11px; color: var(--faint); pointer-events: none; }
+.monitor { position: absolute; background: var(--screen); border: 1px solid var(--border); border-radius: 4px; }
+.monitor .mlabel { position: absolute; left: 6px; top: 4px; font-size: 11px; color: var(--faint); }
+.mpin { position: absolute; border-radius: 2px; background-size: cover; background-position: center; outline: 1px solid rgba(255,255,255,.35); box-shadow: 0 2px 6px rgba(0,0,0,.45); cursor: grab; transition: outline-color .15s; }
+.mpin:hover { outline: 2px solid var(--accent); z-index: 5; }
+.mpin.sel { outline: 2px solid var(--accent); z-index: 6; }
+.mpin.hidden { opacity: .35; outline: 1px dashed var(--muted); box-shadow: none; }
+.mpin.dragging { cursor: grabbing; opacity: .85; }
+.mpin.flash { animation: flash .9s ease-out; }
+@keyframes flash { 0%,40% { box-shadow: 0 0 0 4px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.offscreen { position: absolute; display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 6px; border-radius: 12px; background: var(--menu); border: 1px solid var(--warn); color: var(--warn); font-size: 11px; box-shadow: var(--shadow); z-index: 7; }
+.offscreen button { color: var(--fg); font-size: 11px; padding: 0 6px; border-radius: 8px; background: var(--hover); }
+.map-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
+
+.groups { display: flex; align-items: center; gap: 6px; flex: none; border-bottom: 1px solid var(--line); }
+.gtab { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 12px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 13px; font-weight: 600; }
+.gtab:hover { color: var(--fg); }
+.gtab.on { color: var(--fg); border-bottom-color: var(--accent); }
+.gtab .dot { width: 8px; height: 8px; border-radius: 50%; }
+.gtab .n { font-weight: 500; color: var(--faint); font-size: 12px; }
+.gtab.drop { background: var(--accent-soft); border-radius: 6px 6px 0 0; }
+.gtab input { width: 90px; height: 22px; border: 1px solid var(--accent); border-radius: 4px; background: var(--track); outline: 0; padding: 0 6px; font-size: 13px; }
+.groups .grow { flex: 1; }
+.groups .hint { font-size: 12px; color: var(--faint); }
+
+.pinlist { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.prow { display: grid; grid-template-columns: 72px 1fr auto; align-items: center; gap: 12px; padding: 6px 8px; border-radius: 8px; }
+.prow:hover { background: var(--hover); }
+.prow.sel { background: var(--nav-sel); }
+.prow .thumb { width: 72px; height: 46px; border-radius: 4px; background-size: cover; background-position: center; outline: 1px solid var(--line); position: relative; }
+.prow.hidden .thumb { opacity: .4; }
+.prow .t { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow .t input { width: 100%; max-width: 320px; height: 24px; border: 1px solid var(--accent); border-radius: 4px; background: var(--track); outline: 0; padding: 0 6px; font-weight: 600; font-size: 13px; }
+.prow .m { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.badge { font-size: 11px; padding: 0 6px; border-radius: 9px; line-height: 17px; background: var(--track); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+.badge.live { color: var(--accent); border-color: transparent; background: var(--accent-soft); }
+.badge.warn { color: var(--warn); border-color: var(--warn); background: none; }
+.prow .tools { display: flex; gap: 2px; align-items: center; }
+.prow .tools .more { opacity: 0; transition: opacity .1s; }
+.prow:hover .tools .more, .prow.sel .tools .more { opacity: 1; }
+.tog { width: 30px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: var(--faint); }
+.tog:hover { background: var(--card); color: var(--fg); }
+.tog.on { color: var(--accent); }
+.tog.warnon { color: var(--warn); }
+
+.closed { flex: none; border-top: 1px solid var(--line); padding-top: 10px; display: flex; align-items: center; gap: 10px; }
+.closed .label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.closed .strip { display: flex; gap: 8px; overflow-x: auto; flex: 1; padding: 2px; }
+.closed .cthumb { width: 64px; height: 40px; flex: none; border-radius: 4px; background-size: cover; background-position: center; outline: 1px solid var(--line); opacity: .75; position: relative; }
+.closed .cthumb:hover { opacity: 1; outline: 2px solid var(--accent); }
+.closed .cthumb:hover::after { content: "恢复"; position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; border-radius: 4px; }
+
+/* 历史页 */
+.hist { flex: 1; min-height: 0; display: flex; }
+.hist-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.filters { display: flex; align-items: center; gap: 6px; padding: 0 24px 10px; flex: none; }
+.chip { height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); display: inline-flex; align-items: center; gap: 6px; }
+.chip:hover { color: var(--fg); background: var(--hover); }
+.chip.on { color: var(--on-accent); background: var(--accent); border-color: transparent; }
+.chip .n { font-weight: 500; opacity: .75; }
+.filters .grow { flex: 1; }
+.zoom { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.zoom input { width: 90px; accent-color: var(--accent); }
+.notice { margin: 0 24px 10px; padding: 8px 12px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.notice b { color: var(--fg); font-weight: 600; }
+.notice .grow { flex: 1; }
+.grid { flex: 1; min-height: 0; overflow-y: auto; padding: 0 24px 80px; position: relative; }
+.day { position: sticky; top: 0; z-index: 3; background: var(--page); padding: 10px 0 8px; font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.day span { font-weight: 400; color: var(--faint); font-size: 12px; }
+.rowx { display: flex; gap: 8px; margin-bottom: 8px; }
+.card { position: relative; border-radius: 6px; overflow: hidden; background: var(--card); flex: none; cursor: default; outline: 1px solid var(--line); outline-offset: -1px; }
+.card img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.card:hover { outline: 1px solid var(--border); }
+.card.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+.card .tl { position: absolute; left: 6px; top: 6px; display: flex; gap: 4px; }
+.card .pill { font-size: 11px; line-height: 18px; padding: 0 6px; border-radius: 9px; background: rgba(12,15,19,.72); color: #e6edf3; display: inline-flex; align-items: center; gap: 4px; backdrop-filter: blur(4px); }
+.card .pill .live { width: 6px; height: 6px; border-radius: 50%; background: #40ce9d; }
+.card .pill .dead { width: 6px; height: 6px; border-radius: 50%; background: #8997a6; }
+.card .star { position: absolute; right: 6px; bottom: 6px; color: #f2c94c; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+.card .star svg { fill: #f2c94c; stroke: #f2c94c; width: 14px; height: 14px; }
+.card .acts { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.card:hover .acts { opacity: 1; }
+.card .acts button { width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; background: rgba(12,15,19,.78); color: #e6edf3; }
+.card .acts button:hover { background: var(--accent); color: var(--on-accent); }
+.card .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; font-size: 11px; color: #e6edf3; background: linear-gradient(transparent, rgba(8,10,13,.82)); opacity: 0; transition: opacity .12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card:hover .cap, .card.sel .cap { opacity: 1; }
+.card .check { position: absolute; left: 6px; bottom: 6px; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: none; place-items: center; }
+.card.sel .check { display: grid; }
+.card .check svg { width: 12px; height: 12px; stroke-width: 2.6; }
+.empty { padding: 60px 0; text-align: center; color: var(--muted); }
+.marquee { position: absolute; border: 1px solid var(--accent); background: var(--accent-soft); pointer-events: none; z-index: 4; }
+
+.detail { width: 320px; flex: none; border-left: 1px solid var(--line); background: var(--side); display: flex; flex-direction: column; min-height: 0; }
+.detail.closed-pane { display: none; }
+.detail .dhead { display: flex; align-items: center; padding: 10px 10px 6px 16px; font-size: 12px; color: var(--muted); }
+.detail .dhead .grow { flex: 1; }
+.detail .dbody { overflow-y: auto; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.detail .preview { border-radius: 8px; overflow: hidden; outline: 1px solid var(--line); background: var(--track); display: grid; place-items: center; max-height: 220px; }
+.detail .preview img { max-width: 100%; max-height: 220px; display: block; }
+.detail .title-in { width: 100%; height: 30px; border: 1px solid transparent; border-radius: 6px; background: none; outline: 0; padding: 0 6px; margin-left: -6px; font-size: 15px; font-weight: 600; }
+.detail .title-in:hover { border-color: var(--line); }
+.detail .title-in:focus { border-color: var(--accent); background: var(--track); }
+.kv { display: grid; grid-template-columns: 64px 1fr; gap: 4px 8px; font-size: 12px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sec-t { font-size: 12px; color: var(--muted); margin-bottom: 4px; display: flex; align-items: center; }
+.sec-t .grow { flex: 1; }
+.outs { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.outs div { display: flex; align-items: center; gap: 6px; }
+.outs a { color: var(--accent); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ocr { font-size: 12px; background: var(--track); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 120px; overflow: auto; user-select: text; white-space: pre-wrap; }
+.dacts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.dacts .btn { justify-content: center; }
+.dacts .btn.wide { grid-column: 1 / -1; }
+.multi-note { font-size: 13px; color: var(--muted); padding: 20px 0; text-align: center; }
+
+.selbar { position: absolute; left: 50%; bottom: 20px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: 4px; padding: 6px; border-radius: 10px; background: var(--menu); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; z-index: 20; }
+.selbar.on { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.selbar .n { padding: 0 10px; font-size: 13px; font-weight: 600; }
+.toast { position: absolute; left: 50%; bottom: 20px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; border-radius: 10px; background: var(--menu); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 13px; transition: .15s; z-index: 30; }
+.toast.on { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.toast button { color: var(--accent); font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+.toast button:hover { background: var(--hover); }
+.toast.above { bottom: 72px; }
+
+.ctx { position: fixed; z-index: 50; min-width: 200px; padding: 4px; border-radius: 8px; background: var(--menu); border: 1px solid var(--line); box-shadow: var(--shadow); display: none; font-size: 13px; }
+.ctx.on { display: block; }
+.ctx button { width: 100%; height: 28px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 5px; text-align: left; }
+.ctx button:hover { background: var(--hover); }
+.ctx button kbd { margin-left: auto; font: 11px var(--ui); color: var(--faint); }
+.ctx button.danger { color: var(--danger); }
+.ctx hr { border: 0; height: 1px; background: var(--line); margin: 4px 6px; }
+
+.ql { position: fixed; inset: 0; z-index: 60; background: var(--scrim); display: none; place-items: center; backdrop-filter: blur(2px); }
+.ql.on { display: grid; }
+.ql figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.ql img { max-width: 82vw; max-height: 78vh; border-radius: 6px; box-shadow: var(--shadow); }
+.ql figcaption { color: #e6edf3; font-size: 13px; text-shadow: 0 1px 2px #000; }
+.ql .nav-a { position: fixed; top: 50%; width: 44px; height: 44px; border-radius: 22px; background: rgba(12,15,19,.7); color: #fff; display: grid; place-items: center; }
+.ql .nav-a.l { left: 24px; } .ql .nav-a.r { right: 24px; }
+
+/* 设置页 */
+.settings { flex: 1; min-height: 0; overflow-y: auto; padding: 0 32px 32px; }
+.sgroup { margin-bottom: 20px; }
+.sgroup h3 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 0 8px; }
+.scard { background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+.srow { display: flex; align-items: center; gap: 16px; padding: 12px 16px; min-height: 56px; }
+.srow + .srow { border-top: 1px solid var(--line); }
+.srow .txt { flex: 1; min-width: 0; }
+.srow .txt b { font-weight: 600; display: block; font-size: 14px; }
+.srow .txt span { color: var(--muted); font-size: 12px; }
+.switch { width: 40px; height: 20px; border-radius: 10px; background: var(--raised); position: relative; flex: none; }
+.switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--fg); transition: .15s; }
+.switch.on { background: var(--accent); }
+.switch.on::after { left: 23px; background: var(--on-accent); }
+.seg { display: flex; padding: 2px; border-radius: 6px; background: var(--track); border: 1px solid var(--line); }
+.seg button { padding: 3px 12px; border-radius: 4px; font-size: 12px; color: var(--muted); }
+.seg button.on { background: var(--nav-sel); color: var(--fg); font-weight: 600; }
+.store { display: grid; grid-template-columns: 100px 1fr 72px auto; gap: 12px; align-items: center; padding: 10px 16px; font-size: 13px; }
+.store + .store { border-top: 1px solid var(--line); }
+.store .bar { height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; }
+.store .bar i { display: block; height: 100%; border-radius: 3px; }
+.store .sz { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.placeholder { margin: 40px auto; max-width: 420px; text-align: center; color: var(--muted); font-size: 13px; }
+
+/* 窄窗口 */
+@media (max-width: 1000px) {
+  .detail { position: absolute; right: 0; top: 0; bottom: 0; z-index: 15; box-shadow: var(--shadow); }
+  .detail.auto-hide { display: none; }
+}
+@media (max-width: 760px) {
+  .app { --side-w: 56px; }
+  .brand b, .nav .label, .nav .count, .nav .chev, .side-foot, .sub, .proto-tag, .theme-switch { display: none !important; }
+  .nav { justify-content: center; padding: 0; }
+  .search kbd { display: none; }
+  .page-head, .filters, .pins-wrap, .grid { padding-left: 16px; padding-right: 16px; }
+  .notice { margin-left: 16px; margin-right: 16px; }
+  .zoom { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="titlebar">
+    <div class="brand"><span class="logo"></span><b>RaiShot</b></div>
+    <label class="search"><svg class="i"><use href="#i-search"/></svg><input id="q" placeholder="搜索标题、来源应用、日期、识别过的文字"><kbd>Ctrl F</kbd></label>
+    <div class="spacer"></div>
+    <span class="proto-tag">原型</span>
+    <div class="theme-switch" id="themeSwitch"><button data-t="system" class="on">系统</button><button data-t="dark">深色</button><button data-t="light">浅色</button></div>
+    <div class="winbtns"><span><svg class="i"><path d="M4 8h8"/></svg></span><span><svg class="i"><rect x="4" y="4" width="8" height="8"/></svg></span><span class="x"><svg class="i"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></div>
+  </header>
+
+  <nav class="side" id="side">
+    <button class="nav on" data-page="pins" title="贴图 Ctrl+1"><svg class="i"><use href="#i-pin"/></svg><span class="label">贴图</span><span class="count" id="pinCount"></span></button>
+    <button class="nav" data-page="history" title="历史 Ctrl+2"><svg class="i"><use href="#i-clock"/></svg><span class="label">历史</span></button>
+    <button class="nav" data-page="starred" title="收藏 Ctrl+3"><svg class="i"><use href="#i-star"/></svg><span class="label">收藏</span><span class="count" id="starCount"></span></button>
+    <div class="side-sep"></div>
+    <button class="nav" id="settingsNav" data-page="settings" title="设置 Ctrl+,"><svg class="i"><use href="#i-gear"/></svg><span class="label">设置</span><svg class="i chev"><path d="M6 4l4 4-4 4"/></svg></button>
+    <div class="sub" id="settingsSub"></div>
+    <div class="side-foot">
+      <div>历史占用 1.9 GB / 5 GB</div>
+      <div class="bar"><i></i></div>
+    </div>
+  </nav>
+
+  <main class="main">
+    <!-- 贴图 -->
+    <section class="page on" id="page-pins">
+      <div class="page-head">
+        <h1>贴图</h1><span class="sub-title" id="pinsSub"></span>
+        <div class="grow"></div>
+        <button class="btn ghost" id="hideAll"><svg class="i"><use href="#i-eye-off"/></svg>隐藏本组</button>
+        <button class="btn ghost"><svg class="i"><use href="#i-clip"/></svg>剪贴板贴图</button>
+        <button class="btn primary"><svg class="i"><use href="#i-crop"/></svg>截图</button>
+      </div>
+      <div class="pins-wrap">
+        <div class="screenmap" id="map"><div class="legend">单击定位 · 双击置前 · 拖动移动真实贴图 · 虚线为隐藏</div><div class="map-resize" id="mapResize"></div></div>
+        <div class="groups" id="groups"></div>
+        <div class="pinlist" id="pinlist"></div>
+        <div class="closed"><span class="label">最近关闭</span><div class="strip" id="closedStrip"></div><button class="btn ghost" id="restoreAll">全部恢复</button><button class="btn ghost" data-goto="history" data-filter="pin">更多…</button></div>
+      </div>
+    </section>
+
+    <!-- 历史 / 收藏 共用 -->
+    <section class="page" id="page-history">
+      <div class="page-head"><h1 id="histTitle">历史</h1><span class="sub-title" id="histSub"></span><div class="grow"></div>
+        <button class="iconbtn" id="toggleDetail" title="详情栏"><svg class="i"><use href="#i-panel"/></svg></button>
+      </div>
+      <div class="filters" id="filters"></div>
+      <div class="notice" id="histNotice"><svg class="i"><use href="#i-info"/></svg><span><b>仅保存在本机。</b>保留 30 天、上限 5 GB，收藏的条目不清理。</span><span class="grow"></span><button class="btn ghost" data-goto="settings" data-sub="storage">历史与存储设置</button><button class="iconbtn" id="closeNotice"><svg class="i"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+      <div class="hist">
+        <div class="hist-main"><div class="grid" id="grid" tabindex="0"></div></div>
+        <aside class="detail" id="detail"></aside>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section class="page" id="page-settings">
+      <div class="page-head" style="flex-direction:column;align-items:flex-start;gap:2px;padding-left:32px"><h1 id="setTitle"></h1><span class="sub-title" id="setDesc"></span></div>
+      <div class="settings" id="settingsBody"></div>
+    </section>
+
+    <div class="selbar" id="selbar"><span class="n" id="selN"></span>
+      <button class="btn ghost" data-bulk="star"><svg class="i"><use href="#i-star"/></svg>收藏</button>
+      <button class="btn ghost" data-bulk="export"><svg class="i"><use href="#i-folder"/></svg>导出到文件夹</button>
+      <button class="btn ghost" data-bulk="delete" style="color:var(--danger)"><svg class="i"><use href="#i-trash"/></svg>删除</button>
+      <button class="iconbtn" data-bulk="clear" title="取消选择 Esc"><svg class="i"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <div class="toast" id="toast"><span id="toastText"></span><button id="toastUndo">撤销</button></div>
+  </main>
+</div>
+
+<div class="ctx" id="ctx"></div>
+<div class="ql" id="ql"><button class="nav-a l" id="qlPrev"><svg class="i"><path d="M10 3L5 8l5 5"/></svg></button><figure><img id="qlImg" alt=""><figcaption id="qlCap"></figcaption></figure><button class="nav-a r" id="qlNext"><svg class="i"><path d="M6 3l5 5-5 5"/></svg></button></div>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="9" height="7" rx="1"/><path d="M5 13.5h8.5V6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.4"/></symbol>
+  <symbol id="i-star" viewBox="0 0 16 16"><path d="M8 2.2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.4l-3.6 1.9.7-4-2.9-2.8 4-.6z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 16 16"><path d="M2 2l12 12M6.6 6.6a2 2 0 002.8 2.8M4.2 4.8C2.6 6 1.5 8 1.5 8S4 12.5 8 12.5c1.3 0 2.4-.4 3.3-1M7 3.6c.3 0 .7-.1 1-.1 4 0 6.5 4.5 6.5 4.5s-.5 1-1.5 2"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.2"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></symbol>
+  <symbol id="i-unlock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.2"/><path d="M5.5 7V5a2.5 2.5 0 014.8-1"/></symbol>
+  <symbol id="i-through" viewBox="0 0 16 16"><path d="M4 2.5l7.5 5.2-3.3.6 1.9 3.9-1.6.8-1.9-3.9L4 11.6z"/><path d="M11 12.5h3M12.5 11v3" opacity=".9"/></symbol>
+  <symbol id="i-target" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.2"/><path d="M10.5 5.5V3.7c0-.7-.5-1.2-1.2-1.2H3.7c-.7 0-1.2.5-1.2 1.2v5.6c0 .7.5 1.2 1.2 1.2h1.8"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".8"/><circle cx="8" cy="8" r=".8"/><circle cx="12.5" cy="8" r=".8"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M2 4.5c0-.6.4-1 1-1h3l1.5 1.5H13c.6 0 1 .4 1 1V12c0 .6-.4 1-1 1H3c-.6 0-1-.4-1-1z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 9h6.6l.7-9"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.5v9l7-4.5z"/></symbol>
+  <symbol id="i-text" viewBox="0 0 16 16"><path d="M3 4V3h10v1M8 3v10M6 13h4"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.2"/><path d="M10 3v10"/></symbol>
+  <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 7.2V11M8 5v.1"/></symbol>
+  <symbol id="i-crop" viewBox="0 0 16 16"><path d="M4 1.5V12h10.5M1.5 4H12v10.5"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 16 16"><rect x="3.5" y="3" width="9" height="11" rx="1.2"/><path d="M6 3V2h4v1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></symbol>
+  <symbol id="i-ocr" viewBox="0 0 16 16"><path d="M2 5V3h2M12 3h2v2M14 11v2h-2M4 13H2v-2M5 6h6M5 8h6M5 10h4"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 16 16"><path d="M3 8a5 5 0 105-5H5M5 1v4h4" transform="translate(0 .5)"/></symbol>
+</svg>
+
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const icon = (id, extra = "") => `<svg class="i" ${extra}><use href="#i-${id}"/></svg>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ---------- 主题 ---------- */
+$("#themeSwitch").addEventListener("click", e => {
+  const t = e.target.closest("button")?.dataset.t; if (!t) return;
+  if (t === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = t;
+  $$("#themeSwitch button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+});
+
+/* ---------- 假截图缩略图（程序生成 SVG） ---------- */
+function rng(seed) { let s = seed * 9301 + 49297; return () => ((s = (s * 9301 + 49297) % 233280) / 233280); }
+const thumbCache = new Map();
+function thumb(kind, w, h, seed) {
+  const key = kind + w + "x" + h + seed; if (thumbCache.has(key)) return thumbCache.get(key);
+  const r = rng(seed); const W = 480, H = Math.round(480 * h / w); let s = "";
+  const line = (x, y, len, c, t = 6) => `<rect x="${x}" y="${y}" width="${len}" height="${t}" rx="${t / 2}" fill="${c}"/>`;
+  if (kind === "code") {
+    s += `<rect width="${W}" height="${H}" fill="#1e2228"/><rect width="${W}" height="22" fill="#262b33"/>`;
+    const cs = ["#c678dd", "#61afef", "#98c379", "#e5c07b", "#abb2bf", "#56b6c2"];
+    for (let y = 34, n = 0; y < H - 10; y += 14, n++) { let x = 30 + (n % 5 > 2 ? 18 : 0); s += line(8, y, 12, "#4b5263", 5); for (let k = 0; k < 4 && x < W - 30; k++) { const l = 20 + r() * 70; s += line(x, y, l, cs[(r() * cs.length) | 0], 5); x += l + 8; } }
+  } else if (kind === "web") {
+    s += `<rect width="${W}" height="${H}" fill="#e9edf1"/><rect width="${W}" height="34" fill="#d5dce3"/><rect x="12" y="10" width="${W * .5}" height="14" rx="7" fill="#f4f6f8"/>`;
+    s += `<rect x="24" y="52" width="${W * .55}" height="14" rx="3" fill="#2f3a46"/>`;
+    for (let y = 80; y < H * .55; y += 12) s += line(24, y, W * (.4 + r() * .45), "#9aa6b2", 5);
+    s += `<rect x="24" y="${H * .6}" width="${W * .42}" height="${H * .3}" rx="6" fill="hsl(${(r() * 360) | 0},45%,62%)"/>`;
+    for (let y = H * .6; y < H * .9; y += 12) s += line(W * .5, y, W * (.2 + r() * .25), "#9aa6b2", 5);
+  } else if (kind === "chart") {
+    s += `<rect width="${W}" height="${H}" fill="#232a33"/>`;
+    const n = 9, bw = (W - 60) / n; for (let k = 0; k < n; k++) { const bh = (H - 70) * (.25 + r() * .7); s += `<rect x="${36 + k * bw}" y="${H - 30 - bh}" width="${bw * .6}" height="${bh}" rx="3" fill="${k % 3 ? "#40ce9d" : "#5aa9e6"}"/>`; }
+    s += line(24, 18, 120, "#d9e2e9", 8) + `<rect x="30" y="${H - 30}" width="${W - 50}" height="1" fill="#566270"/>`;
+  } else if (kind === "chat") {
+    s += `<rect width="${W}" height="${H}" fill="#202830"/>`;
+    for (let y = 18; y < H - 30; y += 38) { const me = r() > .5, l = 120 + r() * 180; s += `<rect x="${me ? W - l - 16 : 16}" y="${y}" width="${l}" height="28" rx="10" fill="${me ? "#2f6e57" : "#34404c"}"/>`; }
+  } else if (kind === "table") {
+    s += `<rect width="${W}" height="${H}" fill="#e6eaee"/><rect width="${W}" height="26" fill="#2b6cb0"/>`;
+    for (let y = 26, i = 0; y < H; y += 22, i++) { s += `<rect y="${y}" width="${W}" height="22" fill="${i % 2 ? "#dde3e8" : "#eef1f4"}"/>`; for (let x = 10; x < W; x += 96) s += line(x, y + 8, 40 + r() * 40, "#5b6876", 5); }
+  } else if (kind === "term") {
+    s += `<rect width="${W}" height="${H}" fill="#0f1216"/>`;
+    for (let y = 16; y < H - 8; y += 13) { s += line(10, y, 10, "#40ce9d", 5) + line(26, y, 40 + r() * 260, r() > .8 ? "#ef6b6b" : "#9fb0bf", 5); }
+  } else if (kind === "text") {
+    s += `<rect width="${W}" height="${H}" fill="#262d36"/>`;
+    for (let y = 24; y < H - 16; y += 22) s += line(20, y, W * (.5 + r() * .42), "#d9e2e9", 9);
+  } else { /* video */
+    s += `<defs><linearGradient id="g${seed}" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="hsl(${(r() * 360) | 0},40%,30%)"/><stop offset="1" stop-color="#11161b"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#g${seed})"/>`;
+    s += `<rect x="${W * .12}" y="${H * .18}" width="${W * .76}" height="${H * .6}" rx="8" fill="#e9edf1" opacity=".85"/>`;
+    for (let y = H * .28; y < H * .7; y += 12) s += line(W * .18, y, W * (.3 + r() * .35), "#8a96a3", 5);
+    s += `<circle cx="${W / 2}" cy="${H / 2}" r="26" fill="rgba(0,0,0,.55)"/><path d="M${W / 2 - 8} ${H / 2 - 13}v26l20-13z" fill="#fff"/>`;
+  }
+  const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">${s}</svg>`);
+  thumbCache.set(key, url); return url;
+}
+
+/* ---------- 数据 ---------- */
+const NOW = new Date(2026, 9, 19, 16, 40);
+const groups = [
+  { id: "g0", name: "默认", color: "#40ce9d" },
+  { id: "g1", name: "设计稿", color: "#5aa9e6" },
+  { id: "g2", name: "资料", color: "#e6b450" },
+];
+let currentGroup = "g0", viewGroup = "g0";
+const monitors = [
+  { name: "1 · 主屏 2560×1440 150%", x: 0, y: 0, w: 2560, h: 1440 },
+  { name: "2 · 1920×1080 100%", x: 2560, y: 220, w: 1920, h: 1080 },
+];
+const apps = [["Chrome", "Rust 文档 - std::sync"], ["VS Code", "pin_view.rs — RaiShot"], ["Figma", "主界面 v3"], ["微信", "设计讨论"], ["Excel", "Q3 汇总.xlsx"], ["Windows Terminal", "cargo check"], ["Edge", "GPUI Examples"], ["飞书", "需求评审"]];
+const kinds = ["web", "code", "chart", "chat", "table", "term", "web", "chat"];
+let seq = 1;
+const items = [];
+function add(o) { o.id = "r" + seq++; o.seed = seq * 7; items.push(o); return o; }
+function at(dayOffset, h, m) { const d = new Date(NOW); d.setDate(d.getDate() - dayOffset); d.setHours(h, m, 0, 0); return d; }
+// 屏幕上的贴图
+const livePins = [
+  ["接口签名参考", 0, 16, 31, 1, [140, 160, 820, 520], {}],
+  ["色板与间距", 0, 15, 58, 2, [1050, 120, 640, 760], {}],
+  ["报错堆栈", 0, 15, 12, 5, [1760, 900, 700, 360], { locked: true }],
+  ["客户反馈截图", 0, 14, 47, 3, [2700, 420, 520, 640], {}],
+  ["Q3 数字", 0, 11, 5, 4, [3300, 520, 900, 420], { through: true }],
+  ["会议要点", 1, 18, 20, 7, [-980, 300, 560, 380], {}, "text"],
+  ["待办截屏", 1, 10, 2, 0, [300, 900, 600, 360], { hidden: true }],
+  ["组件稿 A", 1, 9, 40, 2, [200, 200, 700, 500], {}, null, "g1"],
+  ["组件稿 B", 1, 9, 42, 2, [960, 200, 700, 500], {}, null, "g1"],
+  ["论文图 3", 3, 20, 11, 0, [400, 300, 900, 600], {}, null, "g2"],
+];
+for (const [title, d, h, m, a, rect, st, text, g] of livePins) {
+  add({ kind: text ? "text" : "pin", state: "live", title, t: at(d, h, m), app: apps[a][0], win: apps[a][1], w: rect[2], h: rect[3], shape: text ? "text" : kinds[a],
+    pin: { group: g || "g0", x: rect[0], y: rect[1], w: rect[2], h: rect[3], zoom: 100, hidden: !!st.hidden, locked: !!st.locked, through: !!st.through },
+    outputs: ["贴出"], starred: title === "色板与间距", ocr: title === "报错堆栈" ? "thread 'main' panicked at src/pin_view.rs:812:9:\ncalled `Option::unwrap()` on a `None` value\nnote: run with `RUST_BACKTRACE=1`" : "" });
+}
+// 已关闭贴图
+[["旧版工具栏", 0, 13, 30, 2], ["对比图", 0, 10, 11, 0], ["地址截图", 1, 16, 3, 3], ["参数表", 2, 15, 30, 4]].forEach(([title, d, h, m, a]) =>
+  add({ kind: "pin", state: "closed", title, t: at(d, h, m), app: apps[a][0], win: apps[a][1], w: 600 + (seq % 3) * 120, h: 380 + (seq % 4) * 60, shape: kinds[a], outputs: ["贴出", "已关闭"], ocr: "" }));
+// 截图
+const shotSizes = [[1280, 720], [860, 540], [600, 800], [1920, 1080], [420, 300], [1100, 620], [760, 760], [980, 420]];
+const plan = [[0, 9], [1, 8], [2, 6], [3, 5], [6, 7], [9, 6]];
+for (const [d, n] of plan) for (let k = 0; k < n; k++) {
+  const a = (d * 3 + k) % apps.length, sz = shotSizes[(d + k * 3) % shotSizes.length];
+  const outs = k % 3 === 0 ? ["已复制", "已保存 D:\\截图\\RaiShot\\2026-10-" + (19 - d) + "_" + (10 + k) + ".png"] : ["已复制"];
+  add({ kind: "shot", title: "", t: at(d, 17 - k, (k * 13) % 60), app: apps[a][0], win: apps[a][1], w: sz[0], h: sz[1], shape: kinds[a], outputs: outs, starred: d === 2 && k === 1,
+    ocr: kinds[a] === "table" ? "项目\t数量\t金额\n华东\t128\t46,200\n华南\t96\t31,050" : (kinds[a] === "web" && k % 2 ? "Struct std::sync::Mutex\nA mutual exclusion primitive useful for protecting shared data" : "") });
+}
+// 录屏
+[[0, 12, 20, 42, false], [1, 15, 2, 8, true], [3, 11, 45, 133, false], [6, 9, 30, 21, true]].forEach(([d, h, m, dur, gif], k) =>
+  add({ kind: "rec", title: "", t: at(d, h, m), app: apps[(k * 2) % apps.length][0], win: apps[(k * 2) % apps.length][1], w: 1280, h: 720, shape: "video", dur, gif, outputs: [(gif ? "GIF" : "MP4") + " D:\\Videos\\RaiShot\\rec-2026-10-" + (19 - d) + ".mp4"], ocr: "", bytes: gif ? 3.2 : 18.6 }));
+items.sort((a, b) => b.t - a.t);
+
+/* ---------- 工具 ---------- */
+const pad = n => String(n).padStart(2, "0");
+const hm = d => pad(d.getHours()) + ":" + pad(d.getMinutes());
+const WEEK = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+function dayKey(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+function dayLabel(d) {
+  const a = new Date(NOW); a.setHours(0, 0, 0, 0); const b = new Date(d); b.setHours(0, 0, 0, 0);
+  const diff = Math.round((a - b) / 864e5);
+  if (diff === 0) return ["今天", (d.getMonth() + 1) + "月" + d.getDate() + "日"];
+  if (diff === 1) return ["昨天", (d.getMonth() + 1) + "月" + d.getDate() + "日"];
+  if (diff < 7) return [WEEK[d.getDay()], (d.getMonth() + 1) + "月" + d.getDate() + "日"];
+  return [(d.getMonth() + 1) + "月" + d.getDate() + "日", WEEK[d.getDay()]];
+}
+function relTime(d) { const [l] = dayLabel(d); return (l === "今天" ? "" : l + " ") + hm(d); }
+const kindName = it => ({ shot: "截图", pin: "贴图", text: "文字贴图", rec: it.gif ? "GIF 录屏" : "录屏" }[it.kind]);
+const durStr = s => Math.floor(s / 60) + ":" + pad(s % 60);
+const displayTitle = it => it.title || (it.kind === "rec" ? "录屏 " + hm(it.t) : it.app + " · " + hm(it.t));
+const thumbOf = it => thumb(it.shape, it.w, it.h, it.seed);
+let toastTimer = null;
+function toast(text, undo) {
+  $("#toastText").textContent = text; const u = $("#toastUndo"); u.style.display = undo ? "" : "none"; u.onclick = () => { undo(); hideToast(); };
+  const t = $("#toast"); t.classList.toggle("above", $("#selbar").classList.contains("on")); t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, undo ? 10000 : 2600);
+}
+function hideToast() { $("#toast").classList.remove("on"); }
+
+/* ---------- 导航 ---------- */
+const settingsPages = [
+  ["general", "常规", "界面外观、语言与开机启动"], ["capture", "截图", "框选、控件吸附与截图内容"], ["pin", "贴图", "恢复、缩放与标题"],
+  ["record", "录屏", "输出目录、格式、帧率与声音"], ["translate", "翻译", "识别出的文字译成哪种语言"], ["hotkeys", "快捷键", "全局快捷键与快捷动作"],
+  ["save", "保存", "默认目录、文件命名与图片格式"], ["toolbar", "工具栏", "截图与贴图共用的工具及排列顺序"], ["storage", "历史与存储", "记录哪些内容、保留多久、占用多少空间"],
+];
+let page = "pins", settingsSub = "storage";
+$("#settingsSub").innerHTML = settingsPages.map(([id, name]) => `<button class="nav" data-sub="${id}"><span class="label">${name}</span></button>`).join("");
+function go(p, opts = {}) {
+  page = p; if (opts.sub) settingsSub = opts.sub;
+  $$("#side > .nav").forEach(n => n.classList.toggle("on", n.dataset.page === p));
+  $("#settingsNav").classList.toggle("open", p === "settings"); $("#settingsSub").classList.toggle("open", p === "settings");
+  $$("#settingsSub .nav").forEach(n => n.classList.toggle("on", n.dataset.sub === settingsSub));
+  $$(".page").forEach(s => s.classList.remove("on"));
+  const sec = p === "starred" ? "history" : p; $("#page-" + sec).classList.add("on");
+  if (p === "history" || p === "starred") { if (opts.filter) filter = opts.filter; clearSel(); renderHistory(); }
+  if (p === "pins") renderPins();
+  if (p === "settings") renderSettings();
+  counts(); updateSelbar();
+}
+$("#side").addEventListener("click", e => {
+  const sub = e.target.closest("[data-sub]"); if (sub) return go("settings", { sub: sub.dataset.sub });
+  const n = e.target.closest("[data-page]"); if (n) go(n.dataset.page);
+});
+document.addEventListener("click", e => { const g = e.target.closest("[data-goto]"); if (g) go(g.dataset.goto, { filter: g.dataset.filter, sub: g.dataset.sub }); });
+
+/* ---------- 贴图页 ---------- */
+let selPin = null;
+const live = () => items.filter(i => i.state === "live");
+const inGroup = g => live().filter(i => i.pin.group === g);
+function counts() {
+  $("#pinCount").textContent = inGroup(currentGroup).filter(i => !i.pin.hidden).length;
+  $("#starCount").textContent = items.filter(i => i.starred).length || "";
+}
+function renderPins() {
+  counts();
+  const g = groups.find(x => x.id === viewGroup);
+  const list = inGroup(viewGroup);
+  const off = list.filter(isOffscreen).length;
+  const hid = list.filter(i => i.pin.hidden).length;
+  $("#pinsSub").textContent = (viewGroup === currentGroup ? "屏幕上 " : "未显示 · ") + list.length + " 张" + (hid ? " · " + hid + " 张隐藏" : "") + (off ? " · " + off + " 张在屏幕外" : "");
+  $("#hideAll").innerHTML = viewGroup === currentGroup ? icon("eye-off") + "隐藏本组" : icon("eye") + "显示本组";
+  renderGroups(); renderMap(); renderPinList(); renderClosed();
+}
+function renderGroups() {
+  $("#groups").innerHTML = groups.map(g => `<button class="gtab ${g.id === viewGroup ? "on" : ""}" draggable="true" data-g="${g.id}" title="${g.id === currentGroup ? "屏幕上正在显示的分组" : "单击切换为屏幕上显示的分组"}">
+    <span class="dot" style="background:${g.id === currentGroup ? g.color : "transparent"};outline:1.5px solid ${g.color}"></span><span class="gname">${esc(g.name)}</span><span class="n">${inGroup(g.id).length}</span></button>`).join("")
+    + `<button class="iconbtn" id="addGroup" title="新建分组"><svg class="i"><path d="M8 3v10M3 8h10"/></svg></button><span class="grow"></span><span class="hint">双击改名 · 拖动排序 · 把贴图拖到分组上移动</span>`;
+}
+$("#groups").addEventListener("click", e => {
+  if (e.target.closest("#addGroup")) { const g = { id: "g" + Date.now(), name: "新分组", color: ["#c678dd", "#ef6b6b", "#56b6c2"][groups.length % 3] }; groups.push(g); viewGroup = g.id; renderPins(); startRename(g.id); return; }
+  const t = e.target.closest(".gtab"); if (!t || t.querySelector("input")) return;
+  const id = t.dataset.g; viewGroup = id;
+  if (currentGroup !== id) { const prev = currentGroup; currentGroup = id; toast("屏幕上已切换到“" + groups.find(g => g.id === id).name + "”", () => { currentGroup = prev; viewGroup = prev; renderPins(); }); }
+  selPin = null; renderPins();
+});
+$("#groups").addEventListener("dblclick", e => { const t = e.target.closest(".gtab"); if (t) startRename(t.dataset.g); });
+function startRename(id) {
+  const t = $(`.gtab[data-g="${id}"] .gname`); if (!t) return; const g = groups.find(x => x.id === id);
+  t.innerHTML = `<input value="${esc(g.name)}">`; const inp = t.querySelector("input"); inp.focus(); inp.select();
+  const done = ok => { if (ok && inp.value.trim()) g.name = inp.value.trim(); renderPins(); };
+  inp.addEventListener("keydown", ev => { ev.stopPropagation(); if (ev.key === "Enter") done(true); if (ev.key === "Escape") done(false); });
+  inp.addEventListener("blur", () => done(true));
+}
+let dragGroup = null;
+$("#groups").addEventListener("dragstart", e => { const t = e.target.closest(".gtab"); if (t) { dragGroup = t.dataset.g; e.dataTransfer.effectAllowed = "move"; } });
+$("#groups").addEventListener("dragover", e => { const t = e.target.closest(".gtab"); if (t) { e.preventDefault(); $$(".gtab").forEach(x => x.classList.toggle("drop", x === t)); } });
+$("#groups").addEventListener("dragleave", e => { const t = e.target.closest(".gtab"); if (t) t.classList.remove("drop"); });
+$("#groups").addEventListener("drop", e => {
+  const t = e.target.closest(".gtab"); if (!t) return; e.preventDefault();
+  const pinId = e.dataTransfer.getData("text/pin");
+  if (pinId) { const it = items.find(i => i.id === pinId); const from = it.pin.group; it.pin.group = t.dataset.g; toast("已移到“" + groups.find(g => g.id === t.dataset.g).name + "”", () => { it.pin.group = from; renderPins(); }); }
+  else if (dragGroup && dragGroup !== t.dataset.g) { const a = groups.findIndex(g => g.id === dragGroup), b = groups.findIndex(g => g.id === t.dataset.g); groups.splice(b, 0, groups.splice(a, 1)[0]); }
+  dragGroup = null; renderPins();
+});
+
+function virtualBounds() { const xs = monitors.flatMap(m => [m.x, m.x + m.w]), ys = monitors.flatMap(m => [m.y, m.y + m.h]); return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }; }
+function isOffscreen(it) {
+  const p = it.pin; let inter = 0;
+  for (const m of monitors) { const w = Math.max(0, Math.min(p.x + p.w, m.x + m.w) - Math.max(p.x, m.x)), h = Math.max(0, Math.min(p.y + p.h, m.y + m.h) - Math.max(p.y, m.y)); inter += w * h; }
+  return inter < p.w * p.h * .2;
+}
+let mapTf = null;
+function renderMap() {
+  const map = $("#map"); $$(".monitor,.mpin,.offscreen", map).forEach(n => n.remove());
+  const vb = virtualBounds(), W = map.clientWidth, H = map.clientHeight, padX = 120, padY = 18;
+  const sc = Math.min((W - padX * 2) / vb.w, (H - padY * 2 - 14) / vb.h);
+  const ox = (W - vb.w * sc) / 2 - vb.x * sc, oy = padY + (H - padY * 2 - 14 - vb.h * sc) / 2 - vb.y * sc;
+  mapTf = { sc, ox, oy };
+  monitors.forEach(m => { const d = document.createElement("div"); d.className = "monitor"; Object.assign(d.style, { left: ox + m.x * sc + "px", top: oy + m.y * sc + "px", width: m.w * sc + "px", height: m.h * sc + "px" }); d.innerHTML = `<span class="mlabel">${m.name}</span>`; map.appendChild(d); });
+  const list = inGroup(viewGroup);
+  list.forEach(it => {
+    const p = it.pin, off = isOffscreen(it);
+    if (off) {
+      const b = document.createElement("div"); b.className = "offscreen"; b.dataset.id = it.id;
+      const left = p.x < vb.x; b.innerHTML = (left ? "◀ " : "") + esc(displayTitle(it)) + " 在屏幕外" + (left ? "" : " ▶") + ` <button data-recall="${it.id}">调回</button>`;
+      Object.assign(b.style, left ? { left: "8px" } : { right: "8px" }); b.style.top = Math.max(8, Math.min(H - 34, oy + (p.y + p.h / 2) * sc - 12)) + "px";
+      map.appendChild(b); return;
+    }
+    const d = document.createElement("div"); d.className = "mpin" + (p.hidden ? " hidden" : "") + (selPin === it.id ? " sel" : ""); d.dataset.id = it.id;
+    Object.assign(d.style, { left: ox + p.x * sc + "px", top: oy + p.y * sc + "px", width: Math.max(8, p.w * sc) + "px", height: Math.max(6, p.h * sc) + "px", backgroundImage: `url("${thumbOf(it)}")` });
+    d.title = displayTitle(it); map.appendChild(d);
+  });
+}
+function flash(id) { selPin = id; renderPins(); const n = $(`.mpin[data-id="${id}"]`); if (n) { n.classList.remove("flash"); void n.offsetWidth; n.classList.add("flash"); } const row = $(`.prow[data-id="${id}"]`); row?.scrollIntoView({ block: "nearest" }); }
+$("#map").addEventListener("click", e => {
+  const r = e.target.closest("[data-recall]"); if (r) { const it = items.find(i => i.id === r.dataset.recall); const old = { x: it.pin.x, y: it.pin.y }; it.pin.x = 1280 - it.pin.w / 2; it.pin.y = 720 - it.pin.h / 2; flash(it.id); toast("已调回主屏中央", () => { Object.assign(it.pin, old); renderPins(); }); return; }
+});
+let mdrag = null;
+$("#map").addEventListener("pointerdown", e => {
+  const n = e.target.closest(".mpin"); if (!n) return; const it = items.find(i => i.id === n.dataset.id);
+  mdrag = { n, it, sx: e.clientX, sy: e.clientY, x: it.pin.x, y: it.pin.y, moved: false }; n.setPointerCapture(e.pointerId);
+});
+$("#map").addEventListener("pointermove", e => {
+  if (!mdrag) return; const dx = e.clientX - mdrag.sx, dy = e.clientY - mdrag.sy; if (!mdrag.moved && Math.hypot(dx, dy) < 4) return;
+  mdrag.moved = true; mdrag.n.classList.add("dragging");
+  mdrag.it.pin.x = Math.round(mdrag.x + dx / mapTf.sc); mdrag.it.pin.y = Math.round(mdrag.y + dy / mapTf.sc);
+  mdrag.n.style.left = mapTf.ox + mdrag.it.pin.x * mapTf.sc + "px"; mdrag.n.style.top = mapTf.oy + mdrag.it.pin.y * mapTf.sc + "px";
+});
+$("#map").addEventListener("pointerup", () => {
+  if (!mdrag) return; const { it, moved, x, y } = mdrag; mdrag = null;
+  if (moved) { renderPins(); toast("已移动“" + displayTitle(it) + "”", () => { it.pin.x = x; it.pin.y = y; renderPins(); }); } else flash(it.id);
+});
+$("#map").addEventListener("dblclick", e => { const n = e.target.closest(".mpin"); if (n) toast("已置前并激活“" + displayTitle(items.find(i => i.id === n.dataset.id)) + "”"); });
+// 布局图高度可拖
+$("#mapResize").addEventListener("pointerdown", e => {
+  const start = e.clientY, h0 = $("#map").offsetHeight; e.target.setPointerCapture(e.pointerId);
+  const mv = ev => { document.documentElement.style.setProperty("--map-h", Math.max(110, Math.min(420, h0 + ev.clientY - start)) + "px"); renderMap(); };
+  const up = () => { e.target.removeEventListener("pointermove", mv); e.target.removeEventListener("pointerup", up); };
+  e.target.addEventListener("pointermove", mv); e.target.addEventListener("pointerup", up);
+});
+
+function renderPinList() {
+  const list = inGroup(viewGroup);
+  if (!list.length) { $("#pinlist").innerHTML = `<div class="empty">这个分组还没有贴图。<br>截图后按中键或 Ctrl+T 贴出；也可以把贴图拖到上方分组页签。</div>`; return; }
+  $("#pinlist").innerHTML = list.map(it => {
+    const p = it.pin, off = isOffscreen(it);
+    return `<div class="prow ${p.hidden ? "hidden" : ""} ${selPin === it.id ? "sel" : ""}" data-id="${it.id}" draggable="true">
+      <div class="thumb" style="background-image:url('${thumbOf(it)}')"></div>
+      <div style="min-width:0"><div class="t">${esc(displayTitle(it))}</div>
+        <div class="m">${it.kind === "text" ? '<span class="badge">文字</span>' : ""}${off ? '<span class="badge warn">在屏幕外</span>' : ""}${p.hidden ? '<span class="badge">已隐藏</span>' : ""}<span>${p.w}×${p.h} · ${p.zoom}%</span><span>${relTime(it.t)} · ${esc(it.app)}</span></div></div>
+      <div class="tools">
+        <button class="tog ${p.hidden ? "" : "on"}" data-act="hide" title="${p.hidden ? "显示" : "隐藏"}">${icon(p.hidden ? "eye-off" : "eye")}</button>
+        <button class="tog ${p.locked ? "warnon" : ""}" data-act="lock" title="${p.locked ? "已锁定：不能拖动、缩放、编辑，单击解锁" : "锁定"}">${icon(p.locked ? "lock" : "unlock")}</button>
+        <button class="tog ${p.through ? "warnon" : ""}" data-act="through" title="${p.through ? "鼠标穿透中，单击恢复交互" : "鼠标穿透"}">${icon("through")}</button>
+        <button class="iconbtn more" data-act="locate" title="定位">${icon("target")}</button>
+        <button class="iconbtn more" data-act="close" title="关闭（可恢复）">${icon("x")}</button>
+      </div></div>`;
+  }).join("");
+}
+$("#pinlist").addEventListener("click", e => {
+  const row = e.target.closest(".prow"); if (!row) return; const it = items.find(i => i.id === row.dataset.id), p = it.pin;
+  const act = e.target.closest("[data-act]")?.dataset.act;
+  if (act === "hide") p.hidden = !p.hidden;
+  else if (act === "lock") p.locked = !p.locked;
+  else if (act === "through") p.through = !p.through;
+  else if (act === "locate") return flash(it.id);
+  else if (act === "close") { it.state = "closed"; it.outputs = [...it.outputs, "已关闭"]; toast("已关闭“" + displayTitle(it) + "”", () => { it.state = "live"; renderPins(); }); }
+  else { selPin = it.id; }
+  renderPins();
+});
+$("#pinlist").addEventListener("dblclick", e => {
+  const row = e.target.closest(".prow"); if (!row || e.target.closest("[data-act]")) return;
+  if (e.target.closest(".t")) renamePin(row.dataset.id); else flash(row.dataset.id);
+});
+function renamePin(id) {
+  const it = items.find(i => i.id === id); const t = $(`.prow[data-id="${id}"] .t`); if (!t) return;
+  t.innerHTML = `<input value="${esc(it.title)}" placeholder="未命名贴图">`; const inp = t.querySelector("input"); inp.focus(); inp.select();
+  const done = ok => { if (ok) it.title = inp.value.trim(); renderPins(); };
+  inp.addEventListener("keydown", ev => { ev.stopPropagation(); if (ev.key === "Enter") done(true); if (ev.key === "Escape") done(false); });
+  inp.addEventListener("blur", () => done(true));
+}
+$("#pinlist").addEventListener("dragstart", e => { const row = e.target.closest(".prow"); if (row) e.dataTransfer.setData("text/pin", row.dataset.id); });
+$("#hideAll").addEventListener("click", () => { if (viewGroup === currentGroup) { const l = inGroup(viewGroup).filter(i => !i.pin.hidden); l.forEach(i => i.pin.hidden = true); toast("已隐藏本组 " + l.length + " 张", () => { l.forEach(i => i.pin.hidden = false); renderPins(); }); } else { currentGroup = viewGroup; } renderPins(); });
+function renderClosed() {
+  const c = items.filter(i => i.state === "closed").slice(0, 8);
+  $("#closedStrip").innerHTML = c.length ? c.map(it => `<div class="cthumb" data-id="${it.id}" title="${esc(displayTitle(it))} · ${relTime(it.t)}" style="background-image:url('${thumbOf(it)}')"></div>`).join("") : `<span class="label">没有</span>`;
+}
+$("#closedStrip").addEventListener("click", e => { const c = e.target.closest(".cthumb"); if (c) restorePin(items.find(i => i.id === c.dataset.id)); });
+$("#restoreAll").addEventListener("click", () => { const c = items.filter(i => i.state === "closed").slice(0, 8); c.forEach(i => restorePin(i, true)); toast("已恢复 " + c.length + " 张贴图"); renderPins(); });
+function restorePin(it, quiet) {
+  it.state = "live"; it.outputs = it.outputs.filter(o => o !== "已关闭");
+  if (!it.pin) it.pin = { group: currentGroup, x: 600 + (it.seed % 5) * 90, y: 300 + (it.seed % 4) * 70, w: it.w, h: it.h, zoom: 100, hidden: false, locked: false, through: false };
+  it.pin.group = currentGroup; if (!quiet) { toast("已恢复“" + displayTitle(it) + "”（含标注与撤销记录）"); if (page === "pins") renderPins(); else renderHistory(); }
+}
+
+/* ---------- 历史页 ---------- */
+let filter = "all", rowH = 150, sel = new Set(), anchor = null, focusId = null, detailOpen = true;
+const trash = [];
+function visibleItems() {
+  const q = $("#q").value.trim().toLowerCase();
+  return items.filter(it => {
+    if (page === "starred" && !it.starred) return false;
+    if (filter === "shot" && it.kind !== "shot") return false;
+    if (filter === "pin" && !(it.kind === "pin" || it.kind === "text")) return false;
+    if (filter === "rec" && it.kind !== "rec") return false;
+    if (!q) return true;
+    const hay = [displayTitle(it), it.app, it.win, it.ocr, dayKey(it.t).slice(5), dayLabel(it.t)[0], it.w + "x" + it.h, kindName(it)].join(" ").toLowerCase();
+    return q.split(/\s+/).every(w => hay.includes(w));
+  });
+}
+function renderFilters() {
+  const base = items.filter(i => page !== "starred" || i.starred);
+  const n = k => base.filter(i => k === "all" || (k === "pin" ? (i.kind === "pin" || i.kind === "text") : i.kind === k)).length;
+  $("#filters").innerHTML = [["all", "全部"], ["shot", "截图"], ["pin", "贴图"], ["rec", "录屏"]].map(([k, l]) => `<button class="chip ${filter === k ? "on" : ""}" data-f="${k}">${l}<span class="n">${n(k)}</span></button>`).join("")
+    + `<span class="grow"></span><label class="zoom" title="缩略图大小">${icon("search")}<input type="range" min="100" max="260" value="${rowH}" id="zoomR"></label>`;
+  $("#zoomR").addEventListener("input", e => { rowH = +e.target.value; layoutGrid(); });
+}
+$("#filters").addEventListener("click", e => { const c = e.target.closest(".chip"); if (c) { filter = c.dataset.f; clearSel(); renderHistory(); } });
+function renderHistory() {
+  $("#histTitle").textContent = page === "starred" ? "收藏" : "历史";
+  $("#histNotice").style.display = page === "starred" || noticeClosed ? "none" : "";
+  renderFilters(); layoutGrid(); renderDetail(); counts();
+}
+let noticeClosed = false;
+$("#closeNotice").addEventListener("click", () => { noticeClosed = true; $("#histNotice").style.display = "none"; });
+function layoutGrid() {
+  const grid = $("#grid"); const list = visibleItems(); const W = grid.clientWidth - 48 - (window.innerWidth <= 760 ? -16 : 0);
+  $("#histSub").textContent = list.length + " 项" + ($("#q").value ? " · 搜索结果" : "");
+  if (!list.length) { grid.innerHTML = `<div class="empty">${$("#q").value ? "没有匹配的条目。可以搜索标题、应用名、10-18、昨天、1920x1080 或识别过的文字。" : page === "starred" ? "还没有收藏。在任意条目上按 S 或点 ☆ 收藏，收藏不会被自动清理。" : "还没有记录。"}</div>`; return; }
+  const byDay = []; for (const it of list) { const k = dayKey(it.t); let g = byDay[byDay.length - 1]; if (!g || g.k !== k) byDay.push(g = { k, d: it.t, items: [] }); g.items.push(it); }
+  let html = "";
+  for (const g of byDay) {
+    const [a, b] = dayLabel(g.d); html += `<div class="day">${a}<span>${b} · ${g.items.length} 项</span></div>`;
+    let row = [], sum = 0; const gap = 8;
+    const flush = last => {
+      if (!row.length) return; const avail = W - gap * (row.length - 1); const scale = last && sum * rowH < avail ? 1 : avail / (sum * rowH);
+      html += `<div class="rowx">` + row.map(it => card(it, Math.floor(Math.min(it.ar, 3) * rowH * scale), Math.round(rowH * scale))).join("") + `</div>`; row = []; sum = 0;
+    };
+    for (const it of g.items) { it.ar = Math.max(.6, Math.min(3, it.w / it.h)); row.push(it); sum += it.ar; if (sum * rowH + gap * (row.length - 1) >= W) flush(false); }
+    flush(true);
+  }
+  grid.innerHTML = html;
+}
+function card(it, w, h) {
+  const pills = [];
+  if (it.kind === "pin" || it.kind === "text") pills.push(`<span class="pill">${it.state === "live" ? '<i class="live"></i>屏幕上' : '<i class="dead"></i>已关闭'}</span>`);
+  if (it.kind === "text") pills.push(`<span class="pill">${icon("text", 'style="width:11px;height:11px"')}文字</span>`);
+  if (it.kind === "rec") pills.push(`<span class="pill">${icon("play", 'style="width:10px;height:10px;fill:currentColor"')}${it.gif ? "GIF · " : ""}${durStr(it.dur)}</span>`);
+  const primary = it.kind === "rec" ? ["play", "播放"] : it.state === "live" ? ["target", "定位"] : it.kind === "shot" ? ["pin", "贴出"] : ["restore", "恢复贴图"];
+  return `<div class="card ${sel.has(it.id) ? "sel" : ""}" data-id="${it.id}" style="width:${w}px;height:${h}px" draggable="true">
+    <img src="${thumbOf(it)}" alt="">
+    <div class="tl">${pills.join("")}</div>
+    <div class="acts"><button data-a="primary" title="${primary[1]}（双击 / Enter）">${icon(primary[0])}</button><button data-a="copy" title="复制 Ctrl+C">${icon("copy")}</button><button data-a="menu" title="更多">${icon("more")}</button></div>
+    ${it.starred ? `<span class="star">${icon("star")}</span>` : ""}
+    <span class="check">${icon("check")}</span>
+    <div class="cap">${esc(displayTitle(it))}${it.title ? " · " + hm(it.t) : ""} · ${it.w}×${it.h}</div></div>`;
+}
+function setSel(ids, focus) { sel = new Set(ids); if (focus) focusId = focus; $$(".card").forEach(c => c.classList.toggle("sel", sel.has(c.dataset.id))); renderDetail(); updateSelbar(); }
+function clearSel() { sel = new Set(); anchor = null; updateSelbar(); }
+function updateSelbar() { const on = (page === "history" || page === "starred") && sel.size > 1; $("#selbar").classList.toggle("on", on); $("#selN").textContent = "已选 " + sel.size + " 项"; }
+$("#grid").addEventListener("click", e => {
+  const c = e.target.closest(".card"); if (!c) { if (!marqueeMoved) setSel([]); return; }
+  const id = c.dataset.id, a = e.target.closest("[data-a]")?.dataset.a, it = items.find(i => i.id === id);
+  if (a === "primary") return primary(it);
+  if (a === "copy") return toast("已复制" + (it.kind === "rec" ? "文件" : "图片"));
+  if (a === "menu") { setSel([id], id); return openCtx(e.clientX, e.clientY, it); }
+  if (e.shiftKey && anchor) { const l = visibleItems().map(i => i.id), x = l.indexOf(anchor), y = l.indexOf(id); setSel(l.slice(Math.min(x, y), Math.max(x, y) + 1), id); }
+  else if (e.ctrlKey || e.metaKey) { const s = new Set(sel); s.has(id) ? s.delete(id) : s.add(id); anchor = id; setSel(s, id); }
+  else { anchor = id; setSel([id], id); }
+});
+$("#grid").addEventListener("dblclick", e => { const c = e.target.closest(".card"); if (c && !e.target.closest("[data-a]")) primary(items.find(i => i.id === c.dataset.id)); });
+$("#grid").addEventListener("contextmenu", e => { const c = e.target.closest(".card"); if (!c) return; e.preventDefault(); if (!sel.has(c.dataset.id)) { anchor = c.dataset.id; setSel([c.dataset.id], c.dataset.id); } openCtx(e.clientX, e.clientY, items.find(i => i.id === c.dataset.id)); });
+$("#grid").addEventListener("dragstart", e => { const c = e.target.closest(".card"); if (c) { const it = items.find(i => i.id === c.dataset.id); e.dataTransfer.setData("text/plain", it.kind === "rec" ? "rec.mp4" : "shot.png"); } });
+function primary(it) {
+  if (it.kind === "rec") return toast("已用系统播放器打开" + (it.gif ? " GIF" : " MP4"));
+  if (it.state === "live") return toast("已在屏幕上定位“" + displayTitle(it) + "”");
+  if (it.state === "closed") return restorePin(it);
+  toast("已贴出到原截图位置");
+}
+// 框选
+let marq = null, marqueeMoved = false;
+$("#grid").addEventListener("pointerdown", e => {
+  if (e.button !== 0 || e.target.closest(".card") || e.target.closest(".day")) return; marqueeMoved = false;
+  const g = $("#grid"), r = g.getBoundingClientRect(); marq = { x: e.clientX - r.left, y: e.clientY - r.top + g.scrollTop, base: e.ctrlKey ? new Set(sel) : new Set(), el: null };
+  g.setPointerCapture(e.pointerId);
+});
+$("#grid").addEventListener("pointermove", e => {
+  if (!marq) return; const g = $("#grid"), r = g.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top + g.scrollTop;
+  if (!marqueeMoved && Math.hypot(x - marq.x, y - marq.y) < 5) return; marqueeMoved = true;
+  if (!marq.el) { marq.el = document.createElement("div"); marq.el.className = "marquee"; g.appendChild(marq.el); }
+  const L = Math.min(x, marq.x), T = Math.min(y, marq.y), Wd = Math.abs(x - marq.x), Ht = Math.abs(y - marq.y);
+  Object.assign(marq.el.style, { left: L + "px", top: T + "px", width: Wd + "px", height: Ht + "px" });
+  const s = new Set(marq.base);
+  $$(".card", g).forEach(c => { const cr = c.getBoundingClientRect(); const cx = cr.left - r.left, cy = cr.top - r.top + g.scrollTop; if (cx < L + Wd && cx + cr.width > L && cy < T + Ht && cy + cr.height > T) s.add(c.dataset.id); });
+  setSel(s);
+});
+$("#grid").addEventListener("pointerup", () => { if (marq?.el) marq.el.remove(); marq = null; setTimeout(() => marqueeMoved = false, 0); });
+
+function renderDetail() {
+  const d = $("#detail"); d.classList.toggle("closed-pane", !detailOpen); d.classList.toggle("auto-hide", sel.size === 0);
+  $("#toggleDetail").classList.toggle("on", detailOpen);
+  if (!detailOpen) return;
+  if (sel.size > 1) { d.innerHTML = `<div class="dhead">详情<span class="grow"></span></div><div class="dbody"><div class="multi-note">已选 ${sel.size} 项<br>可收藏、导出到文件夹或删除</div></div>`; return; }
+  const it = items.find(i => i.id === [...sel][0]);
+  if (!it) { d.innerHTML = `<div class="dhead">详情</div><div class="dbody"><div class="multi-note">选择一项查看详情<br><br><span style="font-size:12px">空格 快速预览 · Enter ${"贴出／播放"}<br>F2 改标题 · S 收藏 · Delete 删除</span></div></div>`; return; }
+  const outs = it.outputs.map(o => { const m = o.match(/^(已保存|MP4|GIF) (.+)$/); return m ? `<div>${icon(m[1] === "已保存" ? "folder" : "play")}<span>${m[1] === "已保存" ? "已保存到" : m[1]}</span><a title="在资源管理器中显示">${esc(m[2])}</a></div>` : `<div>${icon(o === "已关闭" ? "x" : o === "贴出" ? "pin" : "copy")}<span>${o === "贴出" ? "贴出" + (it.state === "live" ? " · 现在在屏幕上" : "") : o}</span></div>`; }).join("");
+  const acts = it.kind === "rec"
+    ? `<button class="btn primary wide">${icon("play")}播放</button><button class="btn">${icon("copy")}复制文件</button><button class="btn">${icon("folder")}在文件夹中显示</button>${it.gif ? "" : `<button class="btn wide">转为 GIF</button>`}`
+    : `<button class="btn primary wide">${it.state === "live" ? icon("target") + "在屏幕上定位" : it.state === "closed" ? icon("restore") + "恢复贴图" : icon("pin") + "贴出"}</button><button class="btn">${icon("copy")}复制</button><button class="btn">${icon("edit")}编辑</button><button class="btn">${icon("folder")}另存为…</button><button class="btn">${icon("ocr")}识别文字</button>`;
+  d.innerHTML = `<div class="dhead">${kindName(it)}<span class="grow"></span><button class="iconbtn ${it.starred ? "on" : ""}" id="dStar" title="收藏 S">${icon("star", it.starred ? 'style="fill:currentColor"' : "")}</button><button class="iconbtn" id="dMore" title="更多">${icon("more")}</button></div>
+    <div class="dbody">
+      <div class="preview"><img src="${thumbOf(it)}" alt=""></div>
+      <input class="title-in" id="dTitle" value="${esc(it.title)}" placeholder="${esc(displayTitle(it))}" title="F2 编辑，Enter 确认，Esc 放弃">
+      <dl class="kv"><dt>时间</dt><dd>${dayLabel(it.t)[0]} ${hm(it.t)} · ${dayKey(it.t)}</dd><dt>尺寸</dt><dd>${it.w} × ${it.h}${it.kind === "rec" ? " · " + durStr(it.dur) + " · " + it.bytes + " MB" : " · " + (120 + it.seed % 900) + " KB"}</dd><dt>来源</dt><dd title="${esc(it.win)}">${esc(it.app)} — ${esc(it.win)}</dd>${it.pin ? `<dt>分组</dt><dd>${esc(groups.find(g => g.id === it.pin.group)?.name || "")}</dd>` : ""}</dl>
+      <div><div class="sec-t">去向</div><div class="outs">${outs}</div></div>
+      ${it.ocr ? `<div><div class="sec-t">识别的文字<span class="grow"></span><button class="btn ghost" style="height:22px;font-size:12px">${icon("copy")}复制</button></div><div class="ocr">${esc(it.ocr)}</div></div>` : ""}
+      <div class="dacts">${acts}</div>
+    </div>`;
+  const ti = $("#dTitle"); const orig = it.title;
+  ti.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") { it.title = ti.value.trim(); ti.blur(); layoutGrid(); } if (e.key === "Escape") { ti.value = orig; ti.blur(); } });
+  ti.addEventListener("blur", () => { if (ti.value.trim() !== it.title) { it.title = ti.value.trim(); layoutGrid(); setSel(sel); } });
+  $("#dStar").addEventListener("click", () => toggleStar([it]));
+  $("#dMore").addEventListener("click", e => openCtx(e.clientX - 180, e.clientY + 12, it));
+  $(".dacts .btn.primary", d)?.addEventListener("click", () => primary(it));
+}
+$("#toggleDetail").addEventListener("click", () => { detailOpen = !detailOpen; renderDetail(); layoutGrid(); });
+function toggleStar(list) { const on = !list.every(i => i.starred); list.forEach(i => i.starred = on); toast(on ? "已收藏 " + list.length + " 项，不会被自动清理" : "已取消收藏"); renderHistory(); setSel(sel); }
+function del(list) {
+  if (!list.length) return; const idx = list.map(i => [i, items.indexOf(i)]);
+  for (const i of list) items.splice(items.indexOf(i), 1);
+  clearSel(); renderHistory();
+  const recs = list.filter(i => i.kind === "rec").length;
+  toast("已删除 " + list.length + " 项" + (recs ? "（录屏文件移到回收站）" : ""), () => { idx.sort((a, b) => a[1] - b[1]).forEach(([i, k]) => items.splice(k, 0, i)); renderHistory(); });
+}
+$("#selbar").addEventListener("click", e => {
+  const b = e.target.closest("[data-bulk]")?.dataset.bulk; const list = items.filter(i => sel.has(i.id));
+  if (b === "star") toggleStar(list); else if (b === "delete") del(list); else if (b === "export") toast("已导出 " + list.length + " 个文件到 D:\\截图\\导出"); else if (b === "clear") setSel([]);
+});
+
+/* 右键菜单 */
+function openCtx(x, y, it) {
+  const many = sel.size > 1; const m = $("#ctx");
+  const rows = many ? [["star", "收藏 / 取消收藏", "S", "star"], ["folder", "导出到文件夹…", "", "export"], "-", ["trash", "删除 " + sel.size + " 项", "Del", "delete", "danger"]]
+    : it.kind === "rec" ? [["play", "播放", "Enter", "primary"], ["copy", "复制文件", "Ctrl C", "copy"], ["folder", "在文件夹中显示", "", "reveal"], ["play", it.gif ? "已是 GIF" : "转为 GIF", "", "gif"], "-", ["star", it.starred ? "取消收藏" : "收藏", "S", "star"], ["edit", "改标题", "F2", "rename"], "-", ["trash", "删除（文件进回收站）", "Del", "delete", "danger"]]
+    : [[it.state === "live" ? "target" : it.state === "closed" ? "restore" : "pin", it.state === "live" ? "在屏幕上定位" : it.state === "closed" ? "恢复贴图" : "贴出", "Enter", "primary"], ["search", "快速预览", "空格", "ql"], ["copy", "复制图片", "Ctrl C", "copy"], ["edit", "编辑", "E", "edit"], ["ocr", "识别文字", "", "ocr"], ["folder", "另存为…", "Ctrl S", "save"], "-", ["star", it.starred ? "取消收藏" : "收藏", "S", "star"], ["text", "改标题", "F2", "rename"], "-", ["trash", "删除", "Del", "delete", "danger"]];
+  m.innerHTML = rows.map(r => r === "-" ? "<hr>" : `<button data-c="${r[3]}" class="${r[4] || ""}">${icon(r[0])}${r[1]}<kbd>${r[2]}</kbd></button>`).join("");
+  m.classList.add("on"); const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.min(x, innerWidth - w - 8) + "px"; m.style.top = Math.min(y, innerHeight - h - 8) + "px";
+  m.onclick = e => {
+    const c = e.target.closest("[data-c]")?.dataset.c; m.classList.remove("on"); const list = items.filter(i => sel.has(i.id));
+    if (c === "primary") primary(it); else if (c === "star") toggleStar(list.length ? list : [it]); else if (c === "delete") del(list.length ? list : [it]);
+    else if (c === "rename") { detailOpen = true; renderDetail(); $("#dTitle")?.focus(); } else if (c === "ql") openQl(it.id);
+    else if (c) toast({ copy: "已复制", reveal: "已在资源管理器中显示", gif: "开始转换 GIF…", edit: "已打开图片编辑", ocr: "已识别，文字显示在详情栏", save: "另存为…", export: "已导出" }[c] || "");
+  };
+}
+document.addEventListener("pointerdown", e => { if (!e.target.closest("#ctx")) $("#ctx").classList.remove("on"); });
+
+/* 快速预览 */
+let qlId = null;
+function openQl(id) { qlId = id; const it = items.find(i => i.id === id); $("#qlImg").src = thumbOf(it); $("#qlCap").textContent = displayTitle(it) + " · " + dayLabel(it.t)[0] + " " + hm(it.t) + " · " + it.w + "×" + it.h + "　←/→ 翻页 · Esc 关闭"; $("#ql").classList.add("on"); }
+function stepQl(d) { const l = visibleItems(); const k = l.findIndex(i => i.id === qlId); const n = l[Math.max(0, Math.min(l.length - 1, k + d))]; if (n) { openQl(n.id); setSel([n.id], n.id); } }
+$("#ql").addEventListener("click", e => { if (e.target.closest("#qlPrev")) return stepQl(-1); if (e.target.closest("#qlNext")) return stepQl(1); if (!e.target.closest("img")) $("#ql").classList.remove("on"); });
+
+/* ---------- 设置页 ---------- */
+let histOn = true, keep = "30 天", cap = "5 GB", closedFollow = true;
+function renderSettings() {
+  const [id, name, desc] = settingsPages.find(p => p[0] === settingsSub);
+  $("#setTitle").textContent = name; $("#setDesc").textContent = desc;
+  if (id !== "storage") { $("#settingsBody").innerHTML = `<div class="placeholder">“${name}”沿用现有设置页内容，只是挪进主界面右栏。<br>原型只展示新增的“历史与存储”。<br><br><button class="btn" data-goto="settings" data-sub="storage">看“历史与存储”</button></div>`; return; }
+  const seg = (k, opts, v) => `<div class="seg" data-seg="${k}">${opts.map(o => `<button class="${o === v ? "on" : ""}">${o}</button>`).join("")}</div>`;
+  $("#settingsBody").innerHTML = `
+    <div class="sgroup"><h3>记录</h3><div class="scard">
+      <div class="srow"><div class="txt"><b>记录截图历史</b><span>完成的截图（复制、保存、贴出）在本机留一份，可在“历史”里找回。关闭后不写新条目，已有的保留。</span></div><button class="switch ${histOn ? "on" : ""}" data-sw="hist"></button></div>
+      <div class="srow"><div class="txt"><b>关闭的贴图跟随历史保留</b><span>关闭后仍可在“历史”里恢复，包括标注和撤销记录；关闭此项则只保留最近 20 张。</span></div><button class="switch ${closedFollow ? "on" : ""}" data-sw="closed"></button></div>
+      <div class="srow"><div class="txt"><b>录屏</b><span>录屏文件始终在你的录屏目录；历史只记录它们，删除条目时文件移到回收站。</span></div><button class="btn">打开录屏目录</button></div>
+    </div></div>
+    <div class="sgroup"><h3>保留</h3><div class="scard">
+      <div class="srow"><div class="txt"><b>保留时间</b><span>超过时间的条目自动清理；收藏的不清理。</span></div>${seg("keep", ["7 天", "30 天", "90 天", "不限"], keep)}</div>
+      <div class="srow"><div class="txt"><b>容量上限</b><span>超出时从最早的开始清理，不计录屏文件。</span></div>${seg("cap", ["1 GB", "5 GB", "10 GB"], cap)}</div>
+    </div></div>
+    <div class="sgroup"><h3>存储占用</h3><div class="scard">
+      ${[["截图历史", 1.21, "#40ce9d"], ["贴图工作区", .46, "#5aa9e6"], ["缩略图", .08, "#c678dd"], ["文字识别模型", .19, "#e6b450"], ["录屏（外部目录）", 3.6, "#8997a6"]].map(([n, gb, c]) =>
+        `<div class="store"><span>${n}</span><div class="bar"><i style="width:${Math.min(100, gb / 5 * 100)}%;background:${c}"></i></div><span class="sz">${gb >= 1 ? gb.toFixed(2) + " GB" : Math.round(gb * 1024) + " MB"}</span><span style="display:flex;gap:4px"><button class="btn ghost">打开</button><button class="btn ghost">清理…</button></span></div>`).join("")}
+    </div></div>`;
+}
+$("#settingsBody").addEventListener("click", e => {
+  const sw = e.target.closest("[data-sw]"); if (sw) { if (sw.dataset.sw === "hist") histOn = !histOn; else closedFollow = !closedFollow; renderSettings(); toast("已保存"); return; }
+  const sb = e.target.closest("[data-seg] button"); if (sb) { const k = sb.parentElement.dataset.seg; if (k === "keep") keep = sb.textContent; else cap = sb.textContent; renderSettings(); toast("已保存"); }
+});
+
+/* ---------- 键盘 ---------- */
+$("#q").addEventListener("input", () => { if (page === "pins" || page === "settings") go("history"); else { clearSel(); renderHistory(); } });
+document.addEventListener("keydown", e => {
+  const typing = e.target.matches("input");
+  if (e.ctrlKey && e.key.toLowerCase() === "f") { e.preventDefault(); $("#q").focus(); $("#q").select(); return; }
+  if (e.ctrlKey && ["1", "2", "3"].includes(e.key)) { e.preventDefault(); return go(["pins", "history", "starred"][+e.key - 1]); }
+  if (e.ctrlKey && e.key === ",") { e.preventDefault(); return go("settings"); }
+  if ($("#ql").classList.contains("on")) { if (e.key === "Escape" || e.key === " ") { e.preventDefault(); $("#ql").classList.remove("on"); } if (e.key === "ArrowLeft") stepQl(-1); if (e.key === "ArrowRight") stepQl(1); return; }
+  if (e.key === "Escape") { if (typing) { if (e.target.id === "q" && e.target.value) { e.target.value = ""; renderHistory(); } e.target.blur(); return; } $("#ctx").classList.remove("on"); if (sel.size) setSel([]); return; }
+  if (typing) return;
+  if (page === "pins" && selPin) { if (e.key === "F2") { e.preventDefault(); renamePin(selPin); } return; }
+  if (page !== "history" && page !== "starred") return;
+  const l = visibleItems(); if (!l.length) return; const cur = l.findIndex(i => i.id === focusId);
+  const move = d => { const n = l[Math.max(0, Math.min(l.length - 1, (cur < 0 ? 0 : cur + d)))]; anchor = n.id; setSel([n.id], n.id); $(`.card[data-id="${n.id}"]`)?.scrollIntoView({ block: "nearest" }); };
+  if (e.key === "ArrowRight") { e.preventDefault(); move(1); } else if (e.key === "ArrowLeft") { e.preventDefault(); move(-1); }
+  else if (e.key === "ArrowDown") { e.preventDefault(); move(5); } else if (e.key === "ArrowUp") { e.preventDefault(); move(-5); }
+  else if (e.ctrlKey && e.key.toLowerCase() === "a") { e.preventDefault(); setSel(l.map(i => i.id)); }
+  const it = items.find(i => i.id === focusId); if (!it) return;
+  if (e.key === "Enter") primary(it);
+  else if (e.key === " ") { e.preventDefault(); openQl(it.id); }
+  else if (e.key === "Delete") del(items.filter(i => sel.has(i.id)));
+  else if (e.key.toLowerCase() === "s" && !e.ctrlKey) toggleStar(items.filter(i => sel.has(i.id)));
+  else if (e.key === "F2") { e.preventDefault(); detailOpen = true; renderDetail(); $("#dTitle")?.focus(); }
+  else if (e.ctrlKey && e.key.toLowerCase() === "c") toast("已复制图片");
+});
+new ResizeObserver(() => { if (page === "pins") renderMap(); else if (page === "history" || page === "starred") layoutGrid(); }).observe($(".main"));
+
+// 锚点直达：#history、#starred、#settings；#history-detail 选中一张带识别文字的截图
+{ const h = location.hash.slice(1); go(["history", "starred", "settings"].includes(h.split("-")[0]) ? h.split("-")[0] : "pins");
+  if (h === "history-detail") { const it = items.find(i => i.kind === "shot" && i.ocr); anchor = it.id; setSel([it.id], it.id); } }
+</script>
+</body>
+</html>

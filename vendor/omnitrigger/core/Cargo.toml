@@ -1,0 +1,11 @@
+[package]
+name = "omnitrigger-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+publish = false
+description = "确定性输入触发状态机与录制器"
+
+[lib]
+path = "src/lib.rs"

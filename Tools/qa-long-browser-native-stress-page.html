@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN" translate="no" class="notranslate">
+<head>
+  <meta charset="utf-8">
+  <meta name="google" content="notranslate">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <meta name="color-scheme" content="light">
+  <title>RustShot Browser Native Stress QA</title>
+  <style>
+    html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#152238; color:#f3f5f8; }
+    body { font:14px/20px Arial,sans-serif; }
+    header { box-sizing:border-box; height:64px; padding:10px 24px; overflow:hidden; background:#152238; }
+    h1 { font-size:16px; line-height:24px; margin:0; } p { margin:0; }
+    #scroller { width:768px; height:512px; margin:24px; overflow-x:hidden; overflow-y:scroll; scrollbar-width:none; scroll-behavior:auto; overscroll-behavior:contain; background:#203040; }
+    #scroller::-webkit-scrollbar { display:none; width:0; height:0; }
+    #world { position:relative; width:768px; height:25600px; overflow:hidden; background:#203040; }
+    #world canvas { position:absolute; left:0; width:768px; height:800px; display:block; pointer-events:none; image-rendering:pixelated; background:#203040; }
+    footer { margin:0 24px; max-width:1200px; background:#152238; }
+  </style>
+</head>
+<body>
+  <header><h1 id="title"></h1><p>隔离 Chrome 的真实 DOM 滚动：960×640 物理视口，32000 行世界，三块 canvas 复用。</p></header>
+  <div id="scroller" tabindex="-1"><div id="world"></div></div>
+    <footer><p>文字在像素 oracle 外；只观察原生 Auto 的实际 wheel。轮间 reset 单列为夹具准备。</p><p id="status"></p></footer>
+  <script>
+    'use strict';
+    (() => {
+      const nonce=new URL(location.href).searchParams.get('nonce');
+      if (!nonce || !/^[A-Za-z0-9_-]{20,128}$/.test(nonce)) throw new Error('缺少独立文档 nonce');
+      if (devicePixelRatio !== 1.25) throw new Error('首版 stress 仅允许已验证的 DPR=1.25');
+      const spec=Object.freeze({width:960,viewport_height:640,document_height:32000,tile_height:1000});
+      const dpr=1.25, documentEpoch=crypto.randomUUID();
+      document.title=`RustShot Browser Native Stress QA ${nonce}`;
+      document.getElementById('title').textContent=document.title;
+      const scroller=document.getElementById('scroller'), world=document.getElementById('world');
+      let paintEpoch=0, scrollEpoch=0, layoutEpoch=1, cycle=1, signature='', paintScheduled=false;
+      let wheelEvents=0, scrollEvents=0, eventSequence=0, fixturePrepareCalls=0;
+      let lastScrollTop=scroller.scrollTop, lastScrollLeft=scroller.scrollLeft;
+      const eventLimit=256, eventLog=[], phaseLimit=0.003;
+      const slots=[];
+      for (let index=0;index<3;index++) {
+        const canvas=document.createElement('canvas');
+        canvas.width=spec.width;canvas.height=spec.tile_height;
+        const context=canvas.getContext('2d',{alpha:false});
+        if (!context) throw new Error('无法建立不透明 canvas');
+        world.appendChild(canvas);
+        slots.push({canvas,context,tile:-1,revision:0});
+      }
+      // 只保留一个 scratch；三个 backing 不随着32个逻辑块增殖。
+      const scratch=slots[0].context.createImageData(spec.width,spec.tile_height);
+      const opaqueRectangle=(left,top,width,height,rgba)=>{
+        for (let y=top;y<top+height;y++) for (let x=left;x<left+width;x++) scratch.data.set(rgba,(y*spec.width+x)*4);
+      };
+      const paint=(slot,band)=>{
+        const origin=band*spec.tile_height;
+        for (let row=0;row<spec.tile_height;row++) {
+          const y=origin+row;
+          for (let x=0;x<spec.width;x++) {
+            const n=((Math.imul(y,157)+Math.imul(x,71))^(Math.imul(y,17)+Math.imul(x,113)))>>>0;
+            const i=(row*spec.width+x)*4;
+            scratch.data[i]=((Math.imul(y,y)+Math.imul(x,41))>>>0)%251;
+            scratch.data[i+1]=((Math.imul(y,13)+Math.imul(x,19))>>>0)%251;
+            scratch.data[i+2]=n%251;scratch.data[i+3]=255;
+          }
+        }
+        opaqueRectangle(0,0,12,12,[251,19,73,255]);
+        opaqueRectangle(948,0,12,12,[17,239,101,255]);
+        opaqueRectangle(0,988,12,12,[37,89,247,255]);
+        opaqueRectangle(948,988,12,12,[233,181,29,255]);
+        opaqueRectangle(12,0,936,2,[32+(band*31)%192,32+(band*47)%192,32+(band*29)%192,255]);
+        slot.context.putImageData(scratch,0,0);
+        slot.canvas.style.top=`${origin/dpr}px`;
+        slot.tile=band;slot.revision=++paintEpoch;
+      };
+      const physicalTop=()=>scroller.scrollTop*dpr;
+      const refreshPool=()=>{
+        paintScheduled=false;
+        const start=Math.max(0,Math.min(29,Math.floor(physicalTop()/spec.tile_height)));
+        const wanted=[start,start+1,start+2];
+        for (const band of wanted) {
+          if (slots.some(slot=>slot.tile===band)) continue;
+          const slot=slots.find(value=>!wanted.includes(value.tile));
+          if (!slot) throw new Error('canvas pool 槽位无法复用');
+          paint(slot,band);
+        }
+      };
+      const pool=()=>{
+        const top=physicalTop(),bottom=top+spec.viewport_height;
+        const first=Math.floor(top/spec.tile_height),last=Math.floor((bottom-1)/spec.tile_height);
+        const phaseError=top-Math.round(top);
+        return {slot_count:slots.length,backing_bytes:slots.length*spec.width*spec.tile_height*4,
+          scratch_bytes:scratch.data.byteLength,paint_epoch:paintEpoch,
+          painted_ranges:slots.map(slot=>({tile:slot.tile,first_row:slot.tile*spec.tile_height,row_count:spec.tile_height,revision:slot.revision})).sort((a,b)=>a.first_row-b.first_row),
+          visible_world_range:{first_row:top,row_count:spec.viewport_height},
+          physical_phase_error:phaseError,physical_phase_limit:phaseLimit,
+          ready:Math.abs(phaseError)<=phaseLimit && top>=0 && bottom<=spec.document_height && first<=last && slots.some(slot=>slot.tile===first) && slots.some(slot=>slot.tile===last)};
+      };
+      const plainRect=rect=>({left:rect.left,top:rect.top,width:rect.width,height:rect.height});
+      const measure=()=>{
+        const rect=plainRect(scroller.getBoundingClientRect()), viewport=visualViewport;
+        if (!viewport) throw new Error('缺少 visualViewport');
+        const visual={width:viewport.width,height:viewport.height,offset_left:viewport.offsetLeft,offset_top:viewport.offsetTop,scale:viewport.scale};
+        const next=JSON.stringify({dpr:devicePixelRatio,visual,rect,inner_width:innerWidth,inner_height:innerHeight});
+        if (signature && signature!==next) layoutEpoch++;
+        signature=next;
+        return {document_nonce:nonce,document_epoch:documentEpoch,layout_epoch:layoutEpoch,scroll_epoch:scrollEpoch,
+          title:document.title,url:location.href,dpr:devicePixelRatio,visual_viewport:visual,scrollport:rect,
+          viewport:{width:innerWidth,height:innerHeight},scroll_top:scroller.scrollTop,scroll_left:scroller.scrollLeft,
+          scroll_height:scroller.scrollHeight,client_width:scroller.clientWidth,client_height:scroller.clientHeight,
+          pattern_id:'bgra-world-tiled-v2',physical_spec:spec,pool:pool(),cycle,
+          observer_mode:'native-auto',scenario:'native-stress',document_height_css:25600,
+          physical_scroll_top:physicalTop(),fixture_prepare_calls:fixturePrepareCalls,
+          input_observer:{wheel_events:wheelEvents,scroll_events:scrollEvents,last_event_sequence:eventSequence,
+            log_limit:eventLimit,log_dropped:Math.max(0,eventSequence-eventLog.length),events:eventLog.slice()},
+          text_rects:[],text_outside_oracle:true,ready:true,observed_unix_ms:Date.now()};
+      };
+      const recordEvent=(event,delta)=>{
+        eventLog.push({sequence:++eventSequence,type:event.type,is_trusted:event.isTrusted,
+          observed_unix_ms:Date.now(),event_timestamp_ms:event.timeStamp,document_epoch:documentEpoch,
+          layout_epoch:layoutEpoch,scroll_epoch:scrollEpoch,dpr:devicePixelRatio,cycle,
+          scroll_top:scroller.scrollTop,scroll_left:scroller.scrollLeft,
+          physical_scroll_top:physicalTop(),fixture_prepare_calls:fixturePrepareCalls,...delta});
+        if(eventLog.length>eventLimit) eventLog.shift();
+      };
+      scroller.addEventListener('wheel',event=>{
+        wheelEvents++;
+        recordEvent(event,{delta_x:event.deltaX,delta_y:event.deltaY,delta_z:event.deltaZ,delta_mode:event.deltaMode});
+      },{passive:true});
+      scroller.addEventListener('scroll',event=>{
+        scrollEpoch++;
+        scrollEvents++;
+        recordEvent(event,{actual_delta_top_css:scroller.scrollTop-lastScrollTop,actual_delta_left_css:scroller.scrollLeft-lastScrollLeft});
+        lastScrollTop=scroller.scrollTop;lastScrollLeft=scroller.scrollLeft;
+        document.getElementById('status').textContent=`第${cycle}轮 scrollTop=${scroller.scrollTop} CSS / ${physicalTop()}物理行，paint=${paintEpoch}`;
+        if (!paintScheduled) {paintScheduled=true;requestAnimationFrame(refreshPool);}
+      },{passive:true});
+      const settled=(previousScrollTop,requireMovement)=>new Promise((resolve,reject)=>{
+        let last=null,stableFrames=0,finished=false;
+        const timeout=setTimeout(()=>{finished=true;reject(new Error('真实滚动/paintReady/两帧稳定超时'));},5000);
+        const sample=()=>{
+          if (finished) return;
+          const state=measure(),position=JSON.stringify({top:state.scroll_top,left:state.scroll_left,layout:state.layout_epoch,paint:state.pool.paint_epoch,cycle:state.cycle});
+          if (state.pool.ready && (!requireMovement || state.scroll_top!==previousScrollTop) && position===last) stableFrames++;
+          else stableFrames=0;
+          last=position;
+          if (stableFrames>=2) {finished=true;clearTimeout(timeout);resolve(state);}
+          else requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      });
+      const reset=async nextCycle=>{
+        if (!Number.isSafeInteger(nextCycle) || nextCycle!==cycle+1 || nextCycle>3) throw new Error('reset 只允许连续轮间准备');
+        // 唯一允许的scrollTop写入：旧轮UI关闭并撤销lease之后的两次夹具准备。
+        cycle=nextCycle;fixturePrepareCalls++;scroller.scrollTop=0;refreshPool();
+        const state=await settled(null,false);
+        if (state.scroll_top!==0 || !state.pool.ready) throw new Error('轮间 reset 未真正回到世界0');
+        return state;
+      };
+      refreshPool();
+      Object.defineProperty(window,'__rustshotLongBrowserNativeStressQa',{value:Object.freeze({measure,settled,reset}),writable:false,configurable:false});
+      measure();
+    })();
+  </script>
+</body>
+</html>

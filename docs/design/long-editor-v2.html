@@ -1,0 +1,2625 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>长截图编辑 v2</title>
+    <link rel="icon" href="data:," />
+    <style>
+      /* 默认深色，跟随系统浅色；画布颜色由脚本读取同一组变量 */
+      :root {
+        color-scheme: dark;
+        --bg: #171b21;
+        --panel: #1e242c;
+        --well: #14181d;
+        --canvas: #101419;
+        --gutter: #191e25;
+        --hover: #2b333d;
+        --border: #303943;
+        --fg: #dce5ed;
+        --muted: #8b9aa9;
+        --faint: #647381;
+        --accent: #53d5a6;
+        --accent-soft: #203c35;
+        --on-accent: #10281f;
+        --blue: #81b7ee;
+        --cut: #f27c81;
+        --cut-soft: #3a2328;
+        --shadow: 0 12px 36px #000a;
+        --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          color-scheme: light;
+          --bg: #f3f5f7;
+          --panel: #ffffff;
+          --well: #e9edf1;
+          --canvas: #dce2e7;
+          --gutter: #e3e8ed;
+          --hover: #edf1f5;
+          --border: #d8dfe6;
+          --fg: #293744;
+          --muted: #647381;
+          --faint: #84919d;
+          --accent: #177653;
+          --accent-soft: #e2f3ea;
+          --on-accent: #ffffff;
+          --blue: #247fc4;
+          --cut: #d4424e;
+          --cut-soft: #fbe3e5;
+          --shadow: 0 12px 36px #1e304033;
+        }
+      }
+      /* 首版标注样式表沿用的变量名 */
+      :root {
+        --green: var(--accent);
+        --green-soft: var(--accent-soft);
+        --on-green: var(--on-accent);
+        --red: var(--cut);
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body { background: var(--bg); color: var(--fg); font: 13px/1.45 var(--ui); overflow: hidden; }
+      button, input, select, textarea { font: inherit; color: inherit; }
+      button { border: 0; background: transparent; cursor: pointer; }
+      button:disabled { opacity: 0.35; cursor: default; }
+      button:hover:not(:disabled) { background: var(--hover); }
+      button:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+      [hidden] { display: none !important; }
+      kbd {
+        font: 10.5px/1 var(--ui);
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--faint);
+        background: transparent;
+      }
+      .ico {
+        width: 18px; height: 18px; flex: none;
+        background: currentColor;
+        -webkit-mask: var(--i) center / 18px no-repeat;
+        mask: var(--i) center / 18px no-repeat;
+      }
+      .icon-cut {
+        --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='3'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Cpath d='M8.6 7.6 20 18M8.6 16.4 20 6'/%3E%3C/svg%3E");
+        --tool-icon: var(--i);
+      }
+
+      /* 首版工具栏与检查器的基础样式（细节在 long-editor-annotations.css） */
+      .button {
+        height: 32px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center;
+        gap: 7px; border-radius: 6px; white-space: nowrap;
+      }
+      .button.primary, button.primary { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+      .button.primary:hover:not(:disabled), button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+      .button.outlined { border: 1px solid var(--border); }
+      .icon-button { width: 32px; height: 32px; border-radius: 5px; display: inline-grid; place-items: center; flex: none; }
+      .spacer { flex: 1; }
+      .tools {
+        background: var(--panel); border-right: 1px solid var(--border);
+        display: flex; flex-direction: column; align-items: center; min-height: 0;
+      }
+      .tool {
+        border-radius: 7px; color: var(--muted); display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 3px; font-size: 10px; position: relative;
+      }
+      .tool.active { background: var(--accent-soft); color: var(--accent); }
+      .tool.active::before {
+        position: absolute; content: ""; left: -5px; height: 20px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
+      }
+      .tool-separator { height: 1px; background: var(--border); width: 28px; margin: 6px 0; flex: none; }
+      .sidebar {
+        background: var(--panel); border-left: 1px solid var(--border); padding: 14px 14px 0;
+        overflow: auto; scrollbar-width: thin; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+      }
+      .section-heading { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+      .section-heading h2 { font-size: 12px; font-weight: 600; margin: 0; }
+      .section-heading .icon-button { width: 25px; height: 25px; color: var(--muted); }
+      .inspector { padding: 2px 0 14px; }
+      .reset-button { font-size: 11px; color: var(--muted); padding: 2px 6px; border-radius: 4px; }
+      .annotation-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+      .annotation-list button {
+        display: flex; width: 100%; align-items: center; gap: 9px; text-align: left; font-size: 12px; padding: 8px; border-radius: 5px;
+      }
+      .annotation-list button.selected { background: var(--accent-soft); color: var(--accent); }
+      .annotation-input {
+        position: absolute; z-index: 5; min-width: 130px; border: 1px solid var(--accent); background: #1a2420;
+        color: #a9f5d7; padding: 5px 8px; border-radius: 3px; font-size: 18px; outline: none;
+      }
+
+      .app { display: grid; grid-template-rows: 48px minmax(0, 1fr) 28px; height: 100vh; }
+
+      /* 顶栏 */
+      .topbar {
+        display: flex; align-items: center; gap: 6px; padding: 0 10px;
+        background: var(--panel); border-bottom: 1px solid var(--border); min-width: 0;
+      }
+      .doc { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin-right: 4px; }
+      .doc strong { font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .doc strong.over { color: var(--cut); }
+      .doc span { color: var(--muted); font-size: 12px; white-space: nowrap; }
+      .vsep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; flex: none; }
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        height: 30px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px;
+        white-space: nowrap; flex: none;
+      }
+      .btn.icon { width: 30px; padding: 0; }
+      .btn.primary { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+      .btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+      .btn.chip { border-color: var(--border); height: 28px; font-variant-numeric: tabular-nums; }
+      .btn.chip.has { color: var(--cut); border-color: color-mix(in srgb, var(--cut) 45%, var(--border)); }
+      .zoom-val { min-width: 46px; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+      /* 工具栏 | 画布 + 缩略图 + 标记尺 | 属性栏 */
+      .main { display: grid; grid-template-columns: 70px minmax(0, 1fr) 284px; min-height: 0; }
+      .main.side-off { grid-template-columns: 70px minmax(0, 1fr) 0; }
+      .main.side-off .sidebar { display: none; }
+      .stage { display: grid; grid-template-columns: minmax(0, 1fr) 116px 14px; min-height: 0; min-width: 0; }
+      .viewport { position: relative; overflow: hidden; background: var(--canvas); touch-action: none; }
+      .viewport > canvas, .mini > canvas, .ruler > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      #overCanvas { pointer-events: none; }
+      /* 标注按显示片段切成多张 SVG：每张只露出一个保留区间，删段即把图和标注一起剪开 */
+      #annLayer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+      .ann-piece { position: absolute; display: block; overflow: hidden; }
+      .ann-master { display: none; }
+      .overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+      .mini { position: relative; background: var(--well); border-left: 1px solid var(--border); touch-action: none; }
+      .ruler { position: relative; background: var(--panel); border-left: 1px solid var(--border); cursor: pointer; touch-action: none; }
+
+      .ov { position: absolute; pointer-events: auto; white-space: nowrap; user-select: none; }
+      .seam-chip {
+        transform: translate(-100%, -50%);
+        display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px 0 5px;
+        border-radius: 10px; border: 1px solid color-mix(in srgb, var(--cut) 55%, transparent);
+        background: var(--cut-soft); color: var(--cut); font-size: 11px; font-weight: 600;
+        font-variant-numeric: tabular-nums; cursor: pointer; box-shadow: 0 1px 4px #0005;
+      }
+      .seam-chip:hover, .seam-chip.open { background: var(--cut); color: #fff; }
+      .seam-chip .ico { width: 13px; height: 13px; -webkit-mask-size: 13px; mask-size: 13px; }
+      .band-label {
+        transform: translate(-100%, -50%); pointer-events: none;
+        padding: 2px 7px; border-radius: 4px; background: var(--cut); color: #fff;
+        font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px #0006;
+      }
+      .band-label.snapped, .trim-label.snapped { background: var(--blue); color: #0d1b2a; }
+      .anchor-label {
+        transform: translate(-100%, -50%); pointer-events: none;
+        padding: 1px 6px; border-radius: 4px; background: var(--blue); color: #0d1b2a; font-size: 11px; font-weight: 600;
+      }
+      .trim-label {
+        transform: translate(-50%, 0); pointer-events: none;
+        padding: 3px 9px; border-radius: 5px; background: var(--cut); color: #fff; font-size: 12px; font-weight: 600;
+        font-variant-numeric: tabular-nums; box-shadow: 0 2px 8px #0007;
+      }
+      .bar {
+        display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 8px;
+        background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow);
+      }
+      .bar.right { transform: translateX(-100%); }
+      .bar button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border-radius: 6px; }
+      .bar button.danger, .bar button.danger:hover:not(:disabled) { background: var(--cut); color: #fff; font-weight: 600; }
+      .bar button.danger kbd { color: #fff; border-color: #fff6; }
+      .bar .info { padding: 0 8px 0 6px; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .bar .info b { color: var(--cut); font-weight: 600; }
+
+      .onboard {
+        position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+        width: min(640px, calc(100% - 32px)); padding: 12px 14px; border-radius: 10px;
+        background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid var(--border);
+        box-shadow: var(--shadow); z-index: 3;
+      }
+      .onboard h3 { margin: 0 0 6px; font-size: 13px; }
+      .onboard ol { margin: 0; padding-left: 18px; color: var(--muted); }
+      .onboard ol b { color: var(--fg); font-weight: 600; }
+      .onboard .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+      .onboard .acts button { height: 28px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--border); }
+      .onboard .acts button.go, .onboard .acts button.go:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
+
+      .toast {
+        position: absolute; left: 50%; bottom: 16px; transform: translate(-50%, 8px); opacity: 0;
+        display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 8px;
+        background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow);
+        transition: opacity 0.16s, transform 0.16s; pointer-events: none; z-index: 4; white-space: nowrap;
+      }
+      .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+      .toast button { height: 26px; padding: 0 8px; border-radius: 5px; background: var(--hover); }
+
+      .peek {
+        position: fixed; z-index: 30; padding: 8px; border-radius: 10px;
+        background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow);
+      }
+      .peek header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; font-size: 12px; }
+      .peek header b { color: var(--cut); }
+      .peek header span { color: var(--faint); font-variant-numeric: tabular-nums; }
+      .peek canvas { display: block; border-radius: 4px; outline: 1px solid var(--border); }
+      .peek .acts { display: flex; gap: 6px; margin-top: 8px; }
+      .peek .acts button { flex: 1; height: 28px; border: 1px solid var(--border); border-radius: 6px; }
+
+      /* 剪辑面板 */
+      .cut-summary { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
+      .cut-summary b { font-size: 16px; font-variant-numeric: tabular-nums; }
+      .cut-summary span { color: var(--muted); font-size: 11px; }
+      .trim-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .trim-field {
+        display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px;
+        border: 1px solid var(--border); border-radius: 6px; background: var(--well); color: var(--muted); font-size: 11px;
+      }
+      .trim-field:focus-within { border-color: var(--blue); }
+      .trim-field.on { border-color: color-mix(in srgb, var(--cut) 55%, var(--border)); }
+      .trim-field input { width: 100%; min-width: 0; border: 0; background: transparent; text-align: right; font-variant-numeric: tabular-nums; outline: none; }
+      .trim-field.on input { color: var(--cut); }
+      .trim-field i { font-style: normal; color: var(--faint); }
+      .cut-list { list-style: none; margin: 0; padding: 0; }
+      .cut-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 2px; padding: 5px 4px; border-radius: 6px; }
+      .cut-list li:hover { background: var(--hover); }
+      .cut-list .meta { display: flex; flex-direction: column; min-width: 0; font-variant-numeric: tabular-nums; }
+      .cut-list .meta b { font-size: 12px; font-weight: 600; }
+      .cut-list .meta b em { font-style: normal; color: var(--cut); }
+      .cut-list .meta small { color: var(--faint); font-size: 10.5px; }
+      .cut-list button { height: 24px; padding: 0 7px; border-radius: 5px; color: var(--muted); font-size: 11px; }
+
+      .status {
+        display: flex; align-items: center; gap: 14px; padding: 0 12px; min-width: 0;
+        background: var(--panel); border-top: 1px solid var(--border); color: var(--muted);
+        font-size: 12px; white-space: nowrap; overflow: hidden;
+      }
+      .status #hint { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+      .status .coords { font-variant-numeric: tabular-nums; color: var(--faint); }
+
+      dialog {
+        border: 1px solid var(--border); border-radius: 12px; padding: 0; width: min(580px, calc(100vw - 32px));
+        background: var(--panel); color: var(--fg); box-shadow: var(--shadow);
+      }
+      dialog::backdrop { background: #0008; }
+      dialog header { padding: 14px 16px 4px; font-weight: 600; font-size: 14px; }
+      dialog p { margin: 0 16px 10px; color: var(--muted); }
+      dialog .preview { margin: 0 16px; max-height: 58vh; overflow: auto; background: var(--well); border-radius: 8px; text-align: center; }
+      dialog .preview img { width: 300px; display: block; margin: 0 auto; }
+      dialog footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 14px; }
+      dialog table { margin: 0 16px 6px; border-collapse: collapse; width: calc(100% - 32px); }
+      dialog td { padding: 4px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+      dialog td:first-child { width: 120px; color: var(--muted); }
+      dialog td kbd { margin-right: 3px; }
+
+      @media (max-width: 960px) {
+        .doc span, .hide-md { display: none; }
+      }
+      @media (max-width: 760px) {
+        .main { grid-template-columns: 56px minmax(0, 1fr) 0; }
+        .main .sidebar { display: none; }
+        .stage { grid-template-columns: minmax(0, 1fr) 0 14px; }
+        .mini { display: none; }
+        .out-label, #editsLabel, #sideBtn, .zoom-val, [data-action="actual"] { display: none; }
+        .doc { flex: none; }
+      }
+    </style>
+    <link rel="stylesheet" href="long-editor-annotations.css" />
+    <style>
+      /* v2 布局覆盖 */
+      .tools { overflow-x: hidden; }
+      .sidebar { overflow: auto; }
+      .annotation-floating { bottom: 60px; }
+      .sidebar > .inspector { flex: none; overflow: visible; margin-right: 0; padding-right: 0; }
+      .sidebar > .side-bottom { margin-top: auto; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="doc" title="成品尺寸（原图尺寸）">
+          <strong id="outSize">—</strong><span id="srcSize"></span>
+        </div>
+        <button class="btn chip" id="editsChip" data-action="edits" title="剪辑记录：每处删除与裁边，可定位或单独恢复">
+          <i class="ico" style="--i: url(icons/history.svg)"></i><span id="editsLabel">未剪辑</span>
+        </button>
+        <div class="vsep"></div>
+        <button class="btn icon" id="undoBtn" data-action="undo" title="撤销 · Ctrl+Z"><i class="ico" style="--i: url(icons/undo.svg)"></i></button>
+        <button class="btn icon" id="redoBtn" data-action="redo" title="重做 · Ctrl+Y"><i class="ico" style="--i: url(icons/redo.svg)"></i></button>
+        <button class="btn" id="removedBtn" data-action="toggle-removed" aria-pressed="false" title="原位显示所有已删除和已裁掉的部分，可直接拖边调整 · H">
+          <i class="ico" id="removedIco" style="--i: url(icons/eye.svg)"></i><span class="hide-md">显示已删除</span>
+        </button>
+        <div class="spacer"></div>
+        <button class="btn icon" data-action="zoom-out" title="缩小 · Ctrl+-">−</button>
+        <span class="zoom-val" id="zoomVal">100%</span>
+        <button class="btn icon" data-action="zoom-in" title="放大 · Ctrl+=">+</button>
+        <button class="btn" id="fitBtn" data-action="fit" title="适合宽度 · Ctrl+0">适宽</button>
+        <button class="btn" data-action="actual" title="实际像素 · Ctrl+1">1:1</button>
+        <button class="btn" id="sideBtn" data-action="toggle-side" aria-pressed="true" title="显示或隐藏属性栏"><i class="ico" style="--i: url(icons/sliders.svg)"></i><span class="hide-md">属性</span></button>
+        <div class="vsep"></div>
+        <button class="btn" data-action="pin" title="贴到屏幕"><i class="ico" style="--i: url(icons/pin.svg)"></i><span class="out-label">贴图</span></button>
+        <button class="btn" data-action="save" title="保存 · Ctrl+S"><i class="ico" style="--i: url(icons/save.svg)"></i><span class="out-label">保存</span></button>
+        <button class="btn primary" data-action="copy" title="复制成品并关闭 · Ctrl+C"><i class="ico" style="--i: url(icons/copy.svg)"></i>复制</button>
+      </header>
+
+      <div class="main" id="main">
+        <nav class="tools" aria-label="工具"></nav>
+        <div class="stage" id="stage">
+          <div class="viewport canvas-region" id="viewport">
+            <canvas id="baseCanvas"></canvas>
+            <div id="annLayer"></div>
+            <canvas id="overCanvas"></canvas>
+            <div class="overlay" id="overlay"></div>
+            <div class="onboard" id="onboard">
+              <h3>长截图编辑：剪辑和标注在同一张画布上</h3>
+              <ol>
+                <li><b>删段</b>：剪辑工具（1）下在图上上下拖动，选中不要的部分，按 Delete。删掉的位置留一条接缝，悬停可预览、单击可展开调整。</li>
+                <li><b>裁边</b>：拖动图片外缘的把手，松开即生效；已裁的部分拖动时会重新露出，可以拖回来。</li>
+                <li><b>标注</b>：左侧六组工具与套索，右侧属性栏调样式和对象；标注时图片左侧的剪辑轨仍可拖动选段。</li>
+              </ol>
+              <div class="acts">
+                <button data-action="demo" class="go">载入示例剪辑</button>
+                <button data-action="dismiss-onboard">知道了</button>
+              </div>
+            </div>
+            <div class="toast" id="toast" role="status"></div>
+          </div>
+          <div class="mini" id="mini" title="缩略图：拖动滑块浏览，点击跳转，Shift+单击选段到此">
+            <canvas id="miniCanvas"></canvas>
+          </div>
+          <div class="ruler" id="ruler" title="全长标记尺：红色为删除位置，彩色为标注">
+            <canvas id="rulerCanvas"></canvas>
+          </div>
+        </div>
+        <aside class="sidebar" id="sidebar" aria-label="属性">
+          <section class="inspector" id="cut-inspector"></section>
+          <section class="inspector" id="annotation-inspector" hidden></section>
+          <div class="side-bottom"></div>
+        </aside>
+      </div>
+
+      <footer class="status">
+        <span id="hint"></span><span class="spacer"></span><span class="coords" id="coords"></span>
+      </footer>
+    </div>
+
+    <!-- 标注模块写入的原图坐标 SVG；显示时按片段复制，自身不渲染 -->
+    <svg id="annotations" class="ann-master" aria-hidden="true"></svg>
+    <div id="sourceHolder" hidden></div>
+
+    <div class="peek" id="peek" hidden>
+      <header><b id="peekTitle"></b><span id="peekRange"></span></header>
+      <canvas id="peekCanvas"></canvas>
+      <div class="acts" id="peekActs"></div>
+    </div>
+
+    <dialog id="exportDlg">
+      <header id="exportTitle">复制预览</header>
+      <p id="exportInfo"></p>
+      <div class="preview"><img id="exportImg" alt="成品预览" /></div>
+      <footer>
+        <button class="btn" id="exportDownload">下载 PNG</button>
+        <button class="btn primary" id="exportClose">关闭</button>
+      </footer>
+    </dialog>
+
+    <dialog id="helpDlg">
+      <header>快捷键与操作</header>
+      <table>
+        <tr><td>删段</td><td>剪辑工具下在图上拖动，或任何工具下在左侧剪辑轨拖动；<kbd>Delete</kbd>/<kbd>Enter</kbd> 删除，<kbd>K</kbd> 仅保留</td></tr>
+        <tr><td>扩选</td><td>单击放起点，<kbd>Shift</kbd>+单击选到这里（缩略图上同样可用）</td></tr>
+        <tr><td>微调选段</td><td>拖动红线；<kbd>↑</kbd><kbd>↓</kbd> 1px，加 <kbd>Shift</kbd> 10px</td></tr>
+        <tr><td>吸附</td><td>选段与裁边吸附到空白间隙中线；按住 <kbd>Alt</kbd> 暂停</td></tr>
+        <tr><td>裁边</td><td>拖动图片外缘把手；或在剪辑面板输入上下左右像素</td></tr>
+        <tr><td>已删除部分</td><td>悬停接缝预览，单击原位展开；<kbd>H</kbd> 全部展开</td></tr>
+        <tr><td>工具</td><td><kbd>1</kbd> 剪辑、<kbd>2</kbd> 选择、<kbd>3</kbd>–<kbd>8</kbd> 六组工具（取组内上次用的）、<kbd>9</kbd> 套索、<kbd>0</kbd> 工具库</td></tr>
+        <tr><td>对象</td><td><kbd>Shift</kbd> 加选，拖空白框选；<kbd>Ctrl</kbd>+<kbd>A</kbd>/<kbd>D</kbd>/<kbd>G</kbd> 全选/复制/组合；方向键移动；双击文字编辑、双击组合进入</td></tr>
+        <tr><td>折线／套索</td><td>单击加点，<kbd>Enter</kbd> 或双击完成，右键或 <kbd>Esc</kbd> 取消</td></tr>
+        <tr><td>撤销</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd>，一次拖动只记一步；<kbd>Esc</kbd> 只取消正在进行的拖动</td></tr>
+        <tr><td>浏览</td><td>滚轮；<kbd>Ctrl</kbd>+滚轮缩放；空格或中键拖动；<kbd>Home</kbd>/<kbd>End</kbd>/<kbd>PgUp</kbd>/<kbd>PgDn</kbd></td></tr>
+        <tr><td>输出</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd> 复制，<kbd>Ctrl</kbd>+<kbd>S</kbd> 保存</td></tr>
+      </table>
+      <footer><button class="btn primary" id="helpClose">关闭</button></footer>
+    </dialog>
+
+    <script src="long-editor-tools.js"></script>
+    <script src="long-editor-renderer.js"></script>
+    <script src="long-editor-annotations.js"></script>
+    <script>
+      (() => {
+        "use strict";
+        const W = 1080;
+        const GUTTER = 46; // 剪辑轨宽度（含与图片之间的 6px 间隙）
+        const PAD = 32;
+        const MIN_KEEP = 16;
+        const FONT = '"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Segoe UI",sans-serif';
+        const UI = '"Segoe UI","Microsoft YaHei UI",sans-serif';
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        const $ = (s) => document.querySelector(s);
+        const byId = (id) => document.getElementById(id);
+        const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+        const clone = (o) => JSON.parse(JSON.stringify(o));
+        const fmt = (n) => Math.round(n).toLocaleString("en-US");
+        const short = (n) => (n >= 10000 ? (n / 1000).toFixed(0) + "k" : n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(Math.round(n)));
+        const escapeText = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+        const { tools, groups } = window.LongEditorTools;
+        const renderer = window.LongEditorRenderer;
+
+        // ---------- 示例长网页（原型自绘，像素即“原图”） ----------
+        const marks = {};
+        const src = buildSample();
+        const H = src.height;
+        // 标注模块的打码效果从 #source 取像素
+        src.id = "source";
+        byId("sourceHolder").appendChild(src);
+
+        function buildSample() {
+          const cv = document.createElement("canvas");
+          cv.width = W;
+          cv.height = 15000;
+          const g = cv.getContext("2d");
+          const C = { bg: "#15181c", card: "#1c2026", card2: "#232931", line: "#2b313a", text: "#cfd6de", sub: "#8a96a3", head: "#f2f5f8", link: "#6cb2ff" };
+          const X = 84, TW = W - X * 2;
+          let y = 0;
+          g.fillStyle = C.bg;
+          g.fillRect(0, 0, W, cv.height);
+          g.textBaseline = "top";
+          const font = (size, weight = 400) => (g.font = `${weight} ${size}px ${FONT}`);
+          const rr = (x, yy, w, h, r, fill) => {
+            g.beginPath();
+            g.roundRect(x, yy, w, h, r);
+            g.fillStyle = fill;
+            g.fill();
+          };
+          const wrap = (text, x, w, size, lh, color, weight = 400) => {
+            font(size, weight);
+            g.fillStyle = color;
+            const lines = [];
+            let line = "";
+            for (const ch of text) {
+              const t = line + ch;
+              if (line && g.measureText(t).width > w) {
+                lines.push(line);
+                line = ch;
+              } else line = t;
+            }
+            if (line) lines.push(line);
+            for (const l of lines) {
+              g.fillText(l, x, y + Math.round((lh - size) / 2));
+              y += lh;
+            }
+          };
+          const para = (t) => {
+            wrap(t, X, TW, 27, 48, C.text);
+            y += 28;
+          };
+          const h2 = (t) => {
+            y += 30;
+            marks.h2 = marks.h2 || [];
+            marks.h2.push(y);
+            rr(X, y + 9, 6, 34, 3, C.link);
+            wrap(t, X + 22, TW - 22, 34, 52, C.head, 700);
+            y += 22;
+          };
+          const picture = (x, yy, w, h, hue) => {
+            const gr = g.createLinearGradient(x, yy, x, yy + h);
+            gr.addColorStop(0, `hsl(${hue} 45% 34%)`);
+            gr.addColorStop(1, `hsl(${hue + 30} 50% 62%)`);
+            rr(x, yy, w, h, 14, gr);
+            g.save();
+            g.beginPath();
+            g.roundRect(x, yy, w, h, 14);
+            g.clip();
+            g.fillStyle = "#ffe2a8";
+            g.beginPath();
+            g.arc(x + w * 0.74, yy + h * 0.3, h * 0.11, 0, 7);
+            g.fill();
+            g.fillStyle = `hsl(${hue + 100} 30% 22%)`;
+            g.beginPath();
+            g.moveTo(x, yy + h);
+            g.lineTo(x, yy + h * 0.62);
+            g.quadraticCurveTo(x + w * 0.25, yy + h * 0.42, x + w * 0.5, yy + h * 0.6);
+            g.quadraticCurveTo(x + w * 0.75, yy + h * 0.76, x + w, yy + h * 0.55);
+            g.lineTo(x + w, yy + h);
+            g.fill();
+            g.strokeStyle = "#9fd0ff";
+            g.lineWidth = h * 0.05;
+            g.beginPath();
+            g.moveTo(x - 10, yy + h * 0.95);
+            g.bezierCurveTo(x + w * 0.3, yy + h * 0.7, x + w * 0.6, yy + h * 1.02, x + w + 10, yy + h * 0.82);
+            g.stroke();
+            g.setLineDash([14, 12]);
+            g.strokeStyle = "#f4efe2";
+            g.lineWidth = 4;
+            g.beginPath();
+            g.moveTo(x + w * 0.05, yy + h * 0.86);
+            g.bezierCurveTo(x + w * 0.35, yy + h * 0.62, x + w * 0.62, yy + h * 0.9, x + w * 0.96, yy + h * 0.7);
+            g.stroke();
+            g.setLineDash([]);
+            g.restore();
+          };
+
+          // 站点导航
+          g.fillStyle = C.card;
+          g.fillRect(0, 0, W, 84);
+          rr(X, 22, 40, 40, 12, "#3d8bfd");
+          font(26, 700);
+          g.fillStyle = C.head;
+          g.fillText("城市漫游笔记", X + 54, 27);
+          font(22);
+          g.fillStyle = C.sub;
+          ["首页", "路线", "装备", "社区"].forEach((t, i) => g.fillText(t, 470 + i * 82, 31));
+          rr(W - X - 150, 22, 150, 40, 20, C.card2);
+          font(20);
+          g.fillText("搜索路线", W - X - 116, 32);
+          g.fillStyle = C.line;
+          g.fillRect(0, 83, W, 1);
+          y = 84;
+          marks.nav = y;
+          y += 44;
+          wrap("首页  ›  路线  ›  城市骑行", X, TW, 21, 32, C.sub);
+          y += 18;
+          wrap("周末城市骑行：一条串起旧城、河岸与市集的 32 公里路线", X, TW, 50, 72, C.head, 700);
+          y += 26;
+          g.fillStyle = "#e0a458";
+          g.beginPath();
+          g.arc(X + 26, y + 26, 26, 0, 7);
+          g.fill();
+          font(23, 600);
+          g.fillStyle = C.head;
+          g.fillText("林知夏", X + 70, y + 1);
+          font(20);
+          g.fillStyle = C.sub;
+          g.fillText("2026-10-18 · 约 12 分钟阅读 · 3.4 万次浏览", X + 70, y + 32);
+          y += 52 + 40;
+          picture(X, y, TW, 470, 205);
+          y += 470 + 14;
+          wrap("图 1：清晨的沿河骑行道，路面平整，适合放慢速度", X, TW, 21, 32, C.sub);
+          y += 36;
+          para("这条路线是我在过去三个周末反复骑过之后整理出来的。全程三十二公里，大部分路段有独立的非机动车道，爬升不到一百五十米，普通城市车也能轻松完成。建议早上七点前出发，避开旧城的早高峰和河岸的遛狗人群。");
+          para("起点设在地铁站旁边的共享单车停放点，补给可以在对面的便利店解决。如果骑自己的车，记得提前检查胎压和刹车，旧城段的石板路对胎压很敏感，压力太高会颠得手发麻。");
+          para("整条路线按节奏分成四段：旧城环线慢慢看，河岸绿道放开骑，老桥上坡稍微用点力，最后在市集收尾吃点东西。每段之间都有可以停车休息的地方，不必一口气骑完。");
+
+          // 广告横幅
+          y += 12;
+          const adTop = y;
+          const ad = g.createLinearGradient(X, y, X + TW, y + 250);
+          ad.addColorStop(0, "#ff8a3d");
+          ad.addColorStop(1, "#ff3d7f");
+          rr(X, y, TW, 250, 18, ad);
+          g.save();
+          g.clip();
+          g.fillStyle = "#ffffff22";
+          g.beginPath();
+          g.arc(X + TW - 120, y + 60, 130, 0, 7);
+          g.fill();
+          g.restore();
+          font(48, 800);
+          g.fillStyle = "#fff";
+          g.fillText("秋季装备节 · 全场 7 折", X + 44, y + 54);
+          font(25);
+          g.fillText("头盔、车灯、骑行服 限时 3 天", X + 46, y + 124);
+          rr(X + 44, y + 176, 168, 46, 23, "#fff");
+          font(22, 700);
+          g.fillStyle = "#ff4f6d";
+          g.fillText("立即抢购", X + 84, y + 187);
+          rr(X + TW - 74, y + 14, 56, 28, 6, "#0004");
+          font(18);
+          g.fillStyle = "#fff";
+          g.fillText("广告", X + TW - 64, y + 18);
+          y += 250;
+          marks.ad = [adTop, y];
+          y += 40;
+
+          h2("一、出发前的准备");
+          para("装备不需要太专业，但有几样东西最好带上：一盏前灯和一盏尾灯，哪怕白天出发，回程也可能赶上傍晚；一个小水壶；一件薄外套，河边早晚温差比市区大。");
+          for (const t of ["头盔：城市里车多，戴上更安心", "车锁：市集附近停车需要锁车", "手机支架：看导航不必频繁停车", "少量现金：部分摊位只收现金"]) {
+            g.fillStyle = C.link;
+            g.beginPath();
+            g.arc(X + 10, y + 24, 5, 0, 7);
+            g.fill();
+            wrap(t, X + 30, TW - 30, 26, 46, C.text);
+          }
+          y += 34;
+          const rows = [["路段", "距离", "爬升", "路况"], ["旧城环线", "8.6 km", "42 m", "石板路，需减速"], ["河岸绿道", "11.2 km", "18 m", "专用道，平整"], ["老桥上坡", "2.4 km", "65 m", "短陡坡，换轻档"], ["市集支线", "6.1 km", "12 m", "人多，建议推行"], ["返程快线", "3.7 km", "9 m", "车道较窄"], ["合计", "32.0 km", "146 m", ""]];
+          const tTop = y;
+          rr(X, y, TW, rows.length * 60, 12, C.card);
+          rows.forEach((r, i) => {
+            const ry = tTop + i * 60;
+            if (i) {
+              g.fillStyle = C.line;
+              g.fillRect(X + 16, ry, TW - 32, 1);
+            }
+            font(24, i === 0 || i === rows.length - 1 ? 700 : 400);
+            g.fillStyle = i === 0 ? C.sub : C.text;
+            [X + 28, X + 290, X + 460, X + 620].forEach((cx, j) => g.fillText(r[j], cx, ry + 17));
+          });
+          marks.table = [tTop, tTop + rows.length * 60];
+          marks.slope = tTop + 3 * 60 + 30;
+          y = tTop + rows.length * 60 + 40;
+
+          h2("二、旧城段：慢下来看街巷");
+          para("旧城段大约八公里，绕着老城墙走一圈。这一段不追求速度，路面多是石板和砖铺，转弯也多。推荐在钟楼前的小广场停一下，早上有很多人在打太极，光线也最好。");
+          para("绕到北门之后，有一段很短的单行道，需要逆行的地方请下车推行。巷子里有几家开了几十年的早点铺，豆浆油条五块钱一套，值得停下来吃一顿。");
+          const halfW = (TW - 24) / 2;
+          picture(X, y, halfW, 300, 25);
+          picture(X + halfW + 24, y, halfW, 300, 320);
+          y += 300 + 14;
+          wrap("图 2：钟楼广场与北门巷口", X, TW, 21, 32, C.sub);
+          y += 36;
+          para("离开旧城前最后一个路口车流比较复杂，建议跟着行人一起过斑马线，不要抢灯。过了路口就是河岸绿道的入口，有明显的蓝色标线。");
+
+          // 相关推荐
+          y += 12;
+          const recTop = y;
+          rr(X, y, TW, 600, 16, C.card);
+          font(28, 700);
+          g.fillStyle = C.head;
+          g.fillText("相关推荐", X + 28, y + 26);
+          font(21);
+          g.fillStyle = C.link;
+          g.fillText("换一批", X + TW - 100, y + 30);
+          const cw = (TW - 28 * 2 - 20) / 2;
+          ["夜骑滨江：灯光最好的 10 公里", "新手第一次长途要准备什么", "城市公园骑行地图合集", "通勤自行车怎么选"].forEach((t, i) => {
+            const cx = X + 28 + (i % 2) * (cw + 20);
+            const cy = recTop + 84 + Math.floor(i / 2) * 252;
+            picture(cx, cy, cw, 150, 40 + i * 70);
+            g.textBaseline = "top";
+            font(23, 600);
+            g.fillStyle = C.head;
+            g.fillText(t, cx, cy + 166);
+            font(19);
+            g.fillStyle = C.sub;
+            g.fillText(`${2 + i} 天前 · ${(i + 3) * 317} 阅读`, cx, cy + 204);
+          });
+          y += 600;
+          marks.rec = [recTop, y];
+          y += 40;
+
+          h2("三、河岸段：最舒服的一段");
+          para("河岸绿道是整条路线最舒服的部分，十一公里几乎都是平路，路面是新铺的彩色沥青。早上风小，可以骑到每小时二十公里左右，偶尔会遇到晨跑的人，提前打铃示意就好。");
+          para("绿道中段有一座观景平台，可以看到对岸老厂房改造的艺术区。这里有公共厕所和直饮水，是补水的好地方。再往前两公里，就会看到老桥的引桥。");
+          marks.bridgePara = y;
+          para("老桥上坡是全程唯一需要用力的地方，坡度不大但有两公里长。换到轻一点的档位，保持匀速踩踏，不要站起来猛踩。坡顶的风景很好，可以停下来拍几张照片。");
+
+          y += 12;
+          const promoTop = y;
+          rr(X, y, TW, 150, 14, C.card2);
+          rr(X + 24, y + 25, 100, 100, 12, "#4bb38a");
+          font(18);
+          g.fillStyle = C.sub;
+          g.fillText("推广", X + 150, y + 30);
+          font(26, 600);
+          g.fillStyle = C.head;
+          g.fillText("骑行头盔限时优惠，第二件半价", X + 150, y + 60);
+          font(20);
+          g.fillStyle = C.sub;
+          g.fillText("轻量透气 · 多色可选 · 包邮", X + 150, y + 100);
+          y += 150;
+          marks.promo = [promoTop, y];
+          y += 40;
+
+          h2("四、市集收尾");
+          para("下桥之后沿着辅路骑三公里就到市集。周末上午十点以后人会很多，车最好停在入口的停车区，步行进去。烤红薯、现榨果汁和手工面包都很受欢迎，可以带一点回家。");
+          para("返程可以走快线，也可以把车还到市集旁边的停放点坐地铁回去。如果你也骑了这条路线，欢迎在评论区分享你的用时和发现的好去处。");
+          y += 10;
+          rr(X, y, TW, 72, 36, C.card);
+          font(22);
+          g.fillStyle = C.text;
+          g.fillText("赞 1,284　　收藏 356　　分享", X + 40, y + 23);
+          y += 72 + 52;
+
+          font(30, 700);
+          g.fillStyle = C.head;
+          g.fillText("评论 128", X, y);
+          y += 64;
+          marks.comments = y;
+          const comments = [
+            ["骑行的阿哲", "#7aa2f7", "上周按这个路线骑了一遍，老桥那段确实有点累，但是坡顶的风景值了。"],
+            ["晚风", "#e0af68", "旧城那家早点铺我去过，豆浆真的很香！补充一下，周一休息。"],
+            ["小林不吃香菜", "#9ece6a", "请问河岸绿道晚上有路灯吗？想下班后去骑。"],
+            ["林知夏（作者）", "#e0a458", "有的，大部分路段都有，观景平台之后有一小段比较暗，记得开车灯。"],
+            ["周末骑士", "#bb9af7", "收藏了，下周带孩子去骑前半段。"],
+            ["青柠", "#73daca", "市集的手工面包推荐！去晚了就卖完了。"],
+          ];
+          comments.forEach(([name, color, text], i) => {
+            g.fillStyle = color;
+            g.beginPath();
+            g.arc(X + 26, y + 26, 26, 0, 7);
+            g.fill();
+            font(23, 600);
+            g.fillStyle = C.head;
+            g.fillText(name, X + 72, y + 2);
+            font(19);
+            g.fillStyle = C.sub;
+            g.fillText(`${i + 1} 天前`, X + 72 + g.measureText(name).width + 140, y + 6);
+            y += 40;
+            wrap(text, X + 72, TW - 72, 25, 42, C.text);
+            font(19);
+            g.fillStyle = C.sub;
+            g.fillText(`回复　·　赞 ${40 - i * 6}`, X + 72, y + 8);
+            y += 44;
+            g.fillStyle = C.line;
+            g.fillRect(X + 72, y + 8, TW - 72, 1);
+            y += 34;
+          });
+          y += 6;
+          rr(X + TW / 2 - 120, y, 240, 52, 26, C.card2);
+          font(21);
+          g.fillStyle = C.text;
+          g.fillText("查看更多评论", X + TW / 2 - 63, y + 14);
+          y += 52 + 70;
+
+          marks.footer = y;
+          g.fillStyle = C.card;
+          g.fillRect(0, y, W, 300);
+          g.fillStyle = C.line;
+          g.fillRect(0, y, W, 1);
+          [["关于我们", "联系方式", "加入我们"], ["投稿指南", "社区规范", "常见问题"], ["隐私政策", "用户协议", "网站地图"]].forEach((col, i) =>
+            col.forEach((t, j) => {
+              font(21);
+              g.fillStyle = C.sub;
+              g.fillText(t, X + i * 260, y + 54 + j * 46);
+            }),
+          );
+          font(19);
+          g.fillText("© 2026 城市漫游笔记 · 原型示例页面", X, y + 238);
+          y += 300;
+
+          const out = document.createElement("canvas");
+          out.width = W;
+          out.height = Math.ceil(y);
+          out.getContext("2d", { willReadFrequently: true }).drawImage(cv, 0, 0);
+          return out;
+        }
+
+        // ---------- 分级缩略（对应原生按缩放级别分块） ----------
+        const mips = [src];
+        for (let c = src; c.width > 120; ) {
+          const n = document.createElement("canvas");
+          n.width = Math.max(1, Math.round(c.width / 2));
+          n.height = Math.max(1, Math.round(c.height / 2));
+          const g = n.getContext("2d");
+          g.imageSmoothingQuality = "high";
+          g.drawImage(c, 0, 0, n.width, n.height);
+          mips.push(n);
+          c = n;
+        }
+        function mipFor(scale) {
+          let k = 0;
+          while (k + 1 < mips.length && scale <= 1 / 2 ** (k + 1)) k++;
+          return mips[k];
+        }
+        function drawRows(g, s0, s1, dx, dy, dw, scale) {
+          const m = mipFor(scale), fy = m.height / H;
+          g.drawImage(m, 0, s0 * fy, m.width, (s1 - s0) * fy, dx, dy, dw, (s1 - s0) * (dw / W));
+        }
+
+        // ---------- 空白间隙（吸附点取空白行段中线，删后自然留下一个间距） ----------
+        const snaps = (() => {
+          const data = src.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+          const pts = [0, H];
+          let start = -1;
+          for (let r = 0; r <= H; r++) {
+            let blank = r < H;
+            if (blank) {
+              const o = r * W * 4;
+              const R = data[o], G = data[o + 1], B = data[o + 2];
+              for (let x = 3; x < W; x += 3) {
+                const i = o + x * 4;
+                if (Math.abs(data[i] - R) + Math.abs(data[i + 1] - G) + Math.abs(data[i + 2] - B) > 12) {
+                  blank = false;
+                  break;
+                }
+              }
+            }
+            if (blank) {
+              if (start < 0) start = r;
+            } else if (start >= 0) {
+              if (r - start >= 6) pts.push(start === 0 ? 0 : r === H ? H : Math.round((start + r) / 2));
+              start = -1;
+            }
+          }
+          return [...new Set(pts)].sort((a, b) => a - b);
+        })();
+        function nearestSnap(y) {
+          let lo = 0, hi = snaps.length - 1;
+          while (hi - lo > 1) {
+            const m = (lo + hi) >> 1;
+            if (snaps[m] < y) lo = m;
+            else hi = m;
+          }
+          return Math.abs(snaps[lo] - y) <= Math.abs(snaps[hi] - y) ? snaps[lo] : snaps[hi];
+        }
+        function snapY(y, e) {
+          y = clamp(Math.round(y), 0, H);
+          if (!state.snap || (e && e.altKey)) return { y, snapped: false };
+          const s = nearestSnap(y);
+          return Math.abs(s - y) * view.zoom <= 9 ? { y: s, snapped: true } : { y, snapped: false };
+        }
+
+        // ---------- 文档状态 ----------
+        // cuts：长轴上被删除的原图区间（含首尾裁剪），互不重叠、按起点排序；cross：横向保留区间。
+        // 标注由首版标注模块管理，存原图坐标；剪辑作用在图片与标注叠好的画面上，恢复区间即原样回来。
+        // 工具 "crop" 即“剪辑”：沿用标注模块对裁剪工具的约定（该工具下不处理标注手势与按键）。
+        let nextId = 1;
+        const state = {
+          w: W,
+          h: H,
+          cuts: [],
+          cross: [0, W],
+          annotations: [],
+          selection: [],
+          selected: null,
+          pending: null,
+          gesture: null,
+          lasso: null,
+          tool: "crop",
+          undo: [],
+          redo: [],
+          showRemoved: false,
+          peek: new Set(),
+          snap: true,
+          band: null,
+          bandEdge: "b",
+          anchor: null,
+        };
+        const view = { vw: 0, vh: 0, dpr: 1, zoom: 1, sx: 0, sy: 0, fit: true, ready: false };
+        Object.defineProperty(state, "zoom", { get: () => view.zoom });
+        let layout = { segs: [], len: H };
+        let gesture = null;
+        let hover = { kind: "none" };
+        let pointer = null;
+        let lastEvent = null;
+        let space = false;
+        let annotationUI = null;
+        const lastInGroup = {};
+
+        // 撤销栈存改动前的整份快照（剪辑区间、横向范围、标注与套索）
+        const capture = () => JSON.stringify({ c: state.cuts, x: state.cross, a: state.annotations, l: state.lasso });
+        function load(json) {
+          const o = JSON.parse(json);
+          state.cuts = o.c;
+          state.cross = o.x;
+          state.annotations = o.a;
+          state.lasso = o.l ?? null;
+        }
+        function pushUndo(snap, label) {
+          state.undo.push({ snap, label });
+          if (state.undo.length > 300) state.undo.shift();
+          state.redo.length = 0;
+        }
+        const remember = (label = "标注") => pushUndo(capture(), label);
+        function commit(before, label) {
+          if (capture() === before) return false;
+          pushUndo(before, label);
+          return true;
+        }
+        function history(back) {
+          cancelGesture();
+          const from = back ? state.undo : state.redo, to = back ? state.redo : state.undo;
+          const e = from.pop();
+          if (!e) return;
+          to.push({ snap: capture(), label: e.label });
+          const c = centerSrc();
+          load(e.snap);
+          state.band = null;
+          pruneOpen();
+          annotationUI.historyRestored();
+          buildSegments();
+          setAnchor(c, view.vh / 2);
+          renderAnnotations();
+          changed();
+          toast(`${back ? "已撤销" : "已重做"}：${e.label}`);
+        }
+
+        function normalize(list) {
+          const xs = list
+            .map((c) => ({ a: clamp(Math.round(c.a), 0, H), b: clamp(Math.round(c.b), 0, H), id: c.id || nextId++ }))
+            .filter((c) => c.b > c.a)
+            .sort((p, q) => p.a - q.a);
+          const out = [];
+          for (const c of xs) {
+            const l = out[out.length - 1];
+            if (l && c.a <= l.b) l.b = Math.max(l.b, c.b);
+            else out.push({ ...c });
+          }
+          return out;
+        }
+        const removedLen = (cuts) => cuts.reduce((s, c) => s + c.b - c.a, 0);
+        const headCut = () => state.cuts.find((c) => c.a === 0);
+        const tailCut = () => state.cuts.find((c) => c.b === H);
+        const keptWithin = (a, b) => b - a - state.cuts.reduce((s, c) => s + Math.max(0, Math.min(b, c.b) - Math.max(a, c.a)), 0);
+        function pruneOpen() {
+          for (const id of [...state.peek]) if (!state.cuts.some((c) => c.id === id)) state.peek.delete(id);
+        }
+
+        // ---------- 显示布局：原图行 ↔ 显示行 ----------
+        function buildSegments() {
+          const segs = [];
+          let y = 0, d = 0;
+          for (const c of state.cuts) {
+            if (c.a > y) {
+              segs.push({ s0: y, s1: c.a, d0: d, shown: true, cut: null });
+              d += c.a - y;
+            }
+            const shown = state.showRemoved || state.peek.has(c.id);
+            segs.push({ s0: c.a, s1: c.b, d0: d, shown, cut: c });
+            if (shown) d += c.b - c.a;
+            y = c.b;
+          }
+          if (y < H) segs.push({ s0: y, s1: H, d0: d, shown: true, cut: null });
+          if (y < H) d += H - y;
+          layout = { segs, len: Math.max(d, 1) };
+        }
+        function s2dIn(segs, y) {
+          for (const g of segs) if (y <= g.s1) return g.shown ? g.d0 + Math.max(0, y - g.s0) : g.d0;
+          const l = segs[segs.length - 1];
+          return l ? l.d0 + (l.shown ? l.s1 - l.s0 : 0) : 0;
+        }
+        const s2d = (y) => s2dIn(layout.segs, y);
+        function d2s(d) {
+          let last = null;
+          for (const g of layout.segs) {
+            if (!g.shown) continue;
+            last = g;
+            if (d < g.d0 + (g.s1 - g.s0)) return g.s0 + Math.max(0, d - g.d0);
+          }
+          return last ? last.s1 : 0;
+        }
+        function exportSegs() {
+          const segs = [];
+          let y = 0, d = 0;
+          for (const c of state.cuts) {
+            if (c.a > y) {
+              segs.push({ s0: y, s1: c.a, d0: d, shown: true });
+              d += c.a - y;
+            }
+            segs.push({ s0: c.a, s1: c.b, d0: d, shown: false });
+            y = c.b;
+          }
+          if (y < H) segs.push({ s0: y, s1: H, d0: d, shown: true });
+          return segs;
+        }
+
+        // ---------- 视口 ----------
+        const contentH = () => layout.len * view.zoom + PAD * 2;
+        function originY() {
+          const ch = contentH();
+          return ch <= view.vh ? (view.vh - ch) / 2 + PAD : PAD - view.sy;
+        }
+        const dToScreen = (d) => originY() + d * view.zoom;
+        const screenToD = (y) => (y - originY()) / view.zoom;
+        function imgLeft() {
+          const avail = view.vw - GUTTER - PAD * 2, w = W * view.zoom;
+          return w <= avail ? GUTTER + PAD + (avail - w) / 2 : GUTTER + PAD - view.sx;
+        }
+        function clampView() {
+          const ch = contentH();
+          view.sy = ch <= view.vh ? 0 : clamp(view.sy, 0, ch - view.vh);
+          const avail = view.vw - GUTTER - PAD * 2, w = W * view.zoom;
+          view.sx = w <= avail ? 0 : clamp(view.sx, 0, w - avail);
+        }
+        function setAnchor(srcY, screenY) {
+          view.sy = PAD + s2d(srcY) * view.zoom - screenY;
+          clampView();
+        }
+        const srcAt = (y) => clamp(d2s(screenToD(y)), 0, H);
+        const srcPoint = (p) => ({ x: clamp((p.x - imgLeft()) / view.zoom, 0, W), y: srcAt(p.y) });
+        const centerSrc = () => srcAt(view.vh / 2);
+        // 展开／收起时的锚点：视口上部的一行保留内容；正落在展开的删除区里时取该区起点，上方内容不动
+        function stableSrc() {
+          const y = srcAt(view.vh * 0.3);
+          const s = layout.segs.find((g) => g.cut && g.shown && y > g.s0 && y < g.s1);
+          return s ? s.s0 : y;
+        }
+        // 布局变化（删段、展开、裁首尾）时保持某一原图行在屏幕上不动，避免画面跳动
+        function anchored(srcY, fn) {
+          const sy = dToScreen(s2d(srcY));
+          fn();
+          buildSegments();
+          setAnchor(srcY, sy);
+        }
+        function scrollToD(d) {
+          view.sy = PAD + d * view.zoom;
+          clampView();
+          changed();
+        }
+        const fitZoom = () => clamp((view.vw - GUTTER - PAD * 2) / W, 0.05, 1);
+        function setZoom(z, px = view.vw / 2, py = view.vh / 2, fit = false) {
+          const d = screenToD(py), ix = (px - imgLeft()) / view.zoom;
+          view.zoom = clamp(z, 0.05, 4);
+          view.fit = fit;
+          view.sy = PAD + d * view.zoom - py;
+          const avail = view.vw - GUTTER - PAD * 2;
+          if (W * view.zoom > avail) view.sx = GUTTER + PAD + ix * view.zoom - px;
+          clampView();
+          changed();
+        }
+
+        // ---------- 元素 ----------
+        const viewport = byId("viewport"), overlay = byId("overlay");
+        const baseCv = byId("baseCanvas"), baseCtx = baseCv.getContext("2d");
+        const overCv = byId("overCanvas"), overCtx = overCv.getContext("2d");
+        const annLayer = byId("annLayer"), master = byId("annotations");
+        const miniEl = byId("mini"), miniCv = byId("miniCanvas"), miniCtx = miniCv.getContext("2d");
+        const rulerEl = byId("ruler"), rulerCv = byId("rulerCanvas"), rulerCtx = rulerCv.getContext("2d");
+        const toastEl = byId("toast"), peekEl = byId("peek"), mainEl = byId("main");
+
+        let T = {};
+        let hatch = null;
+        const alpha = (hex, a) => {
+          const n = parseInt(hex.slice(1), 16);
+          return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+        };
+        function readTheme() {
+          const cs = getComputedStyle(document.documentElement);
+          const v = (n) => cs.getPropertyValue(n).trim();
+          T = { canvas: v("--canvas"), well: v("--well"), gutter: v("--gutter"), panel: v("--panel"), border: v("--border"), fg: v("--fg"), muted: v("--muted"), accent: v("--accent"), blue: v("--blue"), cut: v("--cut") };
+          const c = document.createElement("canvas");
+          c.width = c.height = 12;
+          const g = c.getContext("2d");
+          g.strokeStyle = alpha(T.cut, 0.5);
+          g.lineWidth = 1.5;
+          g.beginPath();
+          for (const o of [-12, 0, 12]) {
+            g.moveTo(o, 12);
+            g.lineTo(o + 12, 0);
+          }
+          g.stroke();
+          hatch = overCtx.createPattern(c, "repeat");
+          requestRender();
+        }
+
+        // ---------- 渲染 ----------
+        let raf = 0;
+        function requestRender() {
+          if (!raf) raf = requestAnimationFrame(() => {
+            raf = 0;
+            render();
+          });
+        }
+        function changed() {
+          updateChrome();
+          requestRender();
+        }
+        const edgeGesture = () => gesture && ["band", "bandEdge", "cutEdge"].includes(gesture.kind);
+        let annZoom = 0;
+
+        function render() {
+          const { dpr, vw, vh } = view, z = view.zoom;
+          const x0 = imgLeft(), w = W * z, top = dToScreen(0), bot = dToScreen(layout.len);
+          const vTop = Math.max(top, -40), vBot = Math.min(bot, vh + 40);
+
+          // 底图层：剪辑轨、图片
+          let g = baseCtx;
+          g.setTransform(dpr, 0, 0, dpr, 0, 0);
+          g.fillStyle = T.canvas;
+          g.fillRect(0, 0, vw, vh);
+          g.fillStyle = hover.kind === "gutter" || edgeGesture() ? alpha(T.cut, 0.08) : T.gutter;
+          g.fillRect(x0 - GUTTER, vTop, GUTTER - 6, vBot - vTop);
+          drawGutterTicks(g, x0);
+          g.save();
+          g.shadowColor = "rgba(0,0,0,.5)";
+          g.shadowBlur = 18;
+          g.fillStyle = "#000";
+          g.fillRect(x0, vTop, w, vBot - vTop);
+          g.restore();
+          const dA = screenToD(0), dB = screenToD(vh);
+          for (const s of layout.segs) {
+            if (!s.shown) continue;
+            const L = s.s1 - s.s0, v0 = Math.max(s.d0, dA), v1 = Math.min(s.d0 + L, dB);
+            if (v1 <= v0) continue;
+            const r0 = s.s0 + (v0 - s.d0);
+            drawRows(g, r0, r0 + (v1 - v0), x0, dToScreen(v0), w, z * dpr);
+          }
+
+          // 标注层：缩放变了要重出控制点线宽
+          if (annZoom !== z && annotationUI) {
+            annZoom = z;
+            renderAnnotations();
+          }
+          syncPieces(x0, z, dA, dB);
+
+          // 覆盖层：删除区、裁边、选段、把手
+          g = overCtx;
+          g.setTransform(dpr, 0, 0, dpr, 0, 0);
+          g.clearRect(0, 0, vw, vh);
+          const trimOpen = gesture && gesture.kind === "trim" ? gesture.openId : null;
+          for (const s of layout.segs) {
+            if (!s.cut || !s.shown || s.cut.id === trimOpen) continue;
+            const ys = dToScreen(s.d0), ye = dToScreen(s.d0 + s.s1 - s.s0);
+            if (ye < -4 || ys > vh + 4) continue;
+            g.fillStyle = "rgba(8,10,13,.6)";
+            g.fillRect(x0, ys, w, ye - ys);
+            hatch.setTransform(new DOMMatrix([1, 0, 0, 1, 0, Math.round(ys)]));
+            g.fillStyle = hatch;
+            g.fillRect(x0, ys, w, ye - ys);
+            g.fillStyle = alpha(T.cut, 0.4);
+            g.fillRect(x0 - 12, ys, 4, ye - ys);
+            g.fillStyle = T.cut;
+            if (s.s0 > 0) g.fillRect(x0 - GUTTER + 2, ys - 1, w + GUTTER - 2, 2);
+            if (s.s1 < H) g.fillRect(x0 - GUTTER + 2, ye - 1, w + GUTTER - 2, 2);
+          }
+
+          // 左右裁剪：保留压暗区，可拖回
+          let [c0, c1] = state.cross;
+          if (gesture && gesture.kind === "trim" && gesture.side === "left") c0 = gesture.value;
+          if (gesture && gesture.kind === "trim" && gesture.side === "right") c1 = gesture.value;
+          const lx = x0 + c0 * z, rx = x0 + c1 * z;
+          g.fillStyle = "rgba(6,8,10,.66)";
+          if (c0 > 0) g.fillRect(x0, vTop, lx - x0, vBot - vTop);
+          if (c1 < W) g.fillRect(rx, vTop, x0 + w - rx, vBot - vTop);
+          const crossDrag = gesture && gesture.kind === "trim" && (gesture.side === "left" || gesture.side === "right");
+          g.fillStyle = crossDrag ? T.cut : alpha(T.fg, 0.75);
+          if (c0 > 0 || (crossDrag && gesture.side === "left")) g.fillRect(lx - 0.5, vTop, 1, vBot - vTop);
+          if (c1 < W || (crossDrag && gesture.side === "right")) g.fillRect(rx - 0.5, vTop, 1, vBot - vTop);
+
+          // 收起的删除段：接缝；首尾裁剪：图片边缘红色虚线
+          for (const s of layout.segs) {
+            if (!s.cut || s.shown) continue;
+            const y = dToScreen(s.d0);
+            if (y < -10 || y > vh + 10) continue;
+            if (s.s0 === 0 || s.s1 === H) {
+              g.save();
+              g.setLineDash([6, 5]);
+              g.strokeStyle = T.cut;
+              g.lineWidth = 2;
+              g.beginPath();
+              g.moveTo(x0, y);
+              g.lineTo(x0 + w, y);
+              g.stroke();
+              g.restore();
+            } else seam(g, x0, w, y);
+          }
+
+          if (state.band) drawBand(g, x0, w);
+          if (gesture && gesture.kind === "trim" && (gesture.side === "top" || gesture.side === "bottom")) {
+            const y = dToScreen(s2d(gesture.value));
+            g.fillStyle = "rgba(6,8,10,.66)";
+            if (gesture.side === "top") g.fillRect(x0, top, w, y - top);
+            else g.fillRect(x0, y, w, bot - y);
+            g.fillStyle = gesture.snapped ? T.blue : T.cut;
+            g.fillRect(x0 - GUTTER + 2, y - 1, w + GUTTER - 2, 2);
+          }
+          if (state.anchor != null) {
+            const y = Math.round(dToScreen(s2d(state.anchor))) + 0.5;
+            g.save();
+            g.setLineDash([5, 4]);
+            g.strokeStyle = T.blue;
+            g.beginPath();
+            g.moveTo(x0 - GUTTER + 2, y);
+            g.lineTo(x0 + w, y);
+            g.stroke();
+            g.restore();
+          }
+          // 悬停引导线
+          if (!gesture && pointer && !space && (hover.kind === "gutter" || (hover.kind === "image" && state.tool === "crop"))) {
+            g.fillStyle = alpha(T.cut, 0.75);
+            g.fillRect(x0 - GUTTER + 2, Math.round(pointer.y), w + GUTTER - 2, 1);
+          }
+          // 拖边时在剪辑轨上标出附近的吸附点
+          if (state.snap && (edgeGesture() || (gesture && gesture.kind === "trim" && !crossDrag))) {
+            g.fillStyle = alpha(T.blue, 0.8);
+            const a = srcAt(0), b = srcAt(vh);
+            for (const sp of snaps) {
+              if (sp < a || sp > b) continue;
+              g.fillRect(x0 - 20, Math.round(dToScreen(s2d(sp))), 10, 1);
+            }
+          }
+          g.strokeStyle = alpha(T.fg, 0.16);
+          g.lineWidth = 1;
+          g.strokeRect(x0 - 0.5, top - 0.5, w + 1, bot - top + 1);
+          drawHandles(g, x0, w, top, bot, lx, rx);
+
+          syncOverlay(x0, w, top, bot);
+          renderMini();
+          renderRuler();
+          updateStatus();
+        }
+
+        function seam(g, x0, w, y) {
+          g.save();
+          g.beginPath();
+          g.moveTo(x0, y);
+          let up = true;
+          for (let x = x0 + 5; x < x0 + w; x += 9) {
+            g.lineTo(x, y + (up ? -3 : 3));
+            up = !up;
+          }
+          g.lineTo(x0 + w, y);
+          g.lineJoin = "round";
+          g.lineWidth = 4;
+          g.strokeStyle = "rgba(0,0,0,.55)";
+          g.stroke();
+          g.lineWidth = 1.6;
+          g.strokeStyle = T.cut;
+          g.stroke();
+          g.fillStyle = T.cut;
+          g.fillRect(x0 - 12, y - 1, 12, 2);
+          g.restore();
+        }
+
+        function drawBand(g, x0, w) {
+          const { a, b } = state.band;
+          const ya = dToScreen(s2d(a)), yb = dToScreen(s2d(b));
+          g.fillStyle = alpha(T.cut, 0.22);
+          g.fillRect(x0, ya, w, yb - ya);
+          g.fillStyle = alpha(T.cut, 0.55);
+          g.fillRect(x0 - GUTTER + 2, ya, GUTTER - 8, yb - ya);
+          const live = gesture && (gesture.kind === "band" || gesture.kind === "bandEdge");
+          for (const [edge, y] of [["a", ya], ["b", yb]]) {
+            const active = live && state.bandEdge === edge;
+            g.fillStyle = active && gesture.snapped ? T.blue : T.cut;
+            g.fillRect(x0 - GUTTER + 2, y - 1, w + GUTTER - 2, 2);
+            g.beginPath();
+            g.roundRect(x0 + w + 3, y - 8, 7, 16, 3.5);
+            g.fill();
+          }
+        }
+
+        function drawHandles(g, x0, w, top, bot, lx, rx) {
+          const hs = hover.kind === "trim" ? hover.side : null;
+          const gs = gesture && gesture.kind === "trim" ? gesture.side : null;
+          const col = (s) => (s === gs || s === hs ? T.cut : alpha(T.fg, 0.5));
+          const pill = (x, y, ww, hh, c) => {
+            g.beginPath();
+            g.roundRect(x, y, ww, hh, Math.min(ww, hh) / 2);
+            g.fillStyle = c;
+            g.fill();
+          };
+          const cx = x0 + w / 2;
+          let ty = top, by = bot;
+          if (gs === "top") ty = dToScreen(s2d(gesture.value));
+          if (gs === "bottom") by = dToScreen(s2d(gesture.value));
+          if (ty > -20) pill(cx - 26, ty - 13, 52, 6, col("top"));
+          if (by < view.vh + 20) pill(cx - 26, by + 7, 52, 6, col("bottom"));
+          const my = clamp(view.vh / 2, Math.max(top, 0) + 34, Math.min(bot, view.vh) - 34);
+          pill(lx - 3, my - 26, 6, 52, col("left"));
+          pill(rx - 3, my - 26, 6, 52, col("right"));
+        }
+
+        function drawGutterTicks(g, x0) {
+          const z = view.zoom;
+          const step = [100, 200, 500, 1000, 2000, 5000, 10000].find((s) => s * z >= 60) || 10000;
+          const dA = Math.max(0, screenToD(0)), dB = Math.min(layout.len, screenToD(view.vh));
+          g.font = `10px ${UI}`;
+          g.textBaseline = "middle";
+          g.textAlign = "left";
+          for (let d = Math.ceil(dA / (step / 5)) * (step / 5); d <= dB; d += step / 5) {
+            const y = Math.round(dToScreen(d)) + 0.5;
+            const major = Math.abs(d / step - Math.round(d / step)) < 1e-6;
+            g.fillStyle = alpha(T.fg, major ? 0.28 : 0.12);
+            g.fillRect(x0 - (major ? 16 : 11), y, major ? 8 : 3, 1);
+            if (major && d > 0) {
+              g.fillStyle = alpha(T.fg, 0.32);
+              g.fillText(short(d), x0 - GUTTER + 3, y);
+            }
+          }
+        }
+
+        // ---------- 标注层：标注模块的 SVG 按显示片段切开 ----------
+        const pieces = new Map();
+        let annVer = 0, pieceSeq = 0;
+        const prefixIds = (markup, p) => markup.replace(/id="([^"]+)"/g, `id="${p}-$1"`).replace(/url\(#([^)]+)\)/g, `url(#${p}-$1)`);
+        function renderAnnotations() {
+          if (!annotationUI) return;
+          annotationUI.render();
+          annVer++;
+          scheduleMiniRaster();
+          requestRender();
+        }
+        function syncPieces(x0, z, dA, dB) {
+          const seen = new Set();
+          for (const s of layout.segs) {
+            const L = s.s1 - s.s0;
+            if (!s.shown || s.d0 + L < dA || s.d0 > dB) continue;
+            const key = s.s0 + ":" + s.s1;
+            seen.add(key);
+            let el = pieces.get(key);
+            if (!el) {
+              el = document.createElementNS(SVG_NS, "svg");
+              el.setAttribute("class", "ann-piece");
+              el.setAttribute("preserveAspectRatio", "none");
+              el._prefix = "p" + pieceSeq++;
+              annLayer.appendChild(el);
+              pieces.set(key, el);
+            }
+            el.setAttribute("viewBox", `0 ${s.s0} ${W} ${L}`);
+            el.style.left = x0 + "px";
+            el.style.top = dToScreen(s.d0) + "px";
+            el.style.width = W * z + "px";
+            el.style.height = L * z + "px";
+            if (el._ver !== annVer) {
+              el.innerHTML = prefixIds(master.innerHTML, el._prefix);
+              el._ver = annVer;
+            }
+          }
+          for (const [k, el] of pieces)
+            if (!seen.has(k)) {
+              el.remove();
+              pieces.delete(k);
+            }
+        }
+        async function svgImage(markup, width, height) {
+          const svg = `<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${markup}</svg>`;
+          const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+          try {
+            const img = new Image();
+            img.src = url;
+            await img.decode();
+            return img;
+          } finally {
+            URL.revokeObjectURL(url);
+          }
+        }
+        // 缩略图上的标注：去抖后按缩略比例栅格化一次
+        let miniAnn = null, miniTimer = 0;
+        function scheduleMiniRaster() {
+          clearTimeout(miniTimer);
+          miniTimer = setTimeout(async () => {
+            const markup = annotationUI.exportMarkup();
+            if (!state.annotations.length) {
+              miniAnn = null;
+              return requestRender();
+            }
+            try {
+              miniAnn = await svgImage(prefixIds(markup, "m"), 240, Math.round((H * 240) / W));
+            } catch {
+              miniAnn = null;
+            }
+            requestRender();
+          }, 150);
+        }
+
+        // ---------- 浮层（接缝标签、选段操作条等） ----------
+        const ovEls = new Map();
+        let ovFrame = 0;
+        function ov(key, cls, html, x, y) {
+          let el = ovEls.get(key);
+          if (!el) {
+            el = document.createElement("div");
+            overlay.appendChild(el);
+            ovEls.set(key, el);
+          }
+          if (el._cls !== cls) el.className = "ov " + (el._cls = cls);
+          if (el._html !== html) el.innerHTML = el._html = html;
+          el.style.left = Math.round(x) + "px";
+          el.style.top = Math.round(y) + "px";
+          el._seen = ovFrame;
+          return el;
+        }
+        function syncOverlay(x0, w) {
+          ovFrame++;
+          const vh = view.vh;
+          const chipX = x0 - 8;
+          for (const s of layout.segs) {
+            if (!s.cut) continue;
+            const c = s.cut, len = c.b - c.a;
+            if (gesture && gesture.kind === "trim" && gesture.openId === c.id) continue;
+            const y = dToScreen(s.d0);
+            const ye = s.shown ? dToScreen(s.d0 + len) : y;
+            if (ye < -12 || y > vh + 12) continue;
+            const kind = c.a === 0 ? "顶部已裁" : c.b === H ? "底部已裁" : "已删除";
+            const icon = c.a === 0 ? "⤒" : c.b === H ? "⤓" : '<i class="ico icon-cut"></i>';
+            const chipY = s.shown ? clamp(y, 12, Math.max(12, ye - 12)) : y;
+            const el = ov("chip" + c.id, "seam-chip" + (s.shown ? " open" : ""), `${icon}${short(len)}`, chipX, c.a === 0 && !s.shown ? Math.max(y, 12) : chipY);
+            el.dataset.action = "toggle-cut";
+            el.dataset.id = c.id;
+            el.dataset.peek = s.shown ? "" : c.id;
+            el.title = `${kind} ${fmt(len)} px · 单击${s.shown ? "收起" : "原位展开调整"}`;
+            if (s.shown) {
+              const by = clamp(y + 8, 8, Math.max(8, ye - 44));
+              ov(
+                "xbar" + c.id,
+                "bar",
+                `<span class="info">${kind} <b>${fmt(len)}</b> px · 拖动红线调整</span><button data-action="restore" data-id="${c.id}">恢复</button>${state.showRemoved ? "" : `<button data-action="toggle-cut" data-id="${c.id}">收起</button>`}`,
+                x0 + 10,
+                by,
+              );
+            }
+          }
+          if (state.band) {
+            const { a, b } = state.band;
+            const ya = dToScreen(s2d(a)), yb = dToScreen(s2d(b));
+            const removing = keptWithin(a, b);
+            const live = gesture && (gesture.kind === "band" || gesture.kind === "bandEdge");
+            ov("bandlabel", "band-label" + (live && gesture.snapped ? " snapped" : ""), fmt(removing), chipX, clamp((ya + yb) / 2, 12, vh - 12));
+            if (!live) {
+              const segs = exportSegs(), outLen = H - removedLen(state.cuts);
+              const atHead = s2dIn(segs, a) <= 0, atTail = s2dIn(segs, b) >= outLen;
+              const verb = atHead && !atTail ? "裁掉开头" : atTail && !atHead ? "裁掉结尾" : "删除";
+              const bx = Math.min(x0 + w - 10, view.vw - 10);
+              const by = yb - ya >= 56 ? clamp(ya + 8, 8, yb - 46) : yb + 44 < vh ? yb + 8 : Math.max(8, ya - 46);
+              ov(
+                "bandbar",
+                "bar right",
+                `<button class="danger" data-action="delete-band" title="删除选中段 · Delete / Enter"><i class="ico" style="--i: url(icons/trash.svg)"></i>${verb}<kbd>Del</kbd></button><button data-action="keep-band" title="只保留选中段 · K">仅保留<kbd>K</kbd></button><button data-action="clear-band" title="取消选择 · Esc">取消</button>`,
+                bx,
+                clamp(by, 8, vh - 46),
+              );
+            }
+          }
+          if (state.anchor != null) ov("anchor", "anchor-label", "起点", chipX, dToScreen(s2d(state.anchor)));
+          if (gesture && gesture.kind === "trim") {
+            const g = gesture;
+            let text, x, y;
+            if (g.side === "top" || g.side === "bottom") {
+              const total = g.side === "top" ? g.value : H - g.value;
+              const delta = g.side === "top" ? g.value - g.start : g.start - g.value;
+              text = `${g.side === "top" ? "裁掉顶部" : "裁掉底部"} ${fmt(total)} px` + (delta < 0 ? ` · 恢复 ${fmt(-delta)}` : "");
+              x = x0 + w / 2 + 150;
+              y = dToScreen(s2d(g.value)) + (g.side === "top" ? 10 : -38);
+            } else {
+              const total = g.side === "left" ? g.value : W - g.value;
+              text = `${g.side === "left" ? "裁掉左侧" : "裁掉右侧"} ${fmt(total)} px`;
+              x = x0 + g.value * view.zoom + (g.side === "left" ? 80 : -80);
+              y = clamp(view.vh / 2 + 40, 8, vh - 40);
+            }
+            ov("trimlabel", "trim-label" + (g.snapped ? " snapped" : ""), text, x, clamp(y, 8, vh - 36));
+          }
+          for (const [k, el] of ovEls)
+            if (el._seen !== ovFrame) {
+              el.remove();
+              ovEls.delete(k);
+            }
+        }
+
+        // ---------- 缩略图（代码编辑器式：按宽度比例保持可读，内容超高时随主画布按比例滚动） ----------
+        const mini = { hover: false, drag: null };
+        function miniGeom() {
+          const mw = miniEl.clientWidth, mh = miniEl.clientHeight, ms = mw / W;
+          const C = layout.len * ms, viewLen = view.vh / view.zoom, dTop = screenToD(0);
+          const maxScroll = Math.max(0, layout.len - viewLen);
+          const top = C <= mh ? 0 : (maxScroll > 0 ? clamp(dTop / maxScroll, 0, 1) : 0) * (C - mh);
+          return { mw, mh, ms, C, viewLen, dTop, maxScroll, top };
+        }
+        function renderMini() {
+          if (!miniEl.clientWidth) return;
+          const g = miniCtx, dpr = view.dpr, G = miniGeom();
+          g.setTransform(dpr, 0, 0, dpr, 0, 0);
+          g.fillStyle = T.well;
+          g.fillRect(0, 0, G.mw, G.mh);
+          for (const s of layout.segs) {
+            if (!s.shown) continue;
+            const L = s.s1 - s.s0, dy = s.d0 * G.ms - G.top;
+            if (dy > G.mh || dy + L * G.ms < 0) continue;
+            drawRows(g, s.s0, s.s1, 0, dy, G.mw, G.ms * dpr);
+            if (miniAnn) {
+              const fy = miniAnn.height / H;
+              g.drawImage(miniAnn, 0, s.s0 * fy, miniAnn.width, L * fy, 0, dy, G.mw, L * G.ms);
+            }
+            if (s.cut) {
+              g.fillStyle = "rgba(8,10,13,.55)";
+              g.fillRect(0, dy, G.mw, L * G.ms);
+              g.fillStyle = alpha(T.cut, 0.35);
+              g.fillRect(0, dy, G.mw, L * G.ms);
+            }
+          }
+          const [c0, c1] = state.cross;
+          g.fillStyle = "rgba(6,8,10,.6)";
+          if (c0 > 0) g.fillRect(0, 0, c0 * G.ms, G.mh);
+          if (c1 < W) g.fillRect(c1 * G.ms, 0, G.mw - c1 * G.ms, G.mh);
+          g.font = `600 9.5px ${UI}`;
+          g.textAlign = "right";
+          g.textBaseline = "bottom";
+          for (const s of layout.segs) {
+            if (!s.cut || s.shown) continue;
+            const y = s.d0 * G.ms - G.top;
+            if (y < -2 || y > G.mh + 2) continue;
+            g.fillStyle = T.cut;
+            g.fillRect(0, y - 1, G.mw, 2);
+            if (s.s0 > 0 && s.s1 < H) {
+              const label = "−" + short(s.s1 - s.s0);
+              const lw = g.measureText(label).width;
+              g.fillStyle = "rgba(0,0,0,.6)";
+              g.fillRect(G.mw - lw - 6, y - 13, lw + 5, 12);
+              g.fillStyle = T.cut;
+              g.fillText(label, G.mw - 3, y - 2);
+            }
+          }
+          if (state.band) {
+            const ya = s2d(state.band.a) * G.ms - G.top, yb = s2d(state.band.b) * G.ms - G.top;
+            g.fillStyle = alpha(T.cut, 0.4);
+            g.fillRect(0, ya, G.mw, Math.max(1.5, yb - ya));
+          }
+          if (state.anchor != null) {
+            g.fillStyle = T.blue;
+            g.fillRect(0, s2d(state.anchor) * G.ms - G.top - 0.5, G.mw, 1);
+          }
+          const sy = G.dTop * G.ms - G.top, sh = G.viewLen * G.ms;
+          g.fillStyle = alpha(T.fg, mini.drag ? 0.24 : mini.hover ? 0.17 : 0.09);
+          g.fillRect(0, sy, G.mw, sh);
+          g.fillStyle = alpha(T.fg, mini.hover || mini.drag ? 0.55 : 0.3);
+          g.fillRect(0, Math.round(sy), G.mw, 1);
+          g.fillRect(0, Math.round(sy + sh) - 1, G.mw, 1);
+        }
+        function renderRuler() {
+          const g = rulerCtx, dpr = view.dpr, rw = rulerEl.clientWidth, rh = rulerEl.clientHeight;
+          if (!rw) return;
+          const rs = rh / layout.len;
+          g.setTransform(dpr, 0, 0, dpr, 0, 0);
+          g.fillStyle = T.panel;
+          g.fillRect(0, 0, rw, rh);
+          const dTop = screenToD(0), vl = view.vh / view.zoom;
+          g.fillStyle = alpha(T.fg, 0.16);
+          g.fillRect(1, clamp(dTop * rs, 0, rh), rw - 2, Math.max(6, Math.min(vl, layout.len) * rs));
+          for (const a of state.annotations) {
+            if (a.type === "watermark") continue;
+            const b = renderer.box(a), y0 = s2d(b.y), y1 = s2d(b.y + b.h);
+            if (y1 - y0 <= 0 && b.h > 0) continue;
+            g.fillStyle = (a.style && a.style.color) || T.muted;
+            g.fillRect(rw - 5, y0 * rs, 4, Math.max(2, (y1 - y0) * rs));
+          }
+          for (const s of layout.segs) {
+            if (!s.cut) continue;
+            const y = s.d0 * rs;
+            g.fillStyle = T.cut;
+            if (s.shown) {
+              g.globalAlpha = 0.55;
+              g.fillRect(1, y, rw - 6, Math.max(2, (s.s1 - s.s0) * rs));
+              g.globalAlpha = 1;
+            } else g.fillRect(1, clamp(y - 1, 0, rh - 2), rw - 6, 2);
+          }
+          if (state.band) {
+            g.fillStyle = alpha(T.cut, 0.85);
+            const ya = s2d(state.band.a) * rs;
+            g.fillRect(1, ya, rw - 6, Math.max(2, (s2d(state.band.b) - s2d(state.band.a)) * rs));
+          }
+          if (state.anchor != null) {
+            g.fillStyle = T.blue;
+            g.fillRect(0, s2d(state.anchor) * rs - 1, rw, 2);
+          }
+        }
+
+        // ---------- 状态栏、顶栏与剪辑面板 ----------
+        function setHint(t) {
+          const el = byId("hint");
+          if (el.textContent !== t) el.textContent = t;
+        }
+        function hintFor(h) {
+          if (gesture) {
+            if (gesture.kind.startsWith("ann:")) return "Esc 放弃本次操作";
+            switch (gesture.kind) {
+              case "band":
+              case "bandEdge":
+              case "cutEdge":
+                return `拖到画布上下边缘自动滚动 · ${state.snap ? "按住 Alt 暂停吸附 · " : ""}Esc 放弃本次拖动`;
+              case "trim":
+                return "松开即裁掉压暗部分，之后仍可拖回 · Esc 放弃";
+              default:
+                return "平移";
+            }
+          }
+          switch (h.kind) {
+            case "bandEdge":
+              return "拖动红线调整选段范围";
+            case "cutEdge":
+              return "拖动调整已删除的范围；拖到两线重合即恢复";
+            case "trim":
+              return { top: "拖动裁掉顶部；已裁部分会重新露出，可拖回恢复", bottom: "拖动裁掉底部；已裁部分会重新露出，可拖回恢复", left: "拖动裁掉左侧", right: "拖动裁掉右侧" }[h.side];
+            case "gutter":
+              return state.band ? "Shift+单击扩展选段 · 拖动重新选段" : "剪辑轨：任何工具下都能上下拖动选段 · 单击放起点，Shift+单击选到这里";
+            case "image": {
+              if (state.tool === "crop")
+                return state.band
+                  ? "Delete 删除 · K 仅保留 · 拖红线调整 · ↑↓ 微调 · 单击或 Esc 取消"
+                  : "上下拖动选择要删除的部分 · 单击放起点，Shift+单击选到这里 · 滚轮浏览";
+              if (state.tool === "select") return "单击或框选标注，Shift 加选，拖动移动 · 双击文字编辑、双击组合进入";
+              const t = tools[state.tool];
+              return t ? `${t.label}：${t.hint}` : "";
+            }
+            case "margin":
+              return "拖动平移 · 滚轮浏览 · Ctrl+滚轮缩放";
+            case "mini":
+              return "拖动滑块浏览 · 点击跳转 · Shift+单击选段到此处";
+            default:
+              return state.band ? "Delete 删除选段 · K 仅保留 · Esc 取消" : "滚轮浏览 · Ctrl+滚轮缩放 · 空格或中键拖动平移 · H 显示已删除部分";
+          }
+        }
+        function updateStatus() {
+          setHint(hintFor(hover));
+          const el = byId("coords");
+          let t = `${Math.round(view.zoom * 100)}%`;
+          if (pointer && (hover.kind === "image" || hover.kind === "gutter" || gesture)) {
+            const p = srcPoint(pointer);
+            t = `原图 ${fmt(p.x)}, ${fmt(p.y)} · 成品 y ${fmt(s2dIn(exportSegs(), p.y))} · ` + t;
+          }
+          if (el.textContent !== t) el.textContent = t;
+        }
+        function updateChrome() {
+          const [c0, c1] = state.cross;
+          const outW = c1 - c0, outH = H - removedLen(state.cuts);
+          const os = byId("outSize");
+          os.textContent = `${fmt(outW)} × ${fmt(outH)}`;
+          const over = outW * outH > 32e6 || outH > 65535;
+          os.classList.toggle("over", over);
+          os.title = over ? "超过输出上限（3200 万像素或单边 65535）：继续删段或裁边" : "成品尺寸";
+          byId("srcSize").textContent = outH !== H || outW !== W ? `原图 ${fmt(W)} × ${fmt(H)}` : "原图";
+          const inner = state.cuts.filter((c) => c.a > 0 && c.b < H).length;
+          const sides = (headCut() ? 1 : 0) + (tailCut() ? 1 : 0) + (c0 > 0 ? 1 : 0) + (c1 < W ? 1 : 0);
+          const parts = [inner ? `删 ${inner} 段` : "", sides ? `裁 ${sides} 边` : ""].filter(Boolean);
+          byId("editsLabel").textContent = parts.length ? parts.join(" · ") : "未剪辑";
+          byId("editsChip").classList.toggle("has", parts.length > 0);
+          byId("undoBtn").disabled = !state.undo.length;
+          byId("redoBtn").disabled = !state.redo.length;
+          byId("undoBtn").title = state.undo.length ? `撤销：${state.undo[state.undo.length - 1].label} · Ctrl+Z` : "撤销 · Ctrl+Z";
+          byId("redoBtn").title = state.redo.length ? `重做：${state.redo[state.redo.length - 1].label} · Ctrl+Y` : "重做 · Ctrl+Y";
+          byId("zoomVal").textContent = Math.round(view.zoom * 100) + "%";
+          byId("fitBtn").setAttribute("aria-pressed", String(view.fit));
+          byId("removedBtn").setAttribute("aria-pressed", String(state.showRemoved));
+          byId("removedIco").style.setProperty("--i", `url(icons/${state.showRemoved ? "eye-off" : "eye"}.svg)`);
+          byId("sideBtn").setAttribute("aria-pressed", String(!mainEl.classList.contains("side-off")));
+          renderCutPanel();
+        }
+        let cutPanelKey = "";
+        function renderCutPanel() {
+          const panel = byId("cut-inspector");
+          if (panel.hidden || mainEl.classList.contains("side-off")) return;
+          if (panel.contains(document.activeElement) && document.activeElement.matches("input")) return;
+          // 内容不变就不重建，保留用户折叠的分组
+          const key = JSON.stringify([state.cuts, state.cross, state.snap, state.showRemoved]);
+          if (key === cutPanelKey) return;
+          cutPanelKey = key;
+          const [c0, c1] = state.cross, head = headCut(), tail = tailCut();
+          const outH = H - removedLen(state.cuts);
+          const field = (key, label, v) => `<label class="trim-field ${v ? "on" : ""}"><span>${label}</span><input type="number" min="0" step="1" data-trim="${key}" value="${v}" aria-label="${label}侧裁掉像素"><i>px</i></label>`;
+          const rows = state.cuts.map((c) => {
+            const kind = c.a === 0 ? "顶部裁剪" : c.b === H ? "底部裁剪" : "删除段";
+            return `<li><span class="meta"><b>${kind} · <em>${fmt(c.b - c.a)}</em> px</b><small>原图 ${fmt(c.a)} – ${fmt(c.b)}</small></span><button data-action="locate" data-id="${c.id}">定位</button><button data-action="restore" data-id="${c.id}">恢复</button></li>`;
+          });
+          const untouched = !state.cuts.length && c0 === 0 && c1 === W;
+          panel.innerHTML = `<div class="section-heading"><span class="native-icon icon-cut" aria-hidden="true"></span><h2>剪辑</h2><span class="spacer"></span><button class="reset-button" data-action="reset-cuts" ${untouched ? "disabled" : ""}>全部恢复</button></div>
+            <div class="cut-summary"><b>${fmt(c1 - c0)} × ${fmt(outH)}</b><span>成品像素 · 原图 ${fmt(W)} × ${fmt(H)}${outH < H ? ` · 去掉 ${fmt(H - outH)}` : ""}</span></div>
+            <details class="property-section" open><summary>四边裁剪</summary><div class="trim-grid">${field("top", "上", head ? head.b : 0)}${field("bottom", "下", tail ? H - tail.a : 0)}${field("left", "左", c0)}${field("right", "右", W - c1)}</div><p class="object-hint">也可直接拖图片外缘；拖首尾时已裁部分会露出来，可以拖回。</p></details>
+            <details class="property-section" open><summary>删除记录${state.cuts.length ? ` ${state.cuts.length}` : ""}</summary>${rows.length ? `<ul class="cut-list">${rows.join("")}</ul>` : '<p class="object-hint">还没有删除。在图上上下拖动，选中不要的部分后按 Delete。</p>'}</details>
+            <details class="property-section" open><summary>选项</summary>
+              <label class="inspector-property"><span>吸附空白间隙（Alt 暂停）</span><input type="checkbox" data-cut-opt="snap" ${state.snap ? "checked" : ""}></label>
+              <label class="inspector-property"><span>原位显示已删除（H）</span><input type="checkbox" data-cut-opt="removed" ${state.showRemoved ? "checked" : ""}></label>
+            </details>
+            <p class="object-hint">剪辑作用于图片和标注叠好的画面：跨接缝的标注会像图片一样被剪开。切到标注工具后，图片左侧的剪辑轨仍可拖动选段。</p>`;
+        }
+        function syncSide() {
+          const crop = state.tool === "crop";
+          byId("cut-inspector").hidden = !crop;
+          byId("annotation-inspector").hidden = crop;
+          cutPanelKey = "";
+          renderCutPanel();
+        }
+        function syncRail() {
+          for (const b of document.querySelectorAll(".tools [data-tool]")) b.classList.toggle("active", b.dataset.tool === state.tool);
+        }
+        function setTool(key) {
+          if (gesture) cancelGesture();
+          if (key !== "crop" && key !== "select" && !tools[key]) return;
+          state.tool = key;
+          if (tools[key]) lastInGroup[tools[key].group] = key;
+          renderAnnotations();
+          syncRail();
+          syncSide();
+          updateHover();
+          changed();
+        }
+
+        // ---------- 编辑命令 ----------
+        let toastTimer = 0;
+        function toast(message, withUndo) {
+          toastEl.innerHTML = `<span>${escapeText(message)}</span>${withUndo ? '<button data-action="undo">撤销 <kbd>Ctrl+Z</kbd></button>' : ""}`;
+          toastEl.classList.add("show");
+          clearTimeout(toastTimer);
+          toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3600);
+        }
+        function hideOnboard() {
+          byId("onboard").hidden = true;
+        }
+        function deleteBand() {
+          if (!state.band) return;
+          const { a, b } = state.band;
+          const removing = keptWithin(a, b);
+          if (removing <= 0) {
+            state.band = null;
+            changed();
+            return;
+          }
+          const next = normalize([...state.cuts, { a, b }]);
+          if (H - removedLen(next) < MIN_KEEP) return toast("至少保留 16 px，不能删除全部内容");
+          const before = capture();
+          const inside = state.annotations.filter((x) => {
+            const bx = renderer.box(x);
+            return x.type !== "watermark" && bx.y >= a && bx.y + bx.h <= b;
+          }).length;
+          anchored(a, () => {
+            state.cuts = next;
+            state.band = null;
+            for (const c of next) if (c.a <= b && c.b >= a) state.peek.delete(c.id);
+          });
+          hideOnboard();
+          commit(before, `删除 ${fmt(removing)} px`);
+          changed();
+          toast(`已删除 ${fmt(removing)} px${inside ? `，其中 ${inside} 个标注随这段一起隐藏（恢复该段即回来）` : ""}`, true);
+        }
+        function keepBand() {
+          if (!state.band) return;
+          const { a, b } = state.band;
+          const before = capture();
+          anchored(a, () => {
+            state.cuts = normalize([...state.cuts, { a: 0, b: a }, { a: b, b: H }]);
+            state.band = null;
+            state.peek.clear();
+          });
+          hideOnboard();
+          commit(before, "仅保留选段");
+          changed();
+          toast(`只保留选中的 ${fmt(keptWithin(0, H))} px`, true);
+        }
+        function setHead(v) {
+          const old = headCut();
+          const list = state.cuts.filter((c) => c !== old);
+          if (v > 0) list.push({ a: 0, b: v, id: old && old.id });
+          state.cuts = normalize(list);
+        }
+        function setTail(v) {
+          const old = tailCut();
+          const list = state.cuts.filter((c) => c !== old);
+          if (v < H) list.push({ a: v, b: H, id: old && old.id });
+          state.cuts = normalize(list);
+        }
+        function restoreCut(id) {
+          const c = state.cuts.find((x) => x.id === id);
+          if (!c) return;
+          const before = capture();
+          anchored(c.a, () => {
+            state.cuts = state.cuts.filter((x) => x !== c);
+            state.peek.delete(id);
+          });
+          commit(before, `恢复 ${fmt(c.b - c.a)} px`);
+          changed();
+          toast(`已恢复 ${fmt(c.b - c.a)} px`, true);
+        }
+        function toggleCut(id) {
+          if (state.showRemoved) return toast("正在显示全部已删除部分，按 H 收起");
+          const c = state.cuts.find((x) => x.id === id);
+          if (!c) return;
+          anchored(c.a, () => (state.peek.has(id) ? state.peek.delete(id) : state.peek.add(id)));
+          hidePeek();
+          changed();
+        }
+        function toggleRemoved() {
+          anchored(stableSrc(), () => {
+            state.showRemoved = !state.showRemoved;
+            state.peek.clear();
+          });
+          changed();
+          toast(state.showRemoved ? "已原位显示全部删除部分，拖动红线可调整 · H 收起" : "已收起删除部分");
+        }
+        function resetCuts() {
+          const before = capture();
+          anchored(stableSrc(), () => {
+            state.cuts = [];
+            state.cross = [0, W];
+            state.peek.clear();
+          });
+          if (commit(before, "全部恢复")) toast("已恢复全部删除与裁边", true);
+          changed();
+        }
+        function extendTo(y) {
+          if (state.band) {
+            const { a, b } = state.band;
+            if (Math.abs(y - a) < Math.abs(y - b)) state.band = { a: Math.min(y, b - 1), b };
+            else state.band = { a, b: Math.max(y, a + 1) };
+          } else if (state.anchor != null && Math.abs(state.anchor - y) >= 1) {
+            state.band = { a: Math.min(state.anchor, y), b: Math.max(state.anchor, y) };
+            state.anchor = null;
+          } else state.anchor = y;
+          hideOnboard();
+          changed();
+        }
+        function nudgeBand(step) {
+          const band = { ...state.band };
+          const e = state.bandEdge;
+          band[e] = clamp(band[e] + step, 0, H);
+          if (band.b - band.a < 1) return;
+          state.band = band;
+          const y = dToScreen(s2d(band[e]));
+          if (y < 40 || y > view.vh - 40) setAnchor(band[e], clamp(y, 40, view.vh - 40));
+          changed();
+        }
+        function locate(id) {
+          const c = state.cuts.find((x) => x.id === id);
+          if (!c) return;
+          setAnchor(c.a, view.vh * 0.4);
+          changed();
+        }
+        function applyTrimField(key, v) {
+          const before = capture();
+          const head = headCut(), tail = tailCut();
+          anchored(stableSrc(), () => {
+            if (key === "top") setHead(Math.min(v, (tail ? tail.a : H) - MIN_KEEP));
+            if (key === "bottom") setTail(Math.max(H - v, (head ? head.b : 0) + MIN_KEEP));
+            if (key === "left") state.cross = [clamp(v, 0, state.cross[1] - MIN_KEEP), state.cross[1]];
+            if (key === "right") state.cross = [state.cross[0], clamp(W - v, state.cross[0] + MIN_KEEP, W)];
+            pruneOpen();
+          });
+          if (commit(before, "裁边")) toast("已按数值裁边", true);
+          changed();
+        }
+
+        // ---------- 命中测试 ----------
+        // 分区：图外缘＝裁边；左侧剪辑轨＝选段（任何工具）；图内＝当前工具；其余空白＝平移。
+        function hitTest(p) {
+          const z = view.zoom, x0 = imgLeft(), w = W * z, top = dToScreen(0), bot = dToScreen(layout.len);
+          const cutTool = state.tool === "crop";
+          const inGutterX = p.x >= x0 - GUTTER && p.x < x0 - 6;
+          const inImgX = p.x >= x0 && p.x <= x0 + w;
+          const inY = p.y >= top && p.y <= bot;
+          if (state.band && p.x >= x0 - GUTTER && p.x <= x0 + w + 14) {
+            if (Math.abs(p.y - dToScreen(s2d(state.band.b))) <= 5) return { kind: "bandEdge", start: false };
+            if (Math.abs(p.y - dToScreen(s2d(state.band.a))) <= 5) return { kind: "bandEdge", start: true };
+          }
+          if (inGutterX || (cutTool && inImgX)) {
+            for (const s of layout.segs) {
+              if (!s.cut || !s.shown) continue;
+              const ys = dToScreen(s.d0), ye = dToScreen(s.d0 + s.s1 - s.s0);
+              if (s.s0 > 0 && Math.abs(p.y - ys) <= 5) return { kind: "cutEdge", cut: s.cut, side: "a" };
+              if (s.s1 < H && Math.abs(p.y - ye) <= 5) return { kind: "cutEdge", cut: s.cut, side: "b" };
+            }
+          }
+          const [c0, c1] = state.cross, lx = x0 + c0 * z, rx = x0 + c1 * z, inside = cutTool ? 6 : 3;
+          if (p.y >= top - 4 && p.y <= bot + 4) {
+            if (Math.abs(p.x - lx) <= 6) return { kind: "trim", side: "left" };
+            if (p.x >= rx - inside && p.x <= rx + (c1 === W ? 16 : 6)) return { kind: "trim", side: "right" };
+          }
+          if (p.x >= x0 - 4 && p.x <= x0 + w + 4) {
+            if (p.y >= top - 18 && p.y <= top + inside) return { kind: "trim", side: "top" };
+            if (p.y >= bot - inside && p.y <= bot + 18) return { kind: "trim", side: "bottom" };
+          }
+          if (inGutterX && inY) return { kind: "gutter" };
+          if (inImgX && inY) return { kind: "image" };
+          return { kind: "margin" };
+        }
+        function annotationAt(p) {
+          const sp = srcPoint(p), pad = 6 / view.zoom;
+          return state.annotations.some((a) => {
+            if (["watermark", "localFill", "pixelEraser"].includes(a.type)) return false;
+            const b = renderer.box(a);
+            return sp.x >= b.x - pad && sp.x <= b.x + b.w + pad && sp.y >= b.y - pad && sp.y <= b.y + b.h + pad;
+          });
+        }
+        function cursorFor(h) {
+          if (gesture) {
+            if (gesture.kind === "pan") return "grabbing";
+            if (gesture.kind === "trim") return gesture.side === "left" || gesture.side === "right" ? "ew-resize" : "ns-resize";
+            if (gesture.kind.startsWith("ann:")) return gesture.kind === "ann:move" ? "move" : "crosshair";
+            return "ns-resize";
+          }
+          if (space) return "grab";
+          switch (h.kind) {
+            case "bandEdge":
+            case "cutEdge":
+              return "ns-resize";
+            case "trim":
+              return h.side === "left" || h.side === "right" ? "ew-resize" : "ns-resize";
+            case "gutter":
+              return "crosshair";
+            case "image": {
+              if (state.tool === "select") return pointer && annotationAt(pointer) ? "move" : "default";
+              const g = tools[state.tool] && tools[state.tool].gesture;
+              return g === "text" ? "text" : g === "eraser" ? "cell" : "crosshair";
+            }
+            case "margin":
+              return "grab";
+            default:
+              return "default";
+          }
+        }
+        function updateHover() {
+          if (!pointer) return;
+          hover = hitTest(pointer);
+          viewport.style.cursor = cursorFor(hover);
+          requestRender();
+        }
+
+        // ---------- 指针手势 ----------
+        const local = (e) => {
+          const r = viewport.getBoundingClientRect();
+          return { x: e.clientX - r.left, y: e.clientY - r.top };
+        };
+        function begin(e, g) {
+          gesture = state.gesture = g;
+          lastEvent = e;
+          try {
+            viewport.setPointerCapture(e.pointerId);
+          } catch {}
+          e.preventDefault();
+          if (g.kind !== "pan") hidePeek();
+          viewport.style.cursor = cursorFor(hover);
+          startAutoscroll();
+          changed();
+        }
+        function beginBand(e, p) {
+          const s = snapY(srcAt(p.y), e);
+          begin(e, { kind: "band", anchor: s.y, origin: p, moved: false, prevBand: state.band });
+        }
+        function beginTrim(e, side) {
+          const g = { kind: "trim", side, before: capture(), openId: null, tempOpened: false, snapped: false };
+          if (side === "top" || side === "bottom") {
+            const c = side === "top" ? headCut() : tailCut();
+            g.value = g.start = c ? (side === "top" ? c.b : c.a) : side === "top" ? 0 : H;
+            if (c) {
+              g.openId = c.id;
+              // 拖首尾时临时露出已裁部分，向外拖即可恢复
+              if (!state.showRemoved && !state.peek.has(c.id)) {
+                anchored(side === "top" ? c.b : Math.max(0, c.a - 1), () => state.peek.add(c.id));
+                g.tempOpened = true;
+              }
+            }
+          } else g.value = g.start = side === "left" ? state.cross[0] : state.cross[1];
+          hideOnboard();
+          begin(e, g);
+        }
+        viewport.addEventListener("pointerdown", (e) => {
+          if (e.target.closest(".ov, .onboard, .toast, .tool-palette, .annotation-floating, .annotation-input")) return;
+          const p = (pointer = local(e));
+          if (e.button === 1 || (e.button === 0 && space)) return begin(e, { kind: "pan", p, sx: view.sx, sy: view.sy });
+          if (e.button !== 0 || gesture) return;
+          // 选中对象的控制点优先于裁边与剪辑轨
+          if (state.tool !== "crop" && e.target.closest("[data-annotation-handle],[data-annotation-node],[data-arrow-control]")) {
+            annotationUI.begin(e, srcPoint(p));
+            return renderAnnotations();
+          }
+          const h = (hover = hitTest(p));
+          if (h.kind === "bandEdge") {
+            state.bandEdge = h.start ? "a" : "b";
+            return begin(e, { kind: "bandEdge", fixed: h.start ? state.band.b : state.band.a, prevBand: { ...state.band } });
+          }
+          if (h.kind === "cutEdge") return begin(e, { kind: "cutEdge", id: h.cut.id, side: h.side, before: capture() });
+          if (h.kind === "trim") return beginTrim(e, h.side);
+          if (h.kind === "gutter") return beginBand(e, p);
+          if (h.kind === "margin") return begin(e, { kind: "pan", p, sx: view.sx, sy: view.sy });
+          if (state.tool === "crop") return beginBand(e, p);
+          // 图内其余手势交给标注模块（原图坐标）
+          annotationUI.begin(e, srcPoint(p));
+          renderAnnotations();
+          changed();
+        });
+        function applyGesture(p, e) {
+          const g = gesture;
+          if (!g || !p) return;
+          if (g.kind.startsWith("ann:")) {
+            annotationUI.move(e, g, srcPoint(p));
+            return;
+          }
+          switch (g.kind) {
+            case "pan":
+              view.sx = g.sx - (p.x - g.p.x);
+              view.sy = g.sy - (p.y - g.p.y);
+              clampView();
+              break;
+            case "band": {
+              if (!g.moved && Math.hypot(p.x - g.origin.x, p.y - g.origin.y) < 3) return;
+              g.moved = true;
+              const s = snapY(srcAt(p.y), e);
+              g.snapped = s.snapped;
+              state.band = s.y >= g.anchor ? { a: g.anchor, b: Math.max(s.y, g.anchor + 1) } : { a: s.y, b: g.anchor };
+              state.bandEdge = s.y >= g.anchor ? "b" : "a";
+              state.anchor = null;
+              hideOnboard();
+              break;
+            }
+            case "bandEdge": {
+              const s = snapY(srcAt(p.y), e);
+              g.snapped = s.snapped;
+              state.band = s.y >= g.fixed ? { a: g.fixed, b: Math.max(g.fixed + 1, s.y) } : { a: s.y, b: g.fixed };
+              state.bandEdge = s.y >= g.fixed ? "b" : "a";
+              break;
+            }
+            case "cutEdge": {
+              const c = state.cuts.find((x) => x.id === g.id);
+              if (!c) break;
+              const s = snapY(srcAt(p.y), e);
+              g.snapped = s.snapped;
+              const i = state.cuts.indexOf(c);
+              const prevEnd = i > 0 ? state.cuts[i - 1].b : 0, nextStart = i < state.cuts.length - 1 ? state.cuts[i + 1].a : H;
+              if (g.side === "a") c.a = clamp(s.y, prevEnd, c.b);
+              else c.b = clamp(s.y, c.a, nextStart);
+              buildSegments();
+              break;
+            }
+            case "trim": {
+              if (g.side === "top" || g.side === "bottom") {
+                const s = snapY(srcAt(p.y), e);
+                g.snapped = s.snapped;
+                const head = headCut(), tail = tailCut();
+                g.value = g.side === "top" ? clamp(s.y, 0, (tail ? tail.a : H) - MIN_KEEP) : clamp(s.y, (head ? head.b : 0) + MIN_KEEP, H);
+              } else {
+                const x = Math.round((p.x - imgLeft()) / view.zoom);
+                g.value = g.side === "left" ? clamp(x, 0, state.cross[1] - MIN_KEEP) : clamp(x, state.cross[0] + MIN_KEEP, W);
+              }
+              break;
+            }
+          }
+        }
+        viewport.addEventListener("pointermove", (e) => {
+          pointer = local(e);
+          lastEvent = e;
+          if (gesture) {
+            applyGesture(pointer, e);
+            viewport.style.cursor = cursorFor(hover);
+            requestRender();
+          } else updateHover();
+        });
+        viewport.addEventListener("pointerleave", () => {
+          if (gesture) return;
+          pointer = null;
+          hover = { kind: "none" };
+          requestRender();
+        });
+        viewport.addEventListener("pointerup", (e) => {
+          if (!gesture) return;
+          pointer = local(e);
+          applyGesture(pointer, e);
+          endGesture(e);
+        });
+        viewport.addEventListener("pointercancel", () => cancelGesture());
+
+        function release() {
+          if (lastEvent && lastEvent.pointerId != null) {
+            try {
+              viewport.releasePointerCapture(lastEvent.pointerId);
+            } catch {}
+          }
+        }
+        function endGesture(e) {
+          const g = gesture;
+          release();
+          if (g.kind.startsWith("ann:")) {
+            annotationUI.finish(e, g);
+            gesture = state.gesture = null;
+            renderAnnotations();
+            updateHover();
+            return changed();
+          }
+          gesture = state.gesture = null;
+          switch (g.kind) {
+            case "band":
+              if (!g.moved) {
+                const y = snapY(srcAt(pointer.y), e).y;
+                if (e.shiftKey) extendTo(y);
+                else if (g.prevBand) state.band = null;
+                else state.anchor = y;
+              }
+              break;
+            case "cutEdge": {
+              const before = g.before;
+              state.cuts = normalize(state.cuts);
+              if (H - removedLen(state.cuts) < MIN_KEEP) load(before);
+              pruneOpen();
+              buildSegments();
+              if (commit(before, "调整删除范围")) toast("已调整删除范围", true);
+              break;
+            }
+            case "trim":
+              finishTrim(g);
+              break;
+          }
+          updateHover();
+          changed();
+        }
+        function finishTrim(g) {
+          const label = { top: "裁掉顶部", bottom: "裁掉底部", left: "裁掉左侧", right: "裁掉右侧" }[g.side];
+          if (g.side === "left" || g.side === "right") {
+            if (g.value !== g.start) {
+              state.cross = g.side === "left" ? [g.value, state.cross[1]] : [state.cross[0], g.value];
+              commit(g.before, label);
+              toast(`${label} ${fmt(g.side === "left" ? g.value : W - g.value)} px`, true);
+            }
+            return;
+          }
+          const v = g.value;
+          anchored(g.side === "top" ? v : Math.max(0, v - 1), () => {
+            if (g.tempOpened) state.peek.delete(g.openId);
+            if (v !== g.start) (g.side === "top" ? setHead : setTail)(v);
+          });
+          if (commit(g.before, label)) {
+            const total = g.side === "top" ? v : H - v;
+            toast(total ? `${label} ${fmt(total)} px` : `已恢复${g.side === "top" ? "顶部" : "底部"}`, true);
+          }
+        }
+        function cancelGesture() {
+          const g = gesture;
+          if (!g) return;
+          release();
+          gesture = state.gesture = null;
+          if (g.kind.startsWith("ann:")) {
+            annotationUI.cancel(g);
+            renderAnnotations();
+          }
+          if (g.kind === "band" || g.kind === "bandEdge") state.band = g.prevBand || null;
+          if (g.kind === "cutEdge") {
+            load(g.before);
+            buildSegments();
+          }
+          if (g.kind === "trim" && g.tempOpened) anchored(g.side === "top" ? g.start : Math.max(0, g.start - 1), () => state.peek.delete(g.openId));
+          updateHover();
+          changed();
+        }
+
+        // 拖选段、裁首尾或画标注时越过画布上下边缘自动滚动
+        let autoscrolling = false;
+        function startAutoscroll() {
+          if (autoscrolling) return;
+          autoscrolling = true;
+          requestAnimationFrame(function tick() {
+            const g = gesture;
+            if (!g || g.kind === "pan" || (g.kind === "trim" && (g.side === "left" || g.side === "right")) || !pointer) {
+              autoscrolling = false;
+              return;
+            }
+            const zone = 24;
+            const over = pointer.y < zone ? pointer.y - zone : pointer.y > view.vh - zone ? pointer.y - (view.vh - zone) : 0;
+            if (over && !(g.kind === "band" && !g.moved)) {
+              const before = view.sy;
+              view.sy += clamp(over * 0.35, -70, 70);
+              clampView();
+              if (view.sy !== before) {
+                applyGesture(pointer, lastEvent);
+                requestRender();
+              }
+            }
+            requestAnimationFrame(tick);
+          });
+        }
+
+        viewport.addEventListener(
+          "wheel",
+          (e) => {
+            if (e.target.closest(".tool-palette")) return;
+            e.preventDefault();
+            if (e.ctrlKey) {
+              const p = local(e);
+              return setZoom(view.zoom * Math.exp(-e.deltaY * 0.0015), p.x, p.y);
+            }
+            const k = e.deltaMode === 1 ? 40 : 1;
+            if (e.shiftKey) view.sx += e.deltaY * k;
+            else {
+              view.sx += e.deltaX * k;
+              view.sy += e.deltaY * k;
+            }
+            clampView();
+            if (gesture) applyGesture(pointer, e);
+            else updateHover();
+            hidePeek();
+            changed();
+          },
+          { passive: false },
+        );
+
+        // 缩略图：滑块跟手；点外面先把视口中心移过去再跟手；Shift+单击扩展选段
+        miniEl.addEventListener("pointerdown", (e) => {
+          const y = e.clientY - miniEl.getBoundingClientRect().top;
+          const G = miniGeom();
+          const d = (y + G.top) / G.ms;
+          if (e.shiftKey) return extendTo(clamp(d2s(d), 0, H));
+          const sy = G.dTop * G.ms - G.top, sh = G.viewLen * G.ms;
+          if (y < sy || y > sy + sh) scrollToD(d - G.viewLen / 2);
+          mini.drag = { y0: y, d0: screenToD(0) };
+          miniEl.setPointerCapture(e.pointerId);
+          requestRender();
+        });
+        miniEl.addEventListener("pointermove", (e) => {
+          mini.hover = true;
+          hover = { kind: "mini" };
+          if (!mini.drag) return requestRender();
+          const y = e.clientY - miniEl.getBoundingClientRect().top;
+          const G = miniGeom();
+          const f = G.C > G.mh && G.maxScroll > 0 ? (G.mh - G.ms * G.viewLen) / G.maxScroll : G.ms;
+          scrollToD(mini.drag.d0 + (y - mini.drag.y0) / Math.max(f, 1e-4));
+        });
+        miniEl.addEventListener("pointerup", () => {
+          mini.drag = null;
+          requestRender();
+        });
+        miniEl.addEventListener("pointerleave", () => {
+          mini.hover = false;
+          if (hover.kind === "mini") hover = { kind: "none" };
+          requestRender();
+        });
+        miniEl.addEventListener(
+          "wheel",
+          (e) => {
+            e.preventDefault();
+            view.sy += e.deltaY * (e.deltaMode === 1 ? 40 : 1);
+            clampView();
+            changed();
+          },
+          { passive: false },
+        );
+        let rulerDrag = false;
+        const rulerTo = (e) => {
+          const y = e.clientY - rulerEl.getBoundingClientRect().top;
+          scrollToD((y / rulerEl.clientHeight) * layout.len - view.vh / view.zoom / 2);
+        };
+        rulerEl.addEventListener("pointerdown", (e) => {
+          rulerDrag = true;
+          rulerEl.setPointerCapture(e.pointerId);
+          rulerTo(e);
+        });
+        rulerEl.addEventListener("pointermove", (e) => rulerDrag && rulerTo(e));
+        rulerEl.addEventListener("pointerup", () => (rulerDrag = false));
+
+        // ---------- 接缝预览 ----------
+        let peekTimer = 0, peekId = null;
+        overlay.addEventListener("pointerover", (e) => {
+          const el = e.target.closest("[data-peek]");
+          if (el && el.dataset.peek) showPeek(+el.dataset.peek, el);
+        });
+        overlay.addEventListener("pointerout", (e) => {
+          if (e.target.closest("[data-peek]")) schedHide();
+        });
+        peekEl.addEventListener("pointerenter", () => clearTimeout(peekTimer));
+        peekEl.addEventListener("pointerleave", schedHide);
+        function schedHide() {
+          clearTimeout(peekTimer);
+          peekTimer = setTimeout(hidePeek, 220);
+        }
+        function hidePeek() {
+          clearTimeout(peekTimer);
+          peekEl.hidden = true;
+          peekId = null;
+        }
+        function showPeek(id, el) {
+          clearTimeout(peekTimer);
+          if (gesture) return;
+          const c = state.cuts.find((x) => x.id === id);
+          if (!c) return;
+          if (peekId === id && !peekEl.hidden) return;
+          peekId = id;
+          const L = c.b - c.a, cw = 240, s = cw / W, dpr = view.dpr, maxH = 180;
+          let parts = [[c.a, c.b]], gap = 0;
+          if (L * s > maxH) {
+            const half = Math.floor((maxH - 22) / 2 / s);
+            parts = [[c.a, c.a + half], null, [c.b - half, c.b]];
+            gap = L - half * 2;
+          }
+          const ch = parts.reduce((h, p) => h + (p ? (p[1] - p[0]) * s : 22), 0);
+          const cv = byId("peekCanvas"), g = cv.getContext("2d");
+          cv.width = Math.round(cw * dpr);
+          cv.height = Math.round(ch * dpr);
+          cv.style.width = cw + "px";
+          cv.style.height = ch + "px";
+          g.setTransform(dpr, 0, 0, dpr, 0, 0);
+          let y = 0;
+          for (const p of parts) {
+            if (!p) {
+              g.fillStyle = T.well;
+              g.fillRect(0, y, cw, 22);
+              g.fillStyle = T.muted;
+              g.font = `11px ${UI}`;
+              g.textAlign = "center";
+              g.textBaseline = "middle";
+              g.fillText(`⋯ 中间 ${fmt(gap)} px ⋯`, cw / 2, y + 11);
+              y += 22;
+              continue;
+            }
+            drawRows(g, p[0], p[1], 0, y, cw, s * dpr);
+            if (miniAnn) {
+              const fy = miniAnn.height / H;
+              g.drawImage(miniAnn, 0, p[0] * fy, miniAnn.width, (p[1] - p[0]) * fy, 0, y, cw, (p[1] - p[0]) * s);
+            }
+            y += (p[1] - p[0]) * s;
+          }
+          byId("peekTitle").textContent = `${c.a === 0 ? "顶部已裁掉" : c.b === H ? "底部已裁掉" : "已删除"} ${fmt(L)} px`;
+          byId("peekRange").textContent = `原图 ${fmt(c.a)} – ${fmt(c.b)}`;
+          byId("peekActs").innerHTML = `<button data-action="toggle-cut" data-id="${id}">原位展开调整</button><button data-action="restore" data-id="${id}">恢复</button>`;
+          peekEl.hidden = false;
+          const r = el.getBoundingClientRect(), pr = peekEl.getBoundingClientRect();
+          peekEl.style.left = clamp(r.right + 10, 8, innerWidth - pr.width - 8) + "px";
+          peekEl.style.top = clamp(r.top + r.height / 2 - pr.height / 2, 56, innerHeight - pr.height - 36) + "px";
+        }
+
+        // ---------- 输出：图片与标注逐个保留片段拼接，套索按片段蒙版 ----------
+        async function renderOutput() {
+          annotationUI.prepareOutput();
+          const [c0, c1] = state.cross, ow = c1 - c0, segs = exportSegs();
+          const c = document.createElement("canvas");
+          c.width = ow;
+          c.height = H - removedLen(state.cuts);
+          const g = c.getContext("2d");
+          const ann = state.annotations.length ? await svgImage(annotationUI.exportMarkup(), W, H) : null;
+          for (const s of segs) {
+            if (!s.shown) continue;
+            const L = s.s1 - s.s0;
+            g.drawImage(src, c0, s.s0, ow, L, 0, s.d0, ow, L);
+            if (ann) g.drawImage(ann, c0, s.s0, ow, L, 0, s.d0, ow, L);
+            if (state.lasso && state.lasso.length) {
+              g.save();
+              g.beginPath();
+              g.rect(0, s.d0, ow, L);
+              g.clip();
+              g.globalCompositeOperation = "destination-in";
+              g.beginPath();
+              state.lasso.forEach((p, i) => (i ? g.lineTo(p.x - c0, p.y - s.s0 + s.d0) : g.moveTo(p.x - c0, p.y - s.s0 + s.d0)));
+              g.closePath();
+              g.fill();
+              g.restore();
+            }
+          }
+          return c;
+        }
+        let exportUrl = null, exporting = false;
+        async function output(kind) {
+          if (exporting) return;
+          if (gesture) cancelGesture();
+          const [c0, c1] = state.cross, outH = H - removedLen(state.cuts);
+          if ((c1 - c0) * outH > 32e6 || outH > 65535) return toast("超过输出上限：继续删段或裁边后再输出");
+          exporting = true;
+          try {
+            const c = await renderOutput();
+            const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+            if (kind === "save") {
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = "long-capture.png";
+              a.click();
+              setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+              return;
+            }
+            if (exportUrl) URL.revokeObjectURL(exportUrl);
+            exportUrl = URL.createObjectURL(blob);
+            byId("exportImg").src = exportUrl;
+            const inner = state.cuts.filter((x) => x.a > 0 && x.b < H).length;
+            byId("exportInfo").textContent = `成品 ${fmt(c.width)} × ${fmt(c.height)} px（原图 ${fmt(W)} × ${fmt(H)}）· 删 ${inner} 段 · 标注 ${state.annotations.length} 个${state.lasso ? " · 套索透明" : ""}。原型只预览；原生直接写入剪贴板并关闭编辑窗。`;
+            byId("exportDlg").showModal();
+          } catch (err) {
+            toast("生成失败：" + (err && err.message ? err.message : err));
+          } finally {
+            exporting = false;
+          }
+        }
+        byId("exportClose").onclick = () => byId("exportDlg").close();
+        byId("exportDownload").onclick = () => output("save");
+        byId("helpClose").onclick = () => byId("helpDlg").close();
+
+        // ---------- 示例 ----------
+        const styleDefaults = (type) => clone(Object.fromEntries(tools[type].properties.map((p) => [p.key, p.value])));
+        const demoItem = (type, geo, style = {}) => ({ id: Date.now() + Math.random(), type, x: 0, y: 0, w: 0, h: 0, rotation: 0, ...geo, style: { ...styleDefaults(type), ...style } });
+        function loadDemo() {
+          const before = capture();
+          const n = nearestSnap;
+          state.cuts = normalize([
+            { a: 0, b: n(marks.nav + 22) },
+            { a: n(marks.ad[0] - 24), b: n(marks.ad[1] + 20) },
+            { a: n(marks.rec[0] - 24), b: n(marks.rec[1] + 20) },
+            { a: n(marks.footer - 30), b: H },
+          ]);
+          const t = marks.table, note = "最累的一段，换轻档";
+          state.annotations = [
+            demoItem("rect", { x: 70, y: t[0] - 12, w: W - 140, h: t[1] - t[0] + 24 }, { color: "#ff4b5c", width: 5, radius: 10 }),
+            demoItem("arrow", { x: 650, y: t[1] + 44, w: -44, h: marks.slope + 16 - (t[1] + 44) }, { color: "#ff4b5c", width: 6 }),
+            demoItem("text", { x: 668, y: t[1] + 54, text: note }, { color: "#ff4b5c", fontSize: 30, text: note, bold: true }),
+            demoItem("serial", { x: 44, y: marks.h2[0] + 26, number: 1 }, { color: "#ff4b5c" }),
+            demoItem("serial", { x: 44, y: marks.h2[2] + 26, number: 2 }, { color: "#ff4b5c" }),
+            demoItem("highlighter", { x: 84, y: marks.bridgePara + 24, w: 900, h: 0, points: [{ x: 0, y: 0 }, { x: 900, y: 0 }] }, { width: 30, highlighterShape: "line", highlighterBlend: "alpha", opacity: 0.4 }),
+            demoItem("mosaic", { x: 150, y: marks.comments - 2, w: 150, h: 34 }, { blockSize: 10 }),
+          ];
+          state.annotations.forEach((a) => renderer.prepareEffect(a, src));
+          state.lasso = null;
+          state.peek.clear();
+          state.band = null;
+          state.anchor = null;
+          annotationUI.historyRestored();
+          buildSegments();
+          view.sy = 0;
+          clampView();
+          hideOnboard();
+          commit(before, "载入示例");
+          renderAnnotations();
+          changed();
+          toast("示例：裁掉了导航和页脚，删掉了广告与相关推荐；悬停左侧红色标签看被删的内容", true);
+        }
+
+        // ---------- 标注模块 ----------
+        const nativeIcon = (name) => `<span class="native-icon" aria-hidden="true" style="--tool-icon:url('icons/${name}.svg')"></span>`;
+        annotationUI = window.LongEditorAnnotations.create({
+          state,
+          root: $(".app"),
+          $: byId,
+          clone,
+          clamp,
+          remember: () => remember("标注"),
+          renderCrop: changed,
+          render: () => {
+            renderAnnotations();
+            changed();
+          },
+          anchor: (p) => {
+            setAnchor(clamp(p.y, 0, H), view.vh / 2);
+            changed();
+          },
+          center: () => ({ x: clamp((view.vw / 2 - imgLeft()) / view.zoom, 0, W), y: centerSrc() }),
+          startGesture: (e, g) => begin(e, { ...g, startClient: { x: e.clientX, y: e.clientY } }),
+          cancelGesture,
+          toast: (m) => toast(m),
+          escapeText,
+          changeTool: setTool,
+          originalPoint: (e) => srcPoint(local(e)),
+          renderAnnotations,
+          railHead: `<button class="tool" data-tool="crop" title="剪辑：上下拖动选段删除、拖外缘裁边 · 1"><span class="native-icon icon-cut" aria-hidden="true"></span><span>剪辑</span></button><button class="tool" data-tool="select" title="选择、框选与编辑 · 2">${nativeIcon("edit")}<span>选择</span></button>`,
+          placeTextInput: (input, p) => {
+            input.style.left = imgLeft() + p.x * view.zoom + "px";
+            input.style.top = dToScreen(s2d(p.y)) - 26 + "px";
+            viewport.appendChild(input);
+          },
+        });
+
+        // ---------- 全局事件 ----------
+        // 鼠标点顶栏、工具栏与浮条按钮不抢焦点，空格／回车留给画布快捷键
+        document.addEventListener("mousedown", (e) => {
+          if (e.target.closest(".topbar button, .tools button, .ov button, .peek button")) e.preventDefault();
+        });
+        document.addEventListener("click", (e) => {
+          const tool = e.target.closest("[data-tool]");
+          if (tool && tool.closest(".tools")) return setTool(tool.dataset.tool);
+          const el = e.target.closest("[data-action]");
+          if (!el || el.disabled) return;
+          const id = +el.dataset.id;
+          switch (el.dataset.action) {
+            case "undo": return history(true);
+            case "redo": return history(false);
+            case "toggle-removed": return toggleRemoved();
+            case "delete-band": return deleteBand();
+            case "keep-band": return keepBand();
+            case "clear-band": state.band = null; return changed();
+            case "toggle-cut": return toggleCut(id);
+            case "restore": hidePeek(); return restoreCut(id);
+            case "locate": return locate(id);
+            case "reset-cuts": return resetCuts();
+            case "edits":
+              mainEl.classList.remove("side-off");
+              return setTool("crop");
+            case "toggle-side":
+              mainEl.classList.toggle("side-off");
+              syncSide();
+              return changed();
+            case "fit": return setZoom(fitZoom(), view.vw / 2, view.vh / 2, true);
+            case "actual": return setZoom(1);
+            case "zoom-in": return setZoom(view.zoom * 1.25);
+            case "zoom-out": return setZoom(view.zoom / 1.25);
+            case "copy": return output("copy");
+            case "save": return output("save");
+            case "pin": return toast("原型：贴图只做提示；原生会把成品直接贴到屏幕上");
+            case "help": return byId("helpDlg").showModal();
+            case "demo": return loadDemo();
+            case "dismiss-onboard": return hideOnboard();
+          }
+        });
+        const cutPanel = byId("cut-inspector");
+        cutPanel.addEventListener("change", (e) => {
+          const opt = e.target.dataset.cutOpt;
+          if (opt === "snap") state.snap = e.target.checked;
+          if (opt === "removed" && e.target.checked !== state.showRemoved) toggleRemoved();
+          const key = e.target.dataset.trim;
+          if (key) {
+            e.target.blur();
+            applyTrimField(key, Math.max(0, Math.round(+e.target.value || 0)));
+          }
+        });
+        cutPanel.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && e.target.dataset.trim) e.target.blur();
+        });
+
+        addEventListener("keydown", (e) => {
+          if (e.target.closest && e.target.closest("input, textarea, select, dialog")) return;
+          const k = e.key, ctrl = e.ctrlKey || e.metaKey, crop = state.tool === "crop";
+          if (ctrl) {
+            const l = k.toLowerCase();
+            if (l === "z") history(!e.shiftKey);
+            else if (l === "y") history(false);
+            else if (l === "c") output("copy");
+            else if (l === "s") output("save");
+            else if (k === "0") setZoom(fitZoom(), view.vw / 2, view.vh / 2, true);
+            else if (k === "1") setZoom(1);
+            else if (k === "=" || k === "+") setZoom(view.zoom * 1.25);
+            else if (k === "-") setZoom(view.zoom / 1.25);
+            else if (crop || !annotationUI.keydown(e)) return;
+            return e.preventDefault();
+          }
+          if (k === " ") {
+            if (!space) {
+              space = true;
+              viewport.style.cursor = cursorFor(hover);
+              requestRender();
+            }
+            return e.preventDefault();
+          }
+          if (k === "Escape") {
+            if (gesture) return cancelGesture();
+            if (!peekEl.hidden) return hidePeek();
+            if (state.band) {
+              state.band = null;
+              return changed();
+            }
+            // 标注工具下先交给模块：取消折线／套索、清除选择
+            if (!crop && annotationUI.keydown(e)) return;
+            if (state.anchor != null) state.anchor = null;
+            else if (state.peek.size && !state.showRemoved) anchored(stableSrc(), () => state.peek.clear());
+            return changed();
+          }
+          if (state.band) {
+            if (k === "Delete" || k === "Backspace" || k === "Enter") {
+              e.preventDefault();
+              return deleteBand();
+            }
+            if (k === "k" || k === "K") return keepBand();
+            if (k === "ArrowUp" || k === "ArrowDown") {
+              e.preventDefault();
+              return nudgeBand((k === "ArrowUp" ? -1 : 1) * (e.shiftKey ? 10 : 1));
+            }
+          }
+          if (!crop && annotationUI.keydown(e)) {
+            e.preventDefault();
+            renderAnnotations();
+            return changed();
+          }
+          if (k === "h" || k === "H") return toggleRemoved();
+          if (k === "ArrowUp" || k === "ArrowDown") {
+            e.preventDefault();
+            view.sy += (k === "ArrowUp" ? -1 : 1) * (e.shiftKey ? 400 : 60);
+            clampView();
+            return changed();
+          }
+          if (k === "PageDown" || k === "PageUp") {
+            view.sy += (k === "PageDown" ? 1 : -1) * view.vh * 0.9;
+            clampView();
+            return changed();
+          }
+          if (k === "Home") {
+            view.sy = 0;
+            clampView();
+            return changed();
+          }
+          if (k === "End") return scrollToD(layout.len);
+          if (/^[0-9]$/.test(k)) {
+            // 1 剪辑、2 选择、3–9 按工具栏分组（取组内上次用的工具），0 工具库
+            if (k === "0") return document.querySelector('[data-tool-group="all"]')?.click();
+            const order = ["crop", "select", ...groups.map((g) => g.key)];
+            const key = order[+k - 1];
+            const group = groups.find((g) => g.key === key);
+            if (group) setTool(lastInGroup[group.key] ?? group.tools[0]);
+            else if (key) setTool(key);
+          }
+        });
+        addEventListener("keyup", (e) => {
+          if (e.key === " ") {
+            space = false;
+            viewport.style.cursor = cursorFor(hover);
+            requestRender();
+          }
+        });
+        addEventListener("blur", () => {
+          space = false;
+        });
+
+        function resize() {
+          const keep = view.ready ? centerSrc() : null;
+          view.dpr = window.devicePixelRatio || 1;
+          view.vw = viewport.clientWidth;
+          view.vh = viewport.clientHeight;
+          for (const [cv, el] of [[baseCv, viewport], [overCv, viewport], [miniCv, miniEl], [rulerCv, rulerEl]]) {
+            cv.width = Math.max(1, Math.round(el.clientWidth * view.dpr));
+            cv.height = Math.max(1, Math.round(el.clientHeight * view.dpr));
+          }
+          if (view.fit) view.zoom = fitZoom();
+          if (keep == null) {
+            view.sy = 0;
+            view.ready = true;
+          } else setAnchor(keep, view.vh / 2);
+          clampView();
+          changed();
+        }
+        new ResizeObserver(resize).observe(byId("stage"));
+        matchMedia("(prefers-color-scheme: light)").addEventListener("change", readTheme);
+
+        // 仅供调试检查
+        window.__longEditor = { state, view, marks, snaps, H, layout: () => layout, annotationUI: () => annotationUI };
+        if (innerWidth < 1000) mainEl.classList.add("side-off");
+        readTheme();
+        buildSegments();
+        renderAnnotations();
+        syncRail();
+        syncSide();
+        resize();
+      })();
+    </script>
+  </body>
+</html>

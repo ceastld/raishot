@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" role="img" aria-label="Kirie 动作图标：剪纸 K">
+  <rect x="3" y="3" width="58" height="58" rx="16" fill="#119B78"/>
+  <path d="M23 29 40 16h11L32 34h-9Z" fill="#A7F3D0"/>
+  <path d="m23 30 29 18H40L23 37Z" fill="#FFFFFF"/>
+  <rect x="16" y="16" width="8" height="32" rx="2.5" fill="#FFFFFF"/>
+</svg>

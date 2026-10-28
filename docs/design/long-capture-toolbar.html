@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>长截图工具栏 · 设计预览</title>
+<style>
+:root{color-scheme:dark;--page:#121416;--panel:#202327;--fg:#dce0e5;--muted:#8b929c;--line:#34393f;--hover:#30353b;--active:#263f35;--accent:#52c99b;--danger:#f18b8b;--warn:#ddbb7c;--stage:#191c20;--paper:#24282d;--ink:#626b75;--mask:#0008;--shadow:#0004;--grid:#ffffff03;--ui:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",system-ui,sans-serif}
+@media(prefers-color-scheme:light){:root{color-scheme:light;--page:#edf0f2;--panel:#fbfcfd;--fg:#37404a;--muted:#7b848e;--line:#dce0e4;--hover:#e9edf0;--active:#e0f0e9;--accent:#21825f;--danger:#b84242;--warn:#997126;--stage:#d9dee2;--paper:#f6f7f8;--ink:#a2aab2;--mask:#24324224;--shadow:#2634421c;--grid:#00000003}}
+*{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--fg);font:13px/1.5 var(--ui)}button,input{font:inherit}button{cursor:pointer;color:inherit}button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}button:disabled{cursor:default}.page{max-width:1100px;margin:auto;padding:30px 36px 42px}.heading{display:flex;align-items:baseline;gap:12px;margin-bottom:21px}h1{margin:0;font-size:20px;font-weight:500;letter-spacing:.02em}.caption{font-size:12px;color:var(--muted)}.control-row{display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-bottom:23px}.control-label{color:var(--muted);margin-right:8px;font-size:12px}.switch{display:inline-flex;align-items:center;gap:3px;padding:3px;background:var(--panel);border:1px solid var(--line);border-radius:8px}.switch button{height:27px;border:0;border-radius:5px;padding:0 11px;background:transparent;color:var(--muted);font-size:12px}.switch button:hover{color:var(--fg)}.switch button.on{background:var(--hover);color:var(--fg)}.control-note{font-size:12px;color:var(--muted);margin-left:auto}.proposal{margin:0 0 21px}.proposal-heading{display:flex;gap:11px;align-items:center;margin-bottom:9px}.proposal-heading h2{font-size:13px;font-weight:500;margin:0}.proposal-heading .letter{font-size:11px;color:var(--muted);width:16px}.proposal-heading .description{font-size:12px;color:var(--muted)}.height-label{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}.scene{position:relative;height:158px;border:1px solid var(--line);border-radius:12px;background-color:var(--stage);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:20px 20px;overflow:visible}.scene:before{content:"";position:absolute;left:17%;top:0;width:59%;height:46px;border:1px solid var(--accent);border-top:0;background:var(--paper);opacity:.58}.scene:after{content:"";position:absolute;left:calc(17% + 18px);right:calc(24% + 18px);height:6px;top:16px;border-radius:2px;background:var(--ink);opacity:.2}.placement{position:absolute;right:24%;top:58px}.toolbar{position:relative;display:flex;flex-direction:column;width:max-content;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:0 5px 16px var(--shadow)}.main-row{display:flex;gap:2px;align-items:center;height:42px;padding:5px 6px}.tool{width:30px;height:30px;padding:0;display:grid;place-items:center;background:transparent;border:0;border-radius:5px;flex:none;position:relative}.tool:hover{background:var(--hover)}.tool.selected{background:var(--active);color:var(--accent)}.tool:disabled{opacity:.28}.tool.confirm{color:var(--accent)}.tool.cancel{color:var(--muted)}.tool.cancel:hover{color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}.grip{width:13px;color:var(--muted);cursor:grab;margin-right:1px}.icon{display:block;width:20px;height:20px;background:currentColor;mask-image:var(--icon);mask-size:contain;mask-repeat:no-repeat;mask-position:center;flex:none}.grip .icon{width:9px;height:18px}.divider{height:17px;width:1px;background:var(--line);margin:0 4px;flex:none}.inset-info{height:27px;padding:0 8px;display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}.dot{height:5px;width:5px;border-radius:50%;background:var(--accent);flex:none}.data-paused .dot{background:var(--muted)}.data-warning .dot,.data-limit .dot{background:var(--warn)}.data-error .dot{background:var(--danger)}.data-building .dot{border:1px solid var(--muted);border-top-color:transparent;background:none;width:8px;height:8px;animation:spin 1s linear infinite}.secondary{display:flex;align-items:center;gap:6px;justify-content:space-between;border-top:1px solid color-mix(in srgb,var(--line) 65%,transparent);padding:3px 10px 5px;font-size:11px;line-height:15px;color:var(--muted);min-height:24px}.secondary .state{display:flex;align-items:center;gap:6px;min-width:0;white-space:nowrap}.secondary .dimensions{font-variant-numeric:tabular-nums;margin-left:26px;white-space:nowrap}.data-warning .secondary,.data-limit .secondary{color:var(--warn)}.data-error .secondary{color:var(--danger)}.notice{position:absolute;top:calc(100% + 8px);right:0;display:flex;align-items:center;gap:9px;max-width:380px;white-space:nowrap;padding:7px 9px 7px 11px;border:1px solid var(--line);border-radius:7px;color:var(--warn);background:var(--panel);box-shadow:0 4px 14px var(--shadow);font-size:11px;line-height:17px;z-index:5}.notice[hidden]{display:none}.notice.error{color:var(--danger)}.notice.building{color:var(--muted)}.notice-close{border:0;background:transparent;color:var(--muted);padding:0;display:grid;place-items:center;width:16px;height:16px}.notice-close .icon{width:13px;height:13px}.preview{position:absolute;left:calc(76% + 22px);top:8px;width:48px;height:121px;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--paper);opacity:.8}.preview .mini-lines{position:absolute;inset:6px 5px;background:repeating-linear-gradient(to bottom,var(--ink) 0,var(--ink) 2px,transparent 2px,transparent 9px);opacity:.22}.preview .viewport{position:absolute;left:0;right:0;top:5px;height:34px;border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}.preview-size{position:absolute;top:133px;left:calc(76% + 8px);color:var(--muted);font-size:10px;white-space:nowrap;font-variant-numeric:tabular-nums}.scene.b .preview-size,.scene.c .preview-size{display:none}.scene.b .placement{right:20%}.scene.b:before{width:63%}.scene.b:after{right:calc(20% + 18px)}.scene.b .preview{left:calc(80% + 22px)}.bottom-note{color:var(--muted);font-size:12px;margin:6px 0 0}.tooltip{position:fixed;z-index:1000;background:var(--panel);border:1px solid var(--line);padding:5px 9px;border-radius:5px;color:var(--fg);box-shadow:0 3px 12px var(--shadow);font-size:11px;pointer-events:none;white-space:nowrap}.tooltip[hidden]{display:none}.popover{position:fixed;z-index:100;width:260px;border-radius:10px;padding:10px;background:var(--panel);border:1px solid var(--line);box-shadow:0 12px 30px var(--shadow)}.popover[hidden]{display:none}.setting-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0}.setting-row>span{font-size:12px;color:var(--muted)}.segments{display:flex;gap:2px;background:var(--stage);padding:2px;border-radius:6px}.segments button{border:0;background:transparent;border-radius:4px;min-width:31px;height:26px;padding:0 7px;font-size:11px;color:var(--muted)}.segments button.selected{background:var(--hover);color:var(--fg)}.settings-caption{border-top:1px solid var(--line);padding-top:9px;margin-top:7px;color:var(--muted);font-size:11px}.state-note{display:none}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){*{animation:none!important}}@media(max-width:820px){.page{padding:20px}.scene{height:158px}.scene .placement,.scene.b .placement{right:14%}.scene:before,.scene.b:before{left:8%;width:78%}.scene:after,.scene.b:after{left:calc(8% + 18px);right:calc(14% + 18px)}.preview,.scene.b .preview{left:calc(86% + 14px);width:38px}.preview-size{left:auto;right:0}.control-note{display:none}.proposal-heading .description{display:none}}@media(max-width:620px){.page{padding:18px 12px}.scene{overflow:auto}.placement,.scene.b .placement{right:auto!important;left:16px!important}.preview,.preview-size{display:none}.scene.b{min-height:158px}.proposal-heading{gap:5px}.control-row{gap:12px}.switch button{padding:0 8px}.scene:before,.scene.b:before{left:16px;right:16px;width:auto}.scene:after,.scene.b:after{left:28px;right:28px}}
+</style>
+<style>
+.page.selected-c .proposal:has(.scene.a),.page.selected-c .proposal:has(.scene.b){display:none}.page.selected-c .scene.c{height:250px}.page.selected-c .scene.c:before{height:70px}.page.selected-c .scene.c .placement{top:82px}.page.selected-c .scene.c .preview{height:173px}
+.speed-heading{display:flex;align-items:center;justify-content:space-between;padding:8px 0 6px;font-size:12px;color:var(--muted)}.speed-current{color:var(--fg);font-variant-numeric:tabular-nums}.speed-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;padding:3px;border-radius:7px;background:var(--stage);margin-bottom:3px}.speed-grid button{height:27px;padding:0;border:0;background:transparent;color:var(--muted);border-radius:4px;font-size:11px;font-variant-numeric:tabular-nums}.speed-grid button:hover{background:var(--hover);color:var(--fg)}.speed-grid button.selected{background:var(--active);color:var(--accent)}.auto-preview .mini-lines{bottom:-30px;animation:preview-scroll var(--scroll-cycle,8s) linear infinite}@keyframes preview-scroll{to{transform:translateY(-27px)}}
+</style>
+<main class="page selected-c">
+  <header class="heading"><h1>长截图工具栏</h1><span class="caption">C 方案</span></header>
+  <div class="control-row">
+    <div><span class="control-label">状态</span><div class="switch" id="state-switch" aria-label="预览状态">
+      <button class="on" data-state="capturing">采集中</button><button data-state="auto">自动滚动</button><button data-state="paused">暂停</button><button data-state="warning">滚动受阻</button><button data-state="limit">超限</button><button data-state="error">错误</button><button data-state="building">生成中</button>
+    </div></div>
+    <span class="control-note">悬停看提示 · 暂停、自动滚动、设置可点击</span>
+  </div>
+  <section class="proposal">
+    <div class="proposal-heading"><span class="letter">A</span><h2>取消第二行</h2><span class="description">尺寸移到侧边预览，只有需要处理时才出消息</span><span class="height-label">44 px</span></div>
+    <div class="scene a" data-design="a"><div class="placement"></div><div class="preview"><div class="mini-lines"></div><div class="viewport"></div></div><div class="preview-size">1080 × 4680</div></div>
+  </section>
+  <section class="proposal">
+    <div class="proposal-heading"><span class="letter">B</span><h2>尺寸并入主栏</h2><span class="description">仍然一行，多留一小段数字</span><span class="height-label">44 px</span></div>
+    <div class="scene b" data-design="b"><div class="placement"></div><div class="preview"><div class="mini-lines"></div><div class="viewport"></div></div><div class="preview-size">1080 × 4680</div></div>
+  </section>
+  <section class="proposal">
+    <div class="proposal-heading"><span class="letter">C</span><h2>图标主栏 + 提示行 · 已选</h2><span class="description">平时显示状态与尺寸，需要时在同一行放提示</span><span class="height-label">68 px</span></div>
+    <div class="scene c" data-design="c"><div class="placement"></div><div class="preview"><div class="mini-lines"></div><div class="viewport"></div></div><div class="preview-size">1080 × 4680</div></div>
+  </section>
+  <p class="bottom-note">提示行保留固定高度。正常显示状态和尺寸，需要时原位显示错误、警告或进度；长内容可悬停查看。</p>
+</main>
+<div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+<div class="popover" id="settings" aria-label="采集设置" hidden>
+  <div class="setting-row"><span>截图方向</span><div class="segments"><button data-icon="axis-vertical" aria-label="纵向" class="selected"></button><button data-icon="axis-horizontal" aria-label="横向"></button></div></div>
+  <div class="setting-row"><span>自动滚动</span><div class="segments"><button data-icon="auto-down" aria-label="向下" class="selected"></button><button data-icon="auto-up" aria-label="向上"></button></div></div>
+  <div class="speed-heading"><span>滚动速度</span><span class="speed-current" id="speed-current">×1</span></div>
+  <div class="speed-grid" role="group" aria-label="滚动速度档位">
+    <button data-speed="1" class="selected" aria-pressed="true">×1</button><button data-speed="2" aria-pressed="false">×2</button><button data-speed="3" aria-pressed="false">×3</button><button data-speed="4" aria-pressed="false">×4</button><button data-speed="5" aria-pressed="false">×5</button><button data-speed="6" aria-pressed="false">×6</button><button data-speed="7" aria-pressed="false">×7</button><button data-speed="8" aria-pressed="false">×8</button><button data-speed="9" aria-pressed="false">×9</button><button data-speed="10" aria-pressed="false">×10</button>
+  </div>
+  <div class="setting-row"><span>固定栏</span><div class="segments"><button>无</button><button class="selected">自动</button><button>手动</button></div></div>
+  <div class="settings-caption">参数放在独立浮层，不占常驻信息行。</div>
+</div>
+<script>
+const icon=(name)=>`<i class="icon" aria-hidden="true" style="--icon:url('icons/${name}.svg')"></i>`;
+const tool=(name,tip,extra='')=>`<button class="tool ${extra}" data-action="${name}" data-tip="${tip}" aria-label="${tip}">${icon(name)}</button>`;
+const stateDefinitions={
+  capturing:{phase:'采集中',detail:'滚动页面即可继续拼接'},
+  auto:{phase:'自动滚动',detail:'自动滚动中'},
+  paused:{phase:'已暂停',detail:'点击播放或按空格继续'},
+  warning:{phase:'滚动受阻',detail:'未找到可靠重叠，请回滚少量后继续',message:true},
+  limit:{phase:'超过导出上限',detail:'长图已超限，请裁剪后再完成',message:true},
+  error:{phase:'采集失败',detail:'画面读取失败，请重试或保存已有内容',message:true},
+  building:{phase:'正在生成长图…',detail:'正在生成长图…',message:true}
+};
+let currentState='capturing',hiddenMessage=false,tipTimer;
+let selectedSpeed=Math.max(1,Math.min(10,Number(sessionStorage.getItem('long-capture-speed'))||1));
+const tooltip=document.getElementById('tooltip'),settings=document.getElementById('settings');
+document.querySelectorAll('[data-design]').forEach(scene=>{
+  const variant=scene.dataset.design;
+  scene.querySelector('.placement').innerHTML=`<div class="toolbar" data-variant="${variant}"><div class="main-row">${tool('grip','拖动工具栏','grip')}${tool('move','移动选区')}${tool('pause','暂停采集 · 空格')}${tool('auto-down','自动滚动')}${tool('undo','撤销最后一段')}${tool('settings','采集设置')}<span class="divider"></span>${variant==='b'?'<span class="inset-info" data-tip="采集中 · 1080 × 4680"><i class="dot"></i><span>1080 × 4680</span></span><span class="divider"></span>':''}${tool('crop','裁剪长图')}${tool('save','保存 · Ctrl+S')}${tool('pin','贴到屏幕')}<span class="divider"></span>${tool('confirm','完成并复制 · Enter','confirm')}${tool('close','取消 · Esc','cancel')}</div>${variant==='c'?'<div class="secondary"><span class="state"><i class="dot"></i><span class="phase">采集中</span></span><span class="dimensions">1080 × 4680</span></div>':''}<div class="notice" hidden><i class="dot"></i><span class="notice-text"></span><button class="notice-close" aria-label="收起消息">${icon('close')}</button></div></div>`;
+});
+document.querySelectorAll('#settings [data-icon]').forEach(button=>button.innerHTML=icon(button.dataset.icon));
+function setState(state){
+  currentState=state;hiddenMessage=false;settings.hidden=true;tooltip.hidden=true;
+  const definition=stateDefinitions[state];
+  document.querySelectorAll('#state-switch button').forEach(button=>button.classList.toggle('on',button.dataset.state===state));
+  document.querySelectorAll('.scene').forEach(scene=>scene.classList.toggle('auto-preview',state==='auto'));
+  document.querySelectorAll('.toolbar').forEach(bar=>{
+    bar.className=`toolbar data-${state}`;
+    const paused=state==='paused',busy=state==='building';
+    const pause=bar.querySelector('[data-action="pause"]');
+    pause.innerHTML=icon(paused?'play':'pause');pause.classList.toggle('selected',paused);pause.dataset.tip=paused?'继续采集 · 空格':'暂停采集 · 空格';pause.setAttribute('aria-label',pause.dataset.tip);
+    const auto=bar.querySelector('[data-action="auto-down"]');auto.classList.toggle('selected',state==='auto');auto.dataset.tip=state==='auto'?'停止自动滚动':'自动滚动';auto.setAttribute('aria-label',auto.dataset.tip);
+    bar.querySelectorAll('.tool:not(.cancel):not(.grip)').forEach(button=>button.disabled=busy);
+    const inset=bar.querySelector('.inset-info');if(inset)inset.dataset.tip=`${definition.phase} · 1080 × 4680`;
+    const phase=bar.querySelector('.phase');if(phase)phase.textContent=definition.message?definition.detail:definition.phase;
+    const dimensions=bar.querySelector('.secondary .dimensions');if(dimensions)dimensions.hidden=!!definition.message;
+    const notice=bar.querySelector('.notice');notice.hidden=!definition.message||bar.dataset.variant==='c';notice.className=`notice ${state==='error'?'error':busy?'building':''}`;
+    notice.querySelector('.notice-text').textContent=definition.detail;
+    notice.querySelector('.notice-close').hidden=busy;
+  });
+}
+function setSpeed(speed){
+  selectedSpeed=speed;sessionStorage.setItem('long-capture-speed',String(speed));
+  document.getElementById('speed-current').textContent=`×${speed}`;
+  document.documentElement.style.setProperty('--scroll-cycle',`${8/speed}s`);
+  document.querySelectorAll('[data-speed]').forEach(button=>{const active=Number(button.dataset.speed)===speed;button.classList.toggle('selected',active);button.setAttribute('aria-pressed',String(active))});
+}
+function showTip(target){
+  if(!settings.hidden)return;
+  tooltip.textContent=target.dataset.tip;tooltip.hidden=false;
+  const rect=target.getBoundingClientRect(),width=tooltip.offsetWidth;
+  tooltip.style.left=`${Math.max(6,Math.min(innerWidth-width-6,rect.left+rect.width/2-width/2))}px`;
+  tooltip.style.top=`${rect.top-tooltip.offsetHeight-8}px`;
+}
+document.addEventListener('mouseover',event=>{const target=event.target.closest('[data-tip]');if(!target)return;clearTimeout(tipTimer);tipTimer=setTimeout(()=>showTip(target),450)});
+document.addEventListener('mouseout',event=>{if(event.target.closest('[data-tip]')){clearTimeout(tipTimer);tooltip.hidden=true}});
+document.addEventListener('click',event=>{
+  const state=event.target.closest('[data-state]');if(state){setState(state.dataset.state);return}
+  const speed=event.target.closest('[data-speed]');if(speed){setSpeed(Number(speed.dataset.speed));return}
+  const segment=event.target.closest('.segments button');if(segment){segment.parentElement.querySelectorAll('button').forEach(button=>button.classList.toggle('selected',button===segment));return}
+  const close=event.target.closest('.notice-close');if(close){close.parentElement.hidden=true;hiddenMessage=true;return}
+  const action=event.target.closest('[data-action]');
+  if(action){
+    tooltip.hidden=true;clearTimeout(tipTimer);
+    if(action.dataset.action==='pause'){setState(currentState==='paused'?'capturing':'paused');return}
+    if(action.dataset.action==='auto-down'){setState(currentState==='auto'?'capturing':'auto');return}
+    if(action.dataset.action==='settings'){
+      if(!settings.hidden){settings.hidden=true;return}
+      settings.hidden=false;const rect=action.getBoundingClientRect();settings.style.left=`${Math.max(8,Math.min(innerWidth-268,rect.left))}px`;settings.style.top=`${Math.max(8,Math.min(innerHeight-settings.offsetHeight-8,rect.bottom+10))}px`;return;
+    }
+    if(action.dataset.action==='confirm'||action.dataset.action==='save'||action.dataset.action==='pin'){setState('building');setTimeout(()=>setState('capturing'),1600);return}
+  }
+  if(!event.target.closest('#settings'))settings.hidden=true;
+});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){settings.hidden=true;tooltip.hidden=true}if(event.code==='Space'&&event.target===document.body){event.preventDefault();setState(currentState==='paused'?'capturing':'paused')}});
+addEventListener('scroll',()=>{tooltip.hidden=true;settings.hidden=true},{passive:true});
+setSpeed(selectedSpeed);setState('capturing');
+</script>
+</html>

@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>托盘弹层 · 设计预览</title>
+<style>
+/* 托盘右键弹层原型：深色优先，跟随系统；配色沿用主界面原型（GPUI Palette）。 */
+:root{color-scheme:dark;
+  --page:#121416;--stage:#191c20;--grid:#ffffff04;--taskbar:#1c1f23f2;--taskbar-line:#2b3036;
+  --pop:#20252b;--pop-line:#363d46;--section:#1a1e23;--hover:#2b323a;--press:#323a43;--line:#2f363e;
+  --fg:#dce2e8;--muted:#8b95a1;--faint:#5f6874;--kbd:#2a3038;--kbd-line:#3a424c;
+  --accent:#40ce9d;--accent-soft:#40ce9d24;--on-accent:#0c1f18;--warn:#ddbb7c;--warn-soft:#ddbb7c1f;--danger:#f18b8b;--danger-soft:#f18b8b1c;
+  --shadow:0 18px 48px #0009,0 2px 8px #0006;--thumb-a:#2f3b47;--thumb-b:#3c4a3f;--thumb-c:#473a3a;--thumb-ink:#ffffff30;
+  --native:#2b2b2b;--native-line:#404040;--native-hover:#3d3d3d;--native-fg:#f0f0f0;--native-muted:#a0a0a0;
+  --ui:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",system-ui,sans-serif}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){color-scheme:light;
+  --page:#edf0f2;--stage:#d9dee2;--grid:#00000005;--taskbar:#f3f4f6f2;--taskbar-line:#d5d9dd;
+  --pop:#fbfcfd;--pop-line:#d7dce1;--section:#f2f4f6;--hover:#e8ecef;--press:#dfe4e8;--line:#e2e6ea;
+  --fg:#2f3842;--muted:#6f7883;--faint:#a0a8b1;--kbd:#eef1f3;--kbd-line:#d6dbe0;
+  --accent:#21825f;--accent-soft:#21825f1c;--on-accent:#fff;--warn:#99701f;--warn-soft:#99701f18;--danger:#b84242;--danger-soft:#b8424214;
+  --shadow:0 18px 48px #2634422e,0 2px 8px #2634421c;--thumb-a:#c9d4de;--thumb-b:#cfdccf;--thumb-c:#e0d0cc;--thumb-ink:#00000024;
+  --native:#f9f9f9;--native-line:#dcdcdc;--native-hover:#e8e8e8;--native-fg:#1a1a1a;--native-muted:#6b6b6b}}
+:root[data-theme="light"]{color-scheme:light;
+  --page:#edf0f2;--stage:#d9dee2;--grid:#00000005;--taskbar:#f3f4f6f2;--taskbar-line:#d5d9dd;
+  --pop:#fbfcfd;--pop-line:#d7dce1;--section:#f2f4f6;--hover:#e8ecef;--press:#dfe4e8;--line:#e2e6ea;
+  --fg:#2f3842;--muted:#6f7883;--faint:#a0a8b1;--kbd:#eef1f3;--kbd-line:#d6dbe0;
+  --accent:#21825f;--accent-soft:#21825f1c;--on-accent:#fff;--warn:#99701f;--warn-soft:#99701f18;--danger:#b84242;--danger-soft:#b8424214;
+  --shadow:0 18px 48px #2634422e,0 2px 8px #2634421c;--thumb-a:#c9d4de;--thumb-b:#cfdccf;--thumb-c:#e0d0cc;--thumb-ink:#00000024;
+  --native:#f9f9f9;--native-line:#dcdcdc;--native-hover:#e8e8e8;--native-fg:#1a1a1a;--native-muted:#6b6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--fg);font:13px/1.5 var(--ui)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+button:disabled{cursor:default}
+.page{max-width:1180px;margin:auto;padding:28px 32px 40px}
+.heading{display:flex;align-items:baseline;gap:12px;margin-bottom:18px}
+h1{margin:0;font-size:20px;font-weight:500;letter-spacing:.02em}
+.caption{font-size:12px;color:var(--muted)}
+.controls{display:flex;gap:18px 22px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.control-label{color:var(--muted);margin-right:8px;font-size:12px}
+.switch{display:inline-flex;gap:3px;padding:3px;background:var(--pop);border:1px solid var(--line);border-radius:8px;flex-wrap:wrap}
+.switch button{height:27px;border:0;border-radius:5px;padding:0 11px;background:transparent;color:var(--muted);font-size:12px}
+.switch button:hover{color:var(--fg)}
+.switch button.on{background:var(--hover);color:var(--fg)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
+/* 舞台：假桌面 + 任务栏，弹层贴着托盘图标向上展开 */
+.stage{position:relative;height:800px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background-color:var(--stage);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:20px 20px}
+.taskbar{position:absolute;left:0;right:0;bottom:0;height:48px;background:var(--taskbar);border-top:1px solid var(--taskbar-line);display:flex;align-items:center;justify-content:flex-end;padding:0 10px;gap:4px}
+.tray-icon{width:32px;height:32px;border:0;border-radius:5px;background:transparent;display:grid;place-items:center;color:var(--muted)}
+.tray-icon:hover,.tray-icon.open{background:var(--hover)}
+.tray-icon.app{color:var(--accent)}
+.clock{font-size:11px;line-height:15px;text-align:right;color:var(--fg);padding:0 6px 0 8px;font-variant-numeric:tabular-nums}
+.stage-hint{position:absolute;left:18px;top:14px;font-size:12px;color:var(--muted)}
+.size-readout{position:absolute;left:18px;bottom:60px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.toast{position:absolute;left:50%;top:22px;transform:translateX(-50%);background:var(--pop);border:1px solid var(--pop-line);border-radius:7px;padding:6px 12px;font-size:12px;box-shadow:var(--shadow);white-space:nowrap}
+.toast[hidden]{display:none}
+.icon{width:18px;height:18px;flex:none;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* 弹层本体 */
+.popup{position:absolute;right:62px;bottom:56px;width:344px;background:var(--pop);border:1px solid var(--pop-line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;
+  transform-origin:bottom right;animation:rise .14s cubic-bezier(.2,.8,.3,1)}
+.popup[hidden],.native[hidden]{display:none}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}}
+.head{display:flex;align-items:center;gap:9px;padding:10px 12px 9px 14px}
+.brand-mark{width:22px;height:22px;border-radius:6px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center}
+.brand-mark .icon{width:15px;height:15px;stroke-width:2.2}
+.brand{font-weight:600;font-size:13px}
+.status{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);border:0;background:transparent;padding:3px 7px;border-radius:5px;max-width:210px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status:hover{background:var(--hover);color:var(--fg)}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+.status.warn{color:var(--warn)}.status.warn .dot{background:var(--warn)}
+.section{padding:4px 8px 8px}
+.section+.section{border-top:1px solid var(--line);padding-top:8px}
+.section-head{display:flex;align-items:center;gap:8px;padding:2px 6px 5px;font-size:11px;color:var(--muted);min-height:24px}
+.section-head .meta{margin-left:auto;font-variant-numeric:tabular-nums}
+.link{border:0;background:transparent;color:var(--muted);font-size:11px;padding:2px 6px;border-radius:4px;display:inline-flex;align-items:center;gap:2px}
+.link:hover{color:var(--fg);background:var(--hover)}
+.link .icon{width:12px;height:12px}
+kbd{font:11px/1 var(--ui);font-variant-numeric:tabular-nums;color:var(--muted);background:var(--kbd);border:1px solid var(--kbd-line);border-bottom-width:2px;border-radius:4px;padding:2px 5px;white-space:nowrap}
+.hero{width:100%;display:flex;align-items:center;gap:11px;border:0;border-radius:8px;height:40px;padding:0 10px;background:var(--accent-soft);text-align:left}
+.hero:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.hero .icon{color:var(--accent);width:22px;height:22px}
+.hero .title{font-weight:600}
+.hero .sub{font-size:11px;color:var(--muted);margin-left:-3px}
+.hero kbd{margin-left:auto}
+.tiles{display:grid;grid-template-columns:repeat(var(--cols,3),1fr);gap:4px;margin-top:4px}
+.tile{border:0;background:transparent;border-radius:7px;padding:7px 4px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
+.tile:hover{background:var(--hover)}
+.tile .icon{width:20px;height:20px;color:var(--fg)}
+.tile .name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tile .info{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tile.proposed .name:after{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--warn);margin-left:4px;vertical-align:2px}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.chip{border:0;background:transparent;border-radius:6px;height:38px;padding:0 8px;display:flex;align-items:center;gap:8px;min-width:0;text-align:left}
+.chip .text{display:flex;flex-direction:column;min-width:0;flex:1;line-height:15px}
+.chip .key{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip:hover{background:var(--hover)}
+.chip .icon{width:16px;height:16px;color:var(--muted)}
+.chip .name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thumbs{display:flex;gap:6px;padding:0 6px}
+.thumb{flex:1;min-width:0;height:44px;border:1px solid var(--line);border-radius:5px;padding:0;position:relative;overflow:hidden;background:var(--thumb-a)}
+.thumb:hover{outline:2px solid var(--accent);outline-offset:1px}
+.thumb i{position:absolute;left:6px;right:10px;height:3px;border-radius:2px;background:var(--thumb-ink)}
+.thumb .badge{position:absolute;right:3px;bottom:3px;font-size:9px;line-height:12px;padding:0 3px;border-radius:3px;background:#0008;color:#fff;font-style:normal}
+.empty-note{margin:0 6px;padding:10px 10px;border:1px dashed var(--line);border-radius:7px;font-size:11px;color:var(--muted)}
+.row{width:100%;border:0;background:transparent;border-radius:6px;min-height:34px;padding:5px 8px;display:flex;align-items:center;gap:10px;text-align:left}
+.row:hover{background:var(--hover)}
+.row:disabled{opacity:.42;background:transparent}
+.row>.icon{color:var(--muted)}
+.row .text{display:flex;flex-direction:column;min-width:0;flex:1}
+.row .label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .detail{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.row .mini{width:34px;height:24px;border-radius:3px;border:1px solid var(--line);flex:none;position:relative;overflow:hidden}
+.row .mini i{position:absolute;left:4px;right:7px;top:8px;height:2px;background:var(--thumb-ink);border-radius:1px}
+.count{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.group-pick{border:0;background:var(--section);border-radius:5px;padding:1px 6px 1px 8px;font-size:11px;color:var(--fg);display:inline-flex;align-items:center;gap:3px}
+.group-pick:hover{background:var(--hover)}
+.group-pick .icon{width:12px;height:12px}
+.controlbar{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin:4px 0 0;padding:3px;border-radius:8px;background:var(--section)}
+.ctl{border:0;background:transparent;border-radius:6px;height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;position:relative;font-size:11px;color:var(--muted)}
+.ctl .icon{width:17px;height:17px;color:var(--fg)}
+.ctl:hover{background:var(--hover);color:var(--fg)}
+.ctl:disabled{opacity:.38;background:transparent}
+.ctl.danger:hover{background:var(--danger-soft);color:var(--danger)}.ctl.danger:hover .icon{color:var(--danger)}
+.ctl .pip{position:absolute;top:5px;right:calc(50% - 18px);min-width:15px;height:15px;border-radius:8px;background:var(--warn);color:var(--on-accent);font-size:10px;line-height:15px;padding:0 4px;font-variant-numeric:tabular-nums}
+.foot{display:flex;align-items:center;gap:2px;padding:6px 8px;border-top:1px solid var(--line);background:var(--section)}
+.foot-btn{border:0;background:transparent;border-radius:6px;height:30px;padding:0 9px;display:flex;align-items:center;gap:7px;font-size:12px}
+.foot-btn .icon{width:16px;height:16px;color:var(--muted)}
+.foot-btn:hover{background:var(--hover)}
+.foot-btn.exit{margin-left:auto;color:var(--muted)}
+.foot-btn.exit:hover{color:var(--danger);background:var(--danger-soft)}.foot-btn.exit:hover .icon{color:var(--danger)}
+.warnbar{margin:0 8px 6px;padding:7px 9px;border-radius:7px;background:var(--warn-soft);color:var(--warn);font-size:11px;display:flex;gap:8px;align-items:center}
+.warnbar button{margin-left:auto;border:0;background:transparent;color:inherit;text-decoration:underline;font-size:11px;padding:0}
+/* 原生菜单对照：按 Windows 11 系统菜单比例绘制 */
+.native{position:absolute;right:62px;bottom:56px;width:300px;background:var(--native);border:1px solid var(--native-line);border-radius:8px;box-shadow:var(--shadow);padding:4px;color:var(--native-fg);font:12px/1 "Segoe UI","Microsoft YaHei UI",sans-serif}
+.native div{display:flex;align-items:center;height:30px;padding:0 10px 0 30px;border-radius:4px}
+.native div:hover{background:var(--native-hover)}
+.native div span{margin-left:auto;color:var(--native-muted)}
+.native div.b{font-weight:600}
+.native hr{border:0;border-top:1px solid var(--native-line);margin:4px 2px}
+.native div.sub span:after{content:"›";margin-left:8px}
+/* 右栏说明 */
+.notes{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--pop);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card h2{margin:0 0 6px;font-size:13px;font-weight:500}
+.card ul{margin:0;padding-left:16px;color:var(--muted);font-size:12px}
+.card li{margin:3px 0}
+.card li b{color:var(--fg);font-weight:500}
+.card p{margin:0;color:var(--muted);font-size:12px}
+@media(max-width:980px){.layout{grid-template-columns:1fr}}
+@media(max-width:560px){.page{padding:18px 12px}.popup,.native{right:8px;left:8px;width:auto}.stage{height:840px}.clock{display:none}}
+@media(prefers-reduced-motion:reduce){.popup{animation:none}}
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="heading"><h1 id="t-title">托盘弹层</h1><span class="caption" id="t-caption">替换系统右键菜单 · 分区不变、信息更全</span></header>
+  <div class="controls">
+    <div><span class="control-label" data-t="场景|Scenario">场景</span><div class="switch" id="sw-scenario">
+      <button class="on" data-v="normal" data-t="日常|Typical">日常</button><button data-v="fresh" data-t="刚安装|First run">刚安装</button><button data-v="conflict" data-t="热键冲突|Hotkey conflict">热键冲突</button><button data-v="busy" data-t="贴图很多|Many pins">贴图很多</button>
+    </div></div>
+    <div><span class="control-label" data-t="对照|Compare">对照</span><div class="switch" id="sw-view">
+      <button class="on" data-v="popup" data-t="新弹层|New popup">新弹层</button><button data-v="native" data-t="现有菜单|Current menu">现有菜单</button>
+    </div></div>
+    <div><span class="control-label" data-t="截图入口|Capture entries">截图入口</span><div class="switch" id="sw-extra">
+      <button class="on" data-v="1" data-t="+长截图/录屏|+Long/Record">+长截图/录屏</button><button data-v="0" data-t="仅现有|Existing only">仅现有</button>
+    </div></div>
+    <div><span class="control-label" data-t="语言|Language">语言</span><div class="switch" id="sw-lang">
+      <button class="on" data-v="zh">中文</button><button data-v="en">English</button>
+    </div></div>
+    <div><span class="control-label" data-t="主题|Theme">主题</span><div class="switch" id="sw-theme">
+      <button class="on" data-v="system" data-t="跟随系统|System">跟随系统</button><button data-v="dark" data-t="深色|Dark">深色</button><button data-v="light" data-t="浅色|Light">浅色</button>
+    </div></div>
+  </div>
+  <div class="layout">
+    <section class="stage" id="stage">
+      <span class="stage-hint" data-t="右键托盘图标打开 · ↑↓←→ 移动 · Enter 执行 · Esc 关闭|Right-click the tray icon · arrows move · Enter runs · Esc closes">右键托盘图标打开 · ↑↓←→ 移动 · Enter 执行 · Esc 关闭</span>
+      <div class="toast" id="toast" hidden></div>
+      <div class="size-readout" id="size"></div>
+      <div class="popup" id="popup" role="menu" aria-label="RaiShot"></div>
+      <div class="native" id="native" hidden></div>
+      <div class="taskbar">
+        <button class="tray-icon" tabindex="-1" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
+        <button class="tray-icon app open" id="tray" aria-label="RaiShot"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="14" height="11" rx="1.5" stroke-dasharray="2.6 2"/><path d="M14 13l6 6M17 19h3v-3"/></svg></button>
+        <button class="tray-icon" tabindex="-1" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></button>
+        <div class="clock">14:32<br>2026/10/23</div>
+      </div>
+    </section>
+    <aside class="notes" id="notes"></aside>
+  </div>
+</main>
+<script>
+const ICONS={
+  region:'<rect x="3" y="4.5" width="14" height="11" rx="1.5" stroke-dasharray="2.6 2"/><path d="M14 13l6 6M17 19h3v-3"/>',
+  monitor:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8"/>',
+  monitors:'<rect x="2" y="5" width="9.5" height="8" rx="1.5"/><rect x="12.5" y="5" width="9.5" height="8" rx="1.5"/><path d="M6.75 13v4M17.25 13v4M4.5 17h4.5M15 17h4.5"/>',
+  long:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8M8 7h4M8 11h4M8 15h4M19 4v14M16 15l3 3 3-3"/>',
+  record:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>',
+  pin:'<g transform="rotate(35 12 12)"><path d="M8 3.5h8M9 3.5v6l-3 4v1h12v-1l-3-4v-6M12 14.5v6"/></g>',
+  images:'<rect x="7" y="3.5" width="13.5" height="11.5" rx="1.8"/><path d="M17 18.5v.2a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8V10.8A1.8 1.8 0 0 1 5.3 9H7"/><path d="M7 12.5l3.5-3 3 2.5 2-1.5 5 4"/>',
+  settings:'<path d="M3 6h2M9 6h12M3 12h11M18 12h3M3 18h5M12 18h9"/><circle cx="7" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/>',
+  keyboard:'<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M6.5 14h.01M17.5 14h.01M9.5 14h5"/>',
+  eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeoff:'<path d="M3 3l18 18M10 10.1a3 3 0 0 0 4 4M6.6 6.7C4.1 8.3 2.5 12 2.5 12S6 18.5 12 18.5c2 0 3.7-.7 5.1-1.6M10.2 5.7c.6-.1 1.2-.2 1.8-.2 6 0 9.5 6.5 9.5 6.5s-.8 1.5-2.3 3.1"/>',
+  through:'<path d="M5 3.5l11 8-4.8.9 2.8 5.7-2.3 1.1-2.8-5.7L5 16.5z"/><path d="M17 16h4M19 14v4"/>',
+  close:'<path d="m6 6 12 12M18 6 6 18"/>',
+  undo:'<path d="m8 5-4 4 4 4M4 9h9a6 6 0 0 1 0 12h-2"/>',
+  file:'<path d="M14 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 13h6M9 16.5h4"/>',
+  clipboard:'<rect x="5.5" y="5" width="13" height="15.5" rx="2"/><path d="M9 3.5h6v3H9z"/><path d="M9 11h6M9 14.5h4"/>',
+  ocr:'<path d="M8 3.5H5A1.5 1.5 0 0 0 3.5 5v3m12-4.5H19A1.5 1.5 0 0 1 20.5 5v3M3.5 16v3A1.5 1.5 0 0 0 5 20.5h3m8 0h3a1.5 1.5 0 0 0 1.5-1.5v-3M8 16l4-8 4 8m-6.5-3h5"/>',
+  translate:'<path d="M3.5 5.5h9M8 3.5v2M5.5 5.5c.8 3 3 5.5 6 6.5M10.5 5.5c-.8 3-3 5.5-6 6.5M13 20.5l3.5-8 3.5 8M14.2 17.8h4.6"/>',
+  qr:'<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM18 14h2M14 18v2"/>',
+  save:'<path d="M5 4.5h11l3 3V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19z"/><path d="M8 4.5v4.5h7V4.5M8 20.5v-6h8v6"/>',
+  table:'<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10M15 9.5v10"/>',
+  chevron:'<path d="m6 9 6 6 6-6"/>',
+  right:'<path d="m9 6 6 6-6 6"/>',
+  power:'<path d="M12 3.5v8M7.2 6.3a7.5 7.5 0 1 0 9.6 0"/>',
+  text:'<path d="M5 7V4.5h14V7M12 4.5v15M8.5 19.5h7"/>'
+};
+const ic=n=>`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
+const S={scenario:'normal',view:'popup',extra:true,lang:'zh',theme:'system',open:true};
+const T=(zh,en)=>S.lang==='en'?en:zh;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// 每个场景是一份弹层读到的快照；字段对应右栏“数据来源”。
+function data(){
+  const base={
+    hotkey:'Ctrl+1',pinHotkey:'Ctrl+2',hotkeyOk:true,standby:true,
+    screen:{w:2560,h:1440,scale:150},monitors:2,
+    quick:[
+      {icon:'ocr',name:T('识别并复制文字','OCR → copy'),key:'Ctrl+Alt+O'},
+      {icon:'translate',name:T('翻译后贴图','Translate → pin'),key:'Ctrl+Alt+T'},
+      {icon:'qr',name:T('扫码复制','QR → copy'),key:''},
+      {icon:'save',name:T('上次区域 · 快速保存','Last region · save'),key:'Ctrl+Alt+S'}
+    ],
+    recent:[{c:'a',w:1280,h:720,t:T('2 分钟前','2 min ago')},{c:'b',w:820,h:460,t:T('18 分钟前','18 min ago')},{c:'c',w:1920,h:5400,t:T('1 小时前','1 h ago'),long:true},{c:'a',w:640,h:480,t:T('昨天','Yesterday')},{c:'b',w:0,h:0,t:T('昨天','Yesterday'),video:'0:42'}],
+    todayCount:12,
+    clip:{kind:'image',w:1280,h:720},
+    pins:{group:T('工作','Work'),groups:[T('默认','Default'),T('工作','Work'),T('参考','Reference')],shown:4,hidden:2,through:1,closed:{count:5,t:T('3 分钟前','3 min ago'),w:820,h:460}}
+  };
+  if(S.scenario==='fresh')Object.assign(base,{quick:[],recent:[],todayCount:0,clip:{kind:'text',chars:128,preview:T('会议纪要：下周三前完成托盘弹层…','Notes: finish the tray popup by Wed…')},pins:{group:T('默认','Default'),groups:[T('默认','Default')],shown:0,hidden:0,through:0,closed:null}});
+  if(S.scenario==='conflict')Object.assign(base,{hotkeyOk:false,clip:{kind:'none'}});
+  if(S.scenario==='busy')Object.assign(base,{monitors:3,quick:base.quick.concat([{icon:'table',name:T('识别表格并复制','Table → copy'),key:''},{icon:'pin',name:T('当前窗口 · 贴图','Window · pin'),key:'Ctrl+Alt+W'}]),todayCount:37,pins:{group:T('参考','Reference'),groups:base.pins.groups,shown:11,hidden:6,through:3,closed:{count:23,t:T('刚刚','Just now'),w:1440,h:900}}});
+  return base;
+}
+
+function renderPopup(){
+  const d=data(),p=d.pins;
+  const thumb=r=>`<button class="thumb" data-item data-act="${esc(T('贴出最近截图','Pin recent capture'))}" title="${esc(r.video?T('录屏','Recording')+' '+r.video:r.w+' × '+r.h)} · ${esc(r.t)}" style="background:var(--thumb-${r.c})"><i style="top:9px"></i><i style="top:17px;right:22px"></i><i style="top:25px;right:14px"></i>${r.video?`<em class="badge">▶ ${r.video}</em>`:r.long?`<em class="badge">${T('长图','Long')}</em>`:''}</button>`;
+  const clipDetail={image:T(`剪贴板：图片 ${d.clip.w} × ${d.clip.h}`,`Clipboard: image ${d.clip.w} × ${d.clip.h}`),text:T(`剪贴板：文本 ${d.clip.chars} 字 · “${d.clip.preview}”`,`Clipboard: ${d.clip.chars} chars · “${d.clip.preview}”`),none:T('剪贴板里没有图片或文本','Nothing to pin on the clipboard')}[d.clip.kind];
+  const allHidden=p.shown===0&&p.hidden>0;
+  const tiles=[
+    {icon:'monitor',name:T('当前屏幕','This screen'),info:`${d.screen.w} × ${d.screen.h}`},
+    {icon:'monitors',name:T('所有屏幕','All screens'),info:T(`${d.monitors} 台显示器`,`${d.monitors} displays`)}
+  ].concat(S.extra?[{icon:'long',name:T('长截图','Long'),info:T('滚动拼接','Scroll')},{icon:'record',name:T('录屏','Record'),info:'MP4'}]:[]);
+  const pinsMeta=p.shown+p.hidden===0?T('当前分组没有贴图','No pins in this group'):T(`${p.shown} 显示 · ${p.hidden} 隐藏`,`${p.shown} shown · ${p.hidden} hidden`);
+  return `
+  <div class="head">
+    <span class="brand-mark">${ic('region')}</span><span class="brand">RaiShot</span>
+    <button class="status ${d.hotkeyOk?'':'warn'}" data-item data-act="${esc(T('打开 设置 ▸ 快捷键','Open Settings ▸ Hotkeys'))}"><span class="dot"></span>${d.hotkeyOk?T('快捷键正常 · 待命就绪','Hotkeys ready · standby warm'):T(`${d.hotkey} 被其它软件占用`,`${d.hotkey} is taken by another app`)}</button>
+  </div>
+  ${d.hotkeyOk?'':`<div class="warnbar">${T('区域截图暂时只能从托盘左键触发','Region capture only works from the tray icon for now')}<button data-item data-act="${esc(T('打开 设置 ▸ 快捷键','Open Settings ▸ Hotkeys'))}">${T('改键','Change')}</button></div>`}
+  <div class="section">
+    <button class="hero" data-item data-act="${esc(T('区域截图','Capture region'))}">${ic('region')}<span class="title">${T('区域截图','Capture region')}</span><span class="sub">${T('或单击托盘图标','or click the tray icon')}</span><kbd>${d.hotkey}</kbd></button>
+    <div class="tiles" style="--cols:${tiles.length}">${tiles.map(t=>`<button class="tile ${t.proposed?'proposed':''}" data-item data-act="${esc(t.name)}">${ic(t.icon)}<span class="name">${t.name}</span><span class="info">${t.info}</span></button>`).join('')}</div>
+  </div>
+  ${d.quick.length?`<div class="section">
+    <div class="section-head">${T('快捷动作','Quick actions')}<span class="meta">${d.quick.length>4?`<button class="link" data-item data-act="${esc(T('展开全部快捷动作','Show all quick actions'))}">${T(`全部 ${d.quick.length}`,`All ${d.quick.length}`)}${ic('right')}</button>`:''}</span></div>
+    <div class="chips">${d.quick.slice(0,4).map(q=>`<button class="chip" data-item data-act="${esc(q.name)}">${ic(q.icon)}<span class="text"><span class="name">${q.name}</span><span class="key">${q.key||T('无快捷键','No hotkey')}</span></span></button>`).join('')}</div>
+  </div>`:''}
+  <div class="section">
+    <div class="section-head">${T('最近','Recent')}<span class="meta">${d.recent.length?`<button class="link" data-item data-act="${esc(T('打开图库','Open Library'))}">${T(`今天 ${d.todayCount} 张 · 图库`,`${d.todayCount} today · Library`)}${ic('right')}</button>`:''}</span></div>
+    ${d.recent.length?`<div class="thumbs">${d.recent.map(thumb).join('')}</div>`:`<div class="empty-note">${T('截图、贴图和录屏会按时间出现在这里；单击贴出，悬停看尺寸。','Captures, pins and recordings appear here. Click to pin, hover for size.')}</div>`}
+  </div>
+  <div class="section">
+    <div class="section-head">${T('贴图','Pins')}<button class="group-pick" data-item data-act="cycle-group" title="${esc(T('切换屏幕上显示的分组','Switch the group shown on screen'))}">${esc(p.group)}${ic('chevron')}</button><span class="meta">${pinsMeta}</span></div>
+    <button class="row" data-item data-act="${esc(T('剪贴板贴图','Pin clipboard'))}" ${d.clip.kind==='none'?'disabled':''}>${ic('clipboard')}<span class="text"><span class="label">${T('剪贴板贴图','Pin clipboard')}</span><span class="detail">${esc(clipDetail)}</span></span><kbd>${d.pinHotkey}</kbd></button>
+    <button class="row" data-item data-act="${esc(T('打开图片贴图…','Pin image file…'))}">${ic('file')}<span class="text"><span class="label">${T('打开图片贴图…','Pin image file…')}</span></span></button>
+    <button class="row" data-item data-act="${esc(T('恢复最近关闭的贴图','Restore last closed pin'))}" ${p.closed?'':'disabled'}>${p.closed?`<span class="mini" style="background:var(--thumb-b)"><i></i></span>`:ic('undo')}<span class="text"><span class="label">${T('恢复最近关闭','Restore last closed')}</span><span class="detail">${p.closed?T(`${p.closed.t} · ${p.closed.w} × ${p.closed.h} · 含标注`,`${p.closed.t} · ${p.closed.w} × ${p.closed.h} · with markup`):T('还没有关闭过贴图','No closed pins yet')}</span></span>${p.closed?`<span class="count">${T(`共 ${p.closed.count}`,`${p.closed.count} total`)}</span>`:''}</button>
+    <div class="controlbar">
+      <button class="ctl" data-item data-act="toggle-hide" ${p.shown+p.hidden===0?'disabled':''}>${ic(allHidden?'eye':'eyeoff')}${allHidden?T('显示本组','Show group'):T('隐藏本组','Hide group')}</button>
+      <button class="ctl" data-item data-act="clear-through" ${p.through?'':'disabled'} title="${esc(T('关闭鼠标穿透，恢复交互','Turn off click-through'))}">${ic('through')}${p.through?`<span class="pip">${p.through}</span>`:''}${T('取消穿透','Interact')}</button>
+      <button class="ctl" data-item data-act="${esc(T('打开主界面 ▸ 贴图','Open Main ▸ Pins'))}">${ic('pin')}${T('管理','Manage')}</button>
+      <button class="ctl danger" data-item data-act="close-all" ${p.shown+p.hidden===0?'disabled':''} title="${esc(T('关闭全部贴图（可恢复）','Close all pins (restorable)'))}">${ic('close')}${T('全部关闭','Close all')}</button>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="foot-btn" data-item data-act="${esc(T('图库','Library'))}">${ic('images')}${T('图库','Library')}</button>
+    <button class="foot-btn" data-item data-act="${esc(T('设置','Settings'))}">${ic('settings')}${T('设置','Settings')}</button>
+    <button class="foot-btn" data-item data-act="${esc(T('帮助与快捷键','Help & shortcuts'))}">${ic('keyboard')}${T('帮助','Help')}</button>
+    <button class="foot-btn exit" data-item data-act="${esc(T('退出 RaiShot','Exit RaiShot'))}">${ic('power')}${T('退出','Exit')}</button>
+  </div>`;
+}
+
+function renderNative(){
+  const d=data(),rows=[
+    ['b',T('区域截图','Capture region'),d.hotkey],d.quick.length?['sub',T('快捷动作','Quick actions'),'']:null,['',T('当前屏幕截图','Capture current screen'),''],['',T('所有屏幕截图','Capture all screens'),''],'-',
+    ['',T('剪贴板贴图（图片 / 文本）','Pin clipboard (image / text)'),d.pinHotkey],['',T('打开图片贴图…','Pin image file…'),''],['',T('管理贴图…','Manage pins…'),''],['',T('恢复最近关闭的贴图','Restore recently closed pin'),''],['sub',T('全部贴图','All pins'),''],'-',
+    ['',T('图库','Library'),''],['',T('设置','Settings'),''],['',T('帮助与快捷键','Help & shortcuts'),''],'-',['',T('退出 RaiShot','Exit RaiShot'),'']
+  ].filter(Boolean);
+  return rows.map(r=>r==='-'?'<hr>':`<div class="${r[0]}">${esc(r[1])}<span>${esc(r[2])}</span></div>`).join('');
+}
+
+const NOTES=()=>[
+  {h:T('布局','Layout'),li:[
+    T('<b>占地相近</b>：宽 344，高度见舞台左下实测，与现有系统菜单同一量级；贴着托盘图标向上展开，靠屏边时整体翻转。','<b>Similar footprint</b>: 344 wide, measured height at the stage’s lower left, same order as the system menu; anchored above the tray icon, flips at screen edges.'),
+    T('<b>主次分明</b>：区域截图做主按钮，其它采集方式一行图标；低频的分组控制收成底部四格。','<b>Clear hierarchy</b>: region capture is the hero, other modes sit in one row; rarer pin controls collapse into a 4-cell bar.'),
+    T('<b>去掉二级菜单</b>：快捷动作和“全部贴图”的子菜单都平铺进来，一次点击直达。','<b>No submenus</b>: quick actions and the “All pins” submenu are flattened — one click.')]},
+  {h:T('新增的信息','Extra information'),li:[
+    T('<b>状态行</b>：热键注册结果与待命进程是否就绪；冲突时变黄，并给出改键入口。','<b>Status line</b>: hotkey registration and standby process; turns amber with a fix link on conflict.'),
+    T('<b>采集尺寸</b>：当前屏分辨率、显示器数量。','<b>Capture info</b>: current screen size, display count.'),
+    T('<b>最近 5 条</b>：截图／长图／录屏缩略图，单击贴出，悬停看尺寸和时间。','<b>Last 5 items</b>: thumbnails of captures, long shots and recordings; click to pin.'),
+    T('<b>剪贴板预览</b>：先告诉你会贴出什么，没有可贴内容时置灰。','<b>Clipboard preview</b>: shows what will be pinned; disabled when nothing fits.'),
+    T('<b>贴图状态</b>：当前分组、显示／隐藏数、穿透数（角标），最近关闭的缩略图和总数。','<b>Pin state</b>: group, shown/hidden, click-through badge, last closed thumbnail and count.')]},
+  {h:T('交互','Interaction'),li:[
+    T('失焦、Esc、再次右键托盘即关闭；执行任何项后立即关闭再执行，截图不会把弹层截进去。','Closes on blur, Esc or another right-click; every action closes the popup first, so it never appears in a capture.'),
+    T('方向键在可点项之间移动（二维网格按视觉位置），Enter／空格执行，Tab 按分区跳。','Arrow keys move by visual position, Enter/Space runs, Tab jumps between sections.'),
+    T('分组下拉、隐藏／显示、取消穿透是就地操作：弹层保持打开并刷新数字。','Group switch, hide/show and click-through are in-place: the popup stays and refreshes.'),
+    T('长截图／录屏已确认加入：先框选，松开后直接进入采集面板或录屏宿主。','Long capture / Record are confirmed: select a region, then go straight to the capture panel or recorder.')]},
+  {h:T('数据来源','Data sources'),li:[
+    T('热键与快捷动作：Preferences、QuickActionStore（已在每次弹出时读取）。','Hotkeys & quick actions: Preferences, QuickActionStore (already read on every popup).'),
+    T('最近与最近关闭：图库索引 library.sqlite3，只取 5 条缩略图。','Recent & closed: library.sqlite3, 5 thumbnails only.'),
+    T('分组与计数：贴图工作区；剪贴板只看格式与尺寸，不读全文。','Groups & counts: pin workspace; clipboard checks format and size only.')]},
+  {h:T('实现方案','Implementation'),p:T('托盘再备一个不初始化 GPU 的弹层待命进程，右键时才启动 GPUI；延迟门槛与分阶段见 references/tray-popup-2026-10-24.md。','A second GPU-free standby process hosts the popup and starts GPUI on right-click; latency gate and phases in references/tray-popup-2026-10-24.md.')}
+];
+
+function renderNotes(){
+  document.getElementById('notes').innerHTML=NOTES().map(n=>`<div class="card"><h2>${n.h}</h2>${n.li?`<ul>${n.li.map(l=>`<li>${l}</li>`).join('')}</ul>`:`<p>${n.p}</p>`}</div>`).join('');
+}
+
+let overrides={};
+function render(){
+  document.documentElement.lang=S.lang==='en'?'en':'zh-CN';
+  document.querySelectorAll('[data-t]').forEach(el=>{const [zh,en]=el.dataset.t.split('|');el.textContent=T(zh,en)});
+  document.getElementById('t-title').textContent=T('托盘弹层','Tray popup');
+  document.getElementById('t-caption').textContent=T('替换系统右键菜单 · 分区不变、信息更全','Replaces the system context menu · same sections, more information');
+  const popup=document.getElementById('popup'),native=document.getElementById('native');
+  popup.innerHTML=renderPopup();native.innerHTML=renderNative();
+  popup.hidden=!(S.open&&S.view==='popup');native.hidden=!(S.open&&S.view==='native');
+  document.getElementById('tray').classList.toggle('open',S.open);
+  renderNotes();
+  measure();
+}
+// 两种菜单都临时放出来量一次尺寸，便于比较占地。
+function measure(){
+  const size=el=>{const h=el.hidden;el.hidden=false;const v=h?'hidden':'';el.style.visibility=v;const r=el.getBoundingClientRect();el.hidden=h;el.style.visibility='';return `${Math.round(r.width)} × ${Math.round(r.height)}`};
+  document.getElementById('size').textContent=T(`新弹层 ${size(document.getElementById('popup'))} · 现有菜单 ${size(document.getElementById('native'))}`,`New popup ${size(document.getElementById('popup'))} · current menu ${size(document.getElementById('native'))}`);
+}
+
+// data() 每次重建快照，就地操作写进 overrides 后再叠加。
+const baseData=data;
+data=function(){const d=baseData();const o=overrides[S.scenario]||{};if(o.pins)Object.assign(d.pins,o.pins);return d};
+
+let toastTimer;
+function toast(text){const t=document.getElementById('toast');t.textContent='→ '+text;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.hidden=true,1600)}
+function inPlace(act){
+  const d=data(),p=d.pins,o=overrides[S.scenario]=overrides[S.scenario]||{pins:{}};
+  if(act==='cycle-group'){const i=p.groups.indexOf(p.group);o.pins.group=p.groups[(i+1)%p.groups.length];return true}
+  if(act==='toggle-hide'){const total=p.shown+p.hidden;o.pins.shown=p.shown?0:total;o.pins.hidden=p.shown?total:0;return true}
+  if(act==='clear-through'){o.pins.through=0;return true}
+  if(act==='close-all'){o.pins.shown=0;o.pins.hidden=0;o.pins.through=0;o.pins.closed={count:(p.closed?p.closed.count:0)+p.shown+p.hidden,t:T('刚刚','Just now'),w:820,h:460};S.open=false;toast(T('已关闭全部贴图（可恢复）','Closed all pins (restorable)'));return true}
+  return false;
+}
+function focusFirst(){const f=document.querySelector('#popup [data-item]:not(:disabled)');f&&f.focus({preventScroll:true})}
+
+document.getElementById('popup').addEventListener('click',e=>{
+  const b=e.target.closest('[data-item]');if(!b||b.disabled)return;
+  const act=b.dataset.act;
+  if(inPlace(act)){const keep=document.activeElement&&document.activeElement.dataset.act;render();if(S.open){const again=[...document.querySelectorAll('#popup [data-item]')].find(x=>x.dataset.act===keep);(again&&!again.disabled?again:null)?.focus({preventScroll:true})}return}
+  S.open=false;render();toast(act);
+});
+document.getElementById('tray').addEventListener('contextmenu',e=>{e.preventDefault();S.open=!S.open;render();if(S.open)focusFirst()});
+document.getElementById('tray').addEventListener('click',()=>{S.open=false;render();toast(T('区域截图','Capture region'))});
+document.getElementById('stage').addEventListener('mousedown',e=>{if(!e.target.closest('#popup,#native,#tray')&&S.open){S.open=false;render()}});
+document.addEventListener('keydown',e=>{
+  if(!S.open||S.view!=='popup')return;
+  if(e.key==='Escape'){S.open=false;render();document.getElementById('tray').focus();return}
+  if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))return;
+  const items=[...document.querySelectorAll('#popup [data-item]:not(:disabled)')];
+  const cur=document.activeElement;if(!items.includes(cur)){e.preventDefault();focusFirst();return}
+  // 按视觉位置找最近的下一个目标，网格和列表用同一套规则。
+  const r=cur.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+  let best=null,score=Infinity;
+  for(const it of items){if(it===cur)continue;const q=it.getBoundingClientRect(),x=q.left+q.width/2,y=q.top+q.height/2,dx=x-cx,dy=y-cy;
+    const ok={ArrowUp:dy<-4,ArrowDown:dy>4,ArrowLeft:dx<-4&&Math.abs(dy)<r.height,ArrowRight:dx>4&&Math.abs(dy)<r.height}[e.key];if(!ok)continue;
+    const s=e.key==='ArrowUp'||e.key==='ArrowDown'?Math.abs(dy)*1+Math.abs(dx)*2.5:Math.abs(dx);if(s<score){score=s;best=it}}
+  e.preventDefault();best&&best.focus({preventScroll:true});
+});
+function bindSwitch(id,key,parse=v=>v){document.getElementById(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  S[key]=parse(b.dataset.v);document.querySelectorAll(`#${id} button`).forEach(x=>x.classList.toggle('on',x===b));
+  if(key==='theme'){S.theme==='system'?document.documentElement.removeAttribute('data-theme'):document.documentElement.dataset.theme=S.theme}
+  if(key==='scenario')delete overrides[S.scenario];
+  S.open=true;render()})}
+bindSwitch('sw-scenario','scenario');bindSwitch('sw-view','view');bindSwitch('sw-extra','extra',v=>v==='1');bindSwitch('sw-lang','lang');bindSwitch('sw-theme','theme');
+// ?scenario=conflict&lang=en&view=native&extra=0&theme=light 直接打开某个状态，便于转发。
+for(const [k,id] of [['scenario','sw-scenario'],['view','sw-view'],['extra','sw-extra'],['lang','sw-lang'],['theme','sw-theme']]){const v=new URLSearchParams(location.search).get(k);const b=v&&document.querySelector(`#${id} button[data-v="${v}"]`);if(b)b.click()}
+render();
+</script>
+</body>
+</html>

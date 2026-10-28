@@ -1,0 +1,1728 @@
+<title>截图工具栏</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 布局：标题与方案切换 → 1000×640 冻结桌面舞台（按宽度缩放，可直接画）→ 设计要点。深色优先，配色沿用 GPUI Palette；舞台里的“桌面”是截图内容，两种主题下都保持深色。 */
+:root {
+  /* GPUI Palette（capture_toolbar.rs）原值 + 本稿新增的 track / ring / tip 等控件色 */
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --selected: #28473d; --accent: #40ce9d; --accent-hover: #5bd8ac; --on-accent: #10231c;
+  --track: #262c35; --track-hover: #323b47; --ring: #e6edf3; --sw-edge: rgba(255,255,255,.2); --knob: #ffffff;
+  --tip-bg: #0b0e12; --tip-fg: #e6edf3; --tip-muted: #8f9cab; --danger: #ff737f; --danger-bg: rgba(255,115,127,.14);
+  --page: #0f1317; --card: #171c22; --sel: #1498ff; --warn: #e8a33d;
+  --desk: #0c0e11; --desk-2: #15191e; --desk-3: #1a1f25; --desk-line: #2a3038; --desk-fg: #aab4bf; --desk-hi: #e6edf3;
+  --shadow: rgba(0,0,0,.45);
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --accent-hover: #0e5a40; --on-accent: #fff;
+  --track: #eef2f5; --track-hover: #e1e8ed; --ring: #374351; --sw-edge: rgba(0,0,0,.16);
+  --tip-bg: #2b333c; --tip-fg: #f4f7f9; --tip-muted: #b3bec9; --danger: #c62828; --danger-bg: rgba(198,40,40,.1); --warn: #9a5b00;
+  --page: #e8edf1; --card: #f4f7f9; --shadow: rgba(30,40,50,.18); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --accent-hover: #0e5a40; --on-accent: #fff;
+  --track: #eef2f5; --track-hover: #e1e8ed; --ring: #374351; --sw-edge: rgba(0,0,0,.16);
+  --tip-bg: #2b333c; --tip-fg: #f4f7f9; --tip-muted: #b3bec9; --danger: #c62828; --danger-bg: rgba(198,40,40,.1); --warn: #9a5b00;
+  --page: #e8edf1; --card: #f4f7f9; --shadow: rgba(30,40,50,.18); color-scheme: light; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.55 var(--ui); padding-block: 18px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+h1 { font-size: 18px; font-weight: 600; margin: 0; text-wrap: balance; }
+h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 13px; }
+.tog { margin-left: auto; display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); }
+.tog button { height: 28px; padding: 0 14px; border-radius: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.tog button.on { background: var(--bg); color: var(--fg); font-weight: 600; }
+.lede { margin: 0; color: var(--muted); font-size: 13px; max-width: 80ch; }
+.lede kbd, .notes kbd { font: 11.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats b { color: var(--fg); font-weight: 600; }
+.stage-box { width: 100%; overflow: hidden; border-radius: 10px; border: 1px solid var(--border); }
+.stage { position: relative; width: 1000px; height: 640px; transform-origin: 0 0; overflow: hidden; background: var(--desk); user-select: none; touch-action: none; cursor: crosshair; }
+.stage.selecting { cursor: default; }
+
+/* ---------- 假桌面（截图内容） ---------- */
+.desk { position: absolute; inset: 0; color: var(--desk-fg); font: 13px/1.5 var(--ui); }
+.win { position: absolute; left: 24px; top: 18px; width: 952px; height: 604px; background: var(--desk-2); border: 1px solid var(--desk-line); border-radius: 8px; overflow: hidden; }
+.side { position: absolute; left: 0; top: 0; bottom: 0; width: 170px; border-right: 1px solid var(--desk-line); padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; font-size: 12.5px; color: #8e99a5; }
+.side .logo { color: var(--desk-hi); font-weight: 600; font-size: 13.5px; margin-bottom: 6px; }
+.side .on { color: var(--desk-hi); }
+.d-h { position: absolute; left: 214px; top: 26px; font-size: 19px; color: var(--desk-hi); font-weight: 600; }
+.d-s { position: absolute; left: 214px; top: 54px; font-size: 12px; color: #7d8894; }
+.kpi { position: absolute; top: 78px; width: 230px; height: 70px; border: 1px solid var(--desk-line); border-radius: 6px; background: var(--desk-3); padding: 9px 12px; }
+.kpi .l { font-size: 12px; color: #8e99a5; }
+.kpi .v { font-size: 20px; color: var(--desk-hi); font-weight: 600; font-variant-numeric: tabular-nums; }
+.kpi .v em { font-style: normal; font-size: 12px; margin-left: 8px; color: #5fcf8f; font-weight: 500; }
+.kpi .v em.dn { color: #e07a7a; }
+.chart { position: absolute; left: 190px; top: 164px; width: 346px; height: 148px; border-radius: 6px; background: linear-gradient(180deg,#1c2b38,#17202a); border: 1px solid var(--desk-line); }
+.chart .t { position: absolute; left: 12px; top: 8px; font-size: 12px; color: #8e99a5; }
+.chart span { position: absolute; bottom: 18px; width: 18px; border-radius: 3px 3px 0 0; background: #2f7fb8; }
+.chart span.pk { background: #47a3e6; }
+.chart i { position: absolute; bottom: 2px; font: 10px/1 var(--ui); font-style: normal; color: #6f7a86; }
+.acct { position: absolute; left: 550px; top: 164px; width: 230px; height: 70px; border: 1px solid var(--desk-line); border-radius: 6px; background: var(--desk-3); padding: 9px 12px; }
+.acct .n { font: 16px/1.4 var(--mono); color: var(--desk-hi); letter-spacing: .04em; }
+.memo { position: absolute; left: 550px; top: 244px; width: 230px; height: 68px; border: 1px solid var(--desk-line); border-radius: 6px; background: var(--desk-3); padding: 9px 12px; font-size: 12px; }
+.tbl { position: absolute; left: 190px; top: 328px; width: 736px; border-top: 1px solid var(--desk-line); font-size: 12.5px; }
+.tbl div { display: grid; grid-template-columns: 120px 90px 120px 1fr 90px; padding: 7px 4px; border-bottom: 1px solid var(--desk-line); font-variant-numeric: tabular-nums; }
+.tbl div:first-child { color: #7d8894; font-size: 11.5px; }
+
+/* ---------- 选区与图层 ---------- */
+.selbox { position: absolute; box-shadow: 0 0 0 2400px rgba(0,0,0,.5); outline: 1.5px solid var(--sel); pointer-events: none; }
+.fx { position: absolute; inset: 0; pointer-events: none; }
+.fx div { position: absolute; }
+.fxm { backdrop-filter: blur(calc(var(--b) * .45)); background-image: repeating-conic-gradient(rgba(255,255,255,.08) 0 25%, rgba(0,0,0,.16) 0 50%); background-size: var(--b) var(--b); }
+.fxb { backdrop-filter: blur(calc(var(--b) * .6)); background: rgba(20,25,30,.12); }
+.fxs { outline: 1px dashed rgba(64,206,157,.8); }
+svg.ann { position: absolute; inset: 0; width: 1000px; height: 640px; pointer-events: none; overflow: visible; }
+.textin { position: absolute; z-index: 4; min-width: 120px; border: 1px dashed var(--sel); background: rgba(0,0,0,.25); color: #fff; outline: none; padding: 0 2px; font-family: var(--ui); }
+
+/* ---------- 工具栏：尺寸与 GPUI 对齐（主栏按钮 32；二级栏行高 32、控件 28） ---------- */
+.bar { position: absolute; z-index: 5; display: flex; flex-direction: column; gap: 4px; padding: 4px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 8px 24px var(--shadow); font: 12px/1 var(--ui); white-space: nowrap; color: var(--fg); cursor: default; }
+.row { display: flex; align-items: center; gap: 4px; min-height: 32px; }
+.row > * { flex: none; }
+#mainbar .row { gap: 2px; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.mb svg.i { width: 18px; height: 18px; }
+svg.c { width: 9px; height: 9px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: .6; flex: none; }
+.sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex: none; }
+.grip { width: 10px; height: 20px; margin: 0 2px; background-image: radial-gradient(var(--muted) 1px, transparent 1.2px); background-size: 4px 4px; opacity: .6; flex: none; cursor: grab; }
+[aria-disabled="true"] { opacity: .35; cursor: default; }
+.num, .v { font-variant-numeric: tabular-nums; }
+.dim { color: var(--muted); }
+.mono { font-family: var(--mono); font-size: 11.5px; }
+
+/* 主栏 */
+.mb { width: 32px; height: 32px; border-radius: 7px; display: inline-grid; place-items: center; position: relative; flex: none; }
+.mb:hover, .mb.open { background: var(--hover); }
+.mb.on { background: var(--selected); color: var(--accent); }
+.mb[disabled] { opacity: .35; cursor: default; }
+.mb[disabled]:hover { background: none; }
+.mb.primary { background: var(--accent); color: var(--on-accent); }
+.mb.primary:hover { background: var(--accent-hover); }
+.grp { display: inline-flex; position: relative; flex: none; }
+.grp .mb { width: 30px; border-radius: 7px 0 0 7px; }
+.grp .mb.car { width: 14px; border-radius: 0 7px 7px 0; }
+.grp:hover .mb { background: var(--hover); }
+.grp.on .mb { background: var(--selected); color: var(--accent); }
+.grp.ctx::after { content: ""; position: absolute; left: 7px; right: 7px; bottom: 1px; height: 2px; border-radius: 1px; background: var(--accent); }
+.key { position: absolute; right: 2px; bottom: 2px; font: 8px/1 var(--mono); color: var(--muted); }
+.grp.on .key, .mb.on .key { color: var(--accent); }
+
+/* 图标按钮 / 开关：28×28 */
+.ib { width: 28px; height: 28px; border-radius: 6px; display: inline-grid; place-items: center; flex: none; position: relative; }
+.ib:hover, .ib.hv, .ib.open { background: var(--hover); }
+.ib.on { background: var(--selected); color: var(--accent); }
+.ib.danger:hover, .ib.danger.hv { background: var(--danger-bg); color: var(--danger); }
+.ib[aria-disabled="true"]:hover { background: none; }
+
+/* 分段：槽 track，每段 26×24 */
+.pair { display: inline-flex; gap: 4px; flex: none; }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--track); flex: none; }
+.seg > button { height: 24px; min-width: 26px; padding: 0 5px; border-radius: 6px; display: inline-grid; place-items: center; color: var(--muted); }
+.seg > button:hover, .seg > button.hv { background: var(--track-hover); color: var(--fg); }
+.seg > button.on { background: var(--selected); color: var(--accent); }
+.seg > button[aria-disabled="true"]:hover { background: none; color: var(--muted); }
+
+/* 色块：槽 26×28，色点 Ø18，选中 = 2px 底色间隙 + 1.5px 外环 */
+.sws { display: inline-flex; align-items: center; flex: none; }
+.sw { width: 26px; height: 28px; border-radius: 6px; display: inline-grid; place-items: center; flex: none; }
+.sw:hover, .sw.hv { background: var(--hover); }
+.sw i { display: block; width: 18px; height: 18px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px var(--sw-edge); }
+.sw.on i { box-shadow: inset 0 0 0 1px var(--sw-edge), 0 0 0 2px var(--bg), 0 0 0 3.5px var(--ring); }
+.sw.on:hover { background: none; }
+.sw.custom i { display: grid; place-items: center; background: conic-gradient(#ff4b5c, #ffd34d, #39c996, #2bb8c8, #5796ff, #bc8bff, #ff4b5c); }
+.sw.custom b { display: block; width: 10px; height: 10px; border-radius: 50%; background: var(--bg); }
+.sw.custom.has b { width: 12px; height: 12px; background: var(--cc); box-shadow: 0 0 0 1.5px var(--bg); }
+.rb { width: 16px; height: 16px; border-radius: 50%; justify-self: center; background: conic-gradient(#ff4b5c, #ffd34d, #39c996, #2bb8c8, #5796ff, #bc8bff, #ff4b5c); }
+
+/* 数值框、下拉、收起后的颜色按钮：高 28，track 底 */
+.vf, .dd, .cb { height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0 5px 0 6px; border-radius: 6px; background: var(--track); flex: none; }
+.vf:hover, .dd:hover, .cb:hover, .vf.hv { background: var(--track-hover); }
+.vf.open, .dd.open, .cb.open { box-shadow: inset 0 0 0 1px var(--accent); }
+.vf > svg.i { color: var(--muted); }
+.vf .v { text-align: right; }
+.dd .fam { max-width: 96px; overflow: hidden; text-overflow: ellipsis; line-height: 16px; }
+.dd[aria-disabled="true"]:hover { background: var(--track); }
+.cb i { display: block; width: 18px; height: 18px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px var(--sw-edge); }
+.wdot { width: 16px; height: 16px; display: grid; place-items: center; flex: none; }
+.wdot i { display: block; width: var(--d); height: var(--d); border-radius: 50%; background: currentColor; }
+
+/* 拆分开关：左半开关、右半细项 */
+.split { display: inline-flex; flex: none; border-radius: 6px; }
+.split .ib { border-radius: 6px 0 0 6px; }
+.split .car { width: 14px; height: 28px; border-radius: 0 6px 6px 0; display: grid; place-items: center; }
+.split:hover > *, .split .car.open { background: var(--hover); }
+.split.on > * { background: var(--selected); color: var(--accent); }
+
+/* 文字按钮与说明 */
+.tb { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); flex: none; }
+.tb:hover { background: var(--hover); }
+.tb.primary { background: var(--accent); border-color: transparent; color: var(--on-accent); font-weight: 600; }
+.tb.primary:hover { background: var(--accent-hover); }
+.hint { padding: 0 6px; color: var(--muted); }
+.cnt { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 11px; background: var(--track); font-variant-numeric: tabular-nums; }
+.tin { height: 28px; border: 1px solid transparent; border-radius: 6px; background: var(--track); color: var(--fg); padding: 0 8px; font: 12px var(--ui); }
+.tin:focus { outline: none; border-color: var(--accent); }
+.wmin { display: inline-flex; align-items: center; gap: 2px; }
+.tag { font: 9.5px/1 var(--ui); padding: 2px 4px; border-radius: 4px; background: rgba(232,163,61,.18); color: var(--warn); }
+
+/* 现状（当前 GPUI）：文字芯片 + 12px 色点 */
+.oc { height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border); display: inline-flex; align-items: center; gap: 4px; }
+.oc.on { background: var(--selected); color: var(--accent); border-color: transparent; }
+.oc.off { opacity: .4; }
+.ow { flex-wrap: wrap; max-width: 600px; row-gap: 4px; }
+.lbl { padding: 0 4px; color: var(--muted); }
+.odots { display: inline-flex; gap: 3px; align-items: center; }
+.od { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--bg); cursor: pointer; }
+.od.on { border-color: var(--accent); }
+.od i { width: 12px; height: 12px; border-radius: 50%; background: var(--c); border: 1px solid var(--border); }
+
+/* ---------- 下拉与弹层：圆角 10，内边距 12 ---------- */
+.fly, .pop { position: absolute; z-index: 7; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 40px var(--shadow); font: 12.5px/1.4 var(--ui); color: var(--fg); cursor: default; }
+.fly { padding: 4px; min-width: 176px; display: flex; flex-direction: column; gap: 1px; }
+.fi { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; text-align: left; }
+.fi:hover { background: var(--hover); }
+.fi.on { color: var(--accent); background: var(--selected); }
+.ff { padding: 6px 8px 3px; border-top: 1px solid var(--border); margin-top: 3px; color: var(--muted); font-size: 11.5px; }
+.pop { padding: 12px; width: 236px; display: flex; flex-direction: column; gap: 10px; }
+.pop.menu-pop { padding: 4px; gap: 2px; }
+.ph { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px; }
+.pop h4 { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
+.num-in { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.num-in input, .corners input { width: 56px; height: 26px; border: 1px solid transparent; border-radius: 6px; background: var(--track); color: var(--fg); text-align: right; padding: 0 6px; font: 12.5px var(--ui); font-variant-numeric: tabular-nums; }
+.num-in input:focus, .corners input:focus { outline: none; border-color: var(--accent); }
+.sl { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
+.sl::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--accent) var(--p, 50%), var(--track-hover) var(--p, 50%)); }
+.sl::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--knob); border: 2px solid var(--accent); box-shadow: 0 1px 3px var(--shadow); }
+.sl::-moz-range-track { height: 4px; border-radius: 2px; background: var(--track-hover); }
+.sl::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+.sl::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--knob); border: 2px solid var(--accent); }
+.sl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pre { display: flex; gap: 4px; }
+.pre > button { flex: 1 1 0; min-width: 0; height: 28px; border-radius: 6px; background: var(--track); display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.pre > button:hover { background: var(--track-hover); }
+.pre > button.on { background: var(--selected); color: var(--accent); }
+.srow { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 8px; min-height: 28px; }
+.srow > :last-child { justify-self: start; }
+.srow > .pre, .srow > .sline { justify-self: stretch; }
+.sline { display: grid; grid-template-columns: 1fr 40px; align-items: center; gap: 8px; }
+.sline output { text-align: right; font-variant-numeric: tabular-nums; }
+.menu { display: flex; flex-direction: column; gap: 1px; }
+.mi { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 6px; height: 32px; padding: 0 8px 0 4px; border-radius: 6px; text-align: left; }
+.mi > svg.i, .mi > .endsv { justify-self: center; }
+.mi:hover { background: var(--hover); }
+.mi.on { color: var(--accent); }
+.mi kbd { font: 11px/1 var(--mono); color: var(--muted); }
+.mi.danger { color: var(--danger); }
+.mi.danger:hover { background: var(--danger-bg); }
+.mi[aria-disabled="true"]:hover { background: none; }
+.mi.sw2 { grid-template-columns: 1fr auto; padding: 0 2px; height: 28px; }
+.mi.sw2:hover { background: none; }
+.mh { height: 1px; background: var(--border); margin: 3px 6px; }
+.tg { width: 28px; height: 16px; border-radius: 8px; background: var(--track-hover); position: relative; }
+.tg::after { content: ""; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--knob); box-shadow: 0 1px 2px var(--shadow); transition: transform .12s; }
+.tg.on { background: var(--accent); }
+.tg.on::after { transform: translateX(12px); }
+.corners { display: grid; grid-template-columns: 56px 1fr 56px; grid-template-rows: 26px 26px; gap: 6px 10px; align-items: center; }
+.corners .cbox { grid-area: 1 / 2 / 3 / 3; height: 58px; border: 2px solid var(--muted); }
+.note { color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+
+/* 取色器：SV 区 + 色相条 + 原色/新色 + HEX + 预设 */
+.cgrid { display: grid; grid-template-columns: repeat(5, 1fr); justify-items: center; row-gap: 2px; }
+.cp-sv { position: relative; height: 132px; border-radius: 8px; overflow: hidden; background: hsl(var(--h) 100% 50%); cursor: crosshair; touch-action: none; }
+.cp-sv::before { content: ""; position: absolute; inset: 0; background: linear-gradient(to right, #fff, rgba(255,255,255,0)); }
+.cp-sv::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, #000, rgba(0,0,0,0)); }
+.cp-sv i, .cp-hue i { position: absolute; z-index: 1; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.4); }
+.cp-hue { position: relative; height: 12px; border-radius: 6px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); cursor: ew-resize; touch-action: none; }
+.cp-hue i { top: 50%; background: hsl(var(--h) 100% 50%); }
+.cp-row { display: flex; align-items: center; gap: 8px; }
+.cmp { display: flex; width: 44px; height: 26px; flex: none; border-radius: 6px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--sw-edge); }
+.cmp i { flex: 1; }
+.hex { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; height: 26px; padding: 0 8px; border-radius: 6px; background: var(--track); color: var(--muted); font: 12.5px var(--mono); }
+.hex input { flex: 1; min-width: 0; border: 0; background: none; color: var(--fg); font: inherit; text-transform: uppercase; outline: none; }
+.hex:focus-within { box-shadow: inset 0 0 0 1px var(--accent); }
+.cp-act { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* 悬停提示：名称 · 快捷键，可带一行说明 */
+.tip { position: absolute; z-index: 9; pointer-events: none; display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 10px; row-gap: 3px; max-width: 260px; padding: 5px 8px; border-radius: 6px; background: var(--tip-bg); color: var(--tip-fg); font: 12px/1.35 var(--ui); box-shadow: 0 6px 16px var(--shadow); white-space: nowrap; }
+.tip kbd { font: 11px/1 var(--mono); color: var(--tip-muted); justify-self: end; }
+.tip small { grid-column: 1 / -1; font-size: 11.5px; color: var(--tip-muted); white-space: normal; }
+body.scrubbing, body.scrubbing * { cursor: ew-resize !important; }
+
+/* 规格页：控件陈列（同一套 CSS 静态绘制） */
+.top .tog + .tog { margin-left: 0; }
+.jump { display: flex; flex-wrap: wrap; gap: 4px; }
+.jump button { height: 26px; padding: 0 10px; border-radius: 13px; background: var(--hover); font-size: 12px; }
+.jump button:hover { background: var(--border); }
+.gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; margin: 6px 0 14px; }
+.gal figure { margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.gbox { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 52px; font: 12px/1 var(--ui); white-space: nowrap; color: var(--fg); }
+.gal figcaption { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.gal figcaption b { color: var(--fg); font-weight: 600; margin-right: 6px; }
+.pop.static, .tip.static { position: static; }
+.tip.static { display: inline-grid; }
+.chip { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; box-shadow: inset 0 0 0 1px rgba(127,127,127,.45); }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12.5px; }
+.ctl .tog { margin-left: 0; }
+.ctl input[type=range] { width: 200px; max-width: 100%; margin: 0; accent-color: var(--accent); }
+.ctl output { min-width: 48px; color: var(--fg); }
+.lnk { color: var(--accent); font-size: 12.5px; }
+.lnk:hover { text-decoration: underline; }
+
+/* ---------- 设计要点 ---------- */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.nb { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.nb.full { grid-column: 1 / -1; }
+.nb h2 { margin: 0 0 8px; font-size: 14px; font-weight: 600; text-wrap: balance; }
+.nb p, .nb li { font-size: 13px; color: var(--fg); max-width: 72ch; }
+.nb p { margin: 0 0 8px; }
+.nb ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+.nb .m { color: var(--muted); }
+.tw { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 620px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 11.5px; font-weight: 600; color: var(--muted); letter-spacing: .03em; }
+td code, li code, p code { font: 12px/1.4 var(--mono); color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-pointer" viewBox="0 0 20 20"><path d="M5 3v13l3.6-3.4 2.5 5 2-1-2.5-4.9H15z"/></symbol>
+  <symbol id="i-rect" viewBox="0 0 20 20"><rect x="3" y="5" width="14" height="10" rx="1.2"/></symbol>
+  <symbol id="i-ellipse" viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="7.2" ry="5.4"/></symbol>
+  <symbol id="i-triangle" viewBox="0 0 20 20"><path d="M10 3.5 17.2 16H2.8z"/></symbol>
+  <symbol id="i-diamond" viewBox="0 0 20 20"><path d="M10 2.8 17.2 10 10 17.2 2.8 10z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 20 20"><path d="M10 2.6l2.2 4.8 5.2.5-3.9 3.5 1.1 5.1L10 13.9l-4.6 2.6 1.1-5.1-3.9-3.5 5.2-.5z"/></symbol>
+  <symbol id="i-bubble" viewBox="0 0 20 20"><path d="M4.5 4h11A1.5 1.5 0 0 1 17 5.5v6a1.5 1.5 0 0 1-1.5 1.5H9l-3.6 3v-3h-.9A1.5 1.5 0 0 1 3 11.5v-6A1.5 1.5 0 0 1 4.5 4z"/></symbol>
+  <symbol id="i-line" viewBox="0 0 20 20"><path d="M4 16 16 4"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 20 20"><path d="M4 16 16 4M9 4h7v7"/></symbol>
+  <symbol id="i-double" viewBox="0 0 20 20"><path d="M5 15 15 5M10 5h5v5M5 10v5h5"/></symbol>
+  <symbol id="i-poly" viewBox="0 0 20 20"><path d="M3 15l5-8 4 5 5-8"/></symbol>
+  <symbol id="i-curve" viewBox="0 0 20 20"><path d="M3.5 16C5 7 13 14 16 4.5M12 4.6l4-.1.6 3.9"/></symbol>
+  <symbol id="i-pcurve" viewBox="0 0 20 20"><path d="M3 15Q10 1 17 15"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 20 20"><path d="M4 16l1-4 8-8 3 3-8 8zM11.5 5.5l3 3"/></symbol>
+  <symbol id="i-hl" viewBox="0 0 20 20"><path d="M7 13 14 3.5l3 2.5-7 9.5zM7 13l-1 3.5 3.5-1M3 18h7"/></symbol>
+  <symbol id="i-hlbox" viewBox="0 0 20 20"><rect x="3" y="6" width="14" height="8" rx="1" fill="currentColor" fill-opacity=".3"/></symbol>
+  <symbol id="i-spot" viewBox="0 0 20 20"><rect x="2.5" y="3.5" width="15" height="13" rx="2" fill="currentColor" fill-opacity=".25"/><circle cx="10" cy="10" r="3.6" fill="var(--bg)"/></symbol>
+  <symbol id="i-text" viewBox="0 0 20 20"><path d="M5 5h10M10 5v11M8 16h4"/></symbol>
+  <symbol id="i-serial" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><path d="M8.6 7.4 10.4 6v8"/></symbol>
+  <symbol id="i-watermark" viewBox="0 0 20 20"><path d="M3 6l2.5 8L8 8l2 6 2-6 2.5 6L17 6" stroke-dasharray="2 1.6"/></symbol>
+  <symbol id="i-mosaic" viewBox="0 0 20 20"><path d="M3 3h4.6v4.6H3zM12.4 3H17v4.6h-4.6zM7.6 7.6h4.8v4.8H7.6zM3 12.4h4.6V17H3zM12.4 12.4H17V17h-4.6z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-blur" viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5" stroke-dasharray="1.6 2"/><circle cx="10" cy="10" r="2.8" fill="currentColor" fill-opacity=".45"/></symbol>
+  <symbol id="i-mbrush" viewBox="0 0 20 20"><path d="M3 17c2-.2 3-1.4 3-3l7.5-8.5 2 2L7 15c-1 .8-2.3 1.7-4 2z"/><path d="M14 13h3v3h-3z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-bbrush" viewBox="0 0 20 20"><path d="M3 17c2-.2 3-1.4 3-3l7.5-8.5 2 2L7 15c-1 .8-2.3 1.7-4 2z"/><circle cx="15.5" cy="14.5" r="2.2" stroke-dasharray="1.2 1.2"/></symbol>
+  <symbol id="i-fill" viewBox="0 0 20 20"><path d="M4 10l6-6 6 6-6 6zM4 10h12"/><path d="M16.5 13q1.5 2 0 3.2q-1.5-1.2 0-3.2z" fill="currentColor"/></symbol>
+  <symbol id="i-smart" viewBox="0 0 20 20"><path d="M10 3l1.4 5.6L17 10l-5.6 1.4L10 17l-1.4-5.6L3 10l5.6-1.4z"/></symbol>
+  <symbol id="i-perase" viewBox="0 0 20 20"><path d="M7.5 16 3.5 12l7.5-7.5 5.5 5.5L10.5 16zM7.5 8l5.5 5.5M7.5 16H17"/></symbol>
+  <symbol id="i-oerase" viewBox="0 0 20 20"><rect x="3" y="4" width="10" height="9" rx="1"/><path d="M12 12l5 5M17 12l-5 5"/></symbol>
+  <symbol id="i-ocr" viewBox="0 0 20 20"><path d="M3 7V4h3M14 4h3v3M17 13v3h-3M6 16H3v-3M7 8h6M10 8v5"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 20 20"><path d="M7 5 3 9l4 4M3 9h9a4 4 0 0 1 0 8H9"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 20 20"><path d="M13 5l4 4-4 4M17 9H8a4 4 0 0 0 0 8h3"/></symbol>
+  <symbol id="i-more" viewBox="0 0 20 20"><circle cx="5" cy="10" r="1.3" fill="currentColor"/><circle cx="10" cy="10" r="1.3" fill="currentColor"/><circle cx="15" cy="10" r="1.3" fill="currentColor"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 20 20"><path d="M7.5 3h5l-1 5 3 3h-9l3-3zM10 11v6"/></symbol>
+  <symbol id="i-save" viewBox="0 0 20 20"><path d="M4 4h10l2 2v10H4zM7 4v4h6V4M7 16v-5h6v5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5 5 15"/></symbol>
+  <symbol id="i-check" viewBox="0 0 20 20"><path d="M4 10.5 8 14.5 16 5.5"/></symbol>
+  <symbol id="i-rot" viewBox="0 0 20 20"><path d="M15.5 8A6 6 0 1 0 16 12M16 3.5V8h-4.5"/></symbol>
+  <symbol id="i-rotl" viewBox="0 0 20 20"><path d="M4.5 8A6 6 0 1 1 4 12M4 3.5V8h4.5"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 20 20"><path d="M10 3l7 4-7 4-7-4zM3 10.5l7 4 7-4M3 14l7 4 7-4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 20 20"><path d="M4 6h12M8 6V4h4v2M6 6l1 11h6l1-11"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 10 10"><path d="M2 3.5 5 6.5 8 3.5"/></symbol>
+  <symbol id="i-fstroke" viewBox="0 0 20 20"><rect x="3.5" y="5" width="13" height="10" rx="1.5"/></symbol>
+  <symbol id="i-ffill" viewBox="0 0 20 20"><rect x="3.5" y="5" width="13" height="10" rx="1.5" fill="currentColor"/></symbol>
+  <symbol id="i-fboth" viewBox="0 0 20 20"><rect x="3.5" y="5" width="13" height="10" rx="1.5" fill="currentColor" fill-opacity=".35"/></symbol>
+  <symbol id="i-solid" viewBox="0 0 20 20"><path d="M2 10h16" stroke-width="2"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 20 20"><path d="M2 10h16" stroke-dasharray="4 2" stroke-linecap="butt" stroke-width="2"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 20 20"><path d="M3 10h14" stroke-dasharray="0 3.5" stroke-width="2.4"/></symbol>
+  <symbol id="i-radius" viewBox="0 0 20 20"><path d="M4 16V9a5 5 0 0 1 5-5h7"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 20 20"><path d="M4 7h12l-3-3M16 13H4l3 3"/></symbol>
+  <symbol id="i-opacity" viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5"/><path d="M10 3.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></symbol>
+  <symbol id="i-smooth" viewBox="0 0 20 20"><path d="M3 14c3-8 5 2 8-4s4-3 6-4"/></symbol>
+  <symbol id="i-font" viewBox="0 0 20 20"><path d="M3 16l4.5-11h1L13 16M5 12.5h6M14 16v-5.5M12.5 10.5h3"/></symbol>
+  <symbol id="i-size" viewBox="0 0 20 20"><path d="M3 16 9 4l6 12M5.2 12h7.6"/></symbol>
+  <!-- 二级栏新增图标：端点、头型、叠加、对齐、字形、描边、底色、区域、排列菜单等 -->
+  <symbol id="i-e-none" viewBox="0 0 20 20"><path d="M3 10h14"/></symbol>
+  <symbol id="i-e-end" viewBox="0 0 20 20"><path d="M3 10h13M12 6l4 4-4 4"/></symbol>
+  <symbol id="i-e-both" viewBox="0 0 20 20"><path d="M4 10h12M8 6l-4 4 4 4M12 6l4 4-4 4"/></symbol>
+  <symbol id="i-h-open" viewBox="0 0 20 20"><path d="M3 10h12.5M10.5 5.5 15.5 10l-5 4.5"/></symbol>
+  <symbol id="i-h-tri" viewBox="0 0 20 20"><path d="M3 10h8"/><path d="M10 5.5 16.5 10 10 14.5z" fill="currentColor"/></symbol>
+  <symbol id="i-h-dart" viewBox="0 0 20 20"><path d="M2.5 10.4 11 11.6 10 14.8 17 10 10 5.2 11 8.4 2.5 9.6z" fill="currentColor" stroke-width="1"/></symbol>
+  <symbol id="i-b-mul" viewBox="0 0 20 20"><circle cx="7.5" cy="10" r="5"/><circle cx="12.5" cy="10" r="5" fill="currentColor" fill-opacity=".35"/></symbol>
+  <symbol id="i-b-alpha" viewBox="0 0 20 20"><rect x="3.5" y="3.5" width="13" height="13" rx="2"/><path d="M3.5 3.5H10V10H3.5zM10 10h6.5v6.5H10z" fill="currentColor" fill-opacity=".4" stroke="none"/></symbol>
+  <symbol id="i-al-l" viewBox="0 0 20 20"><path d="M4 5h12M4 8.7h7.5M4 12.3h12M4 16h7.5"/></symbol>
+  <symbol id="i-al-c" viewBox="0 0 20 20"><path d="M4 5h12M6.3 8.7h7.4M4 12.3h12M6.3 16h7.4"/></symbol>
+  <symbol id="i-al-r" viewBox="0 0 20 20"><path d="M4 5h12M8.5 8.7H16M4 12.3h12M8.5 16H16"/></symbol>
+  <symbol id="i-bold" viewBox="0 0 20 20"><path d="M6 4.5h4.8a2.8 2.8 0 0 1 0 5.6H6zM6 10.1h5.6a2.9 2.9 0 0 1 0 5.8H6z" stroke-width="2"/></symbol>
+  <symbol id="i-italic" viewBox="0 0 20 20"><path d="M9 4.5h6M5 15.5h6M12 4.5l-4 11"/></symbol>
+  <symbol id="i-underline" viewBox="0 0 20 20"><path d="M6 4v5.5a4 4 0 0 0 8 0V4M5 17h10"/></symbol>
+  <symbol id="i-strike" viewBox="0 0 20 20"><path d="M4 10h12M13.6 6.2C13 4.9 11.7 4 10 4 8 4 6.6 5.1 6.6 6.7c0 .8.3 1.4 1 1.9M7 13.6c.5 1.5 1.6 2.4 3.3 2.4 2 0 3.4-1.1 3.4-2.7 0-.6-.2-1.1-.6-1.5"/></symbol>
+  <symbol id="i-toutline" viewBox="0 0 20 20"><path d="M4.5 16 10 4l5.5 12M6.7 11.5h6.6" stroke-width="4.2" stroke-opacity=".3"/><path d="M4.5 16 10 4l5.5 12M6.7 11.5h6.6"/></symbol>
+  <symbol id="i-tbg" viewBox="0 0 20 20"><rect x="2.5" y="3" width="15" height="14" rx="3" fill="currentColor" fill-opacity=".28" stroke="none"/><path d="M6.2 14.5 10 5.5l3.8 9M7.5 11.5h5"/></symbol>
+  <symbol id="i-region-rect" viewBox="0 0 20 20"><rect x="3" y="4.5" width="14" height="11" rx="1.5" stroke-dasharray="2.6 2"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 20 20"><path d="M3.5 6.5h8M15.5 6.5h1M3.5 13.5h1M8.5 13.5h8"/><circle cx="13.5" cy="6.5" r="2"/><circle cx="6.5" cy="13.5" r="2"/></symbol>
+  <symbol id="i-eyedrop" viewBox="0 0 20 20"><path d="M12.4 4.3a2.1 2.1 0 0 1 3 3L13.8 9l1 1-1.4 1.4-4.8-4.8L10 5.2l1 1zM9.6 7.6 4 13.2V16h2.8l5.6-5.6"/></symbol>
+  <symbol id="i-delvtx" viewBox="0 0 20 20"><path d="M3 15.5 7.5 8l3.5 4.5"/><circle cx="7.5" cy="8" r="1.6" fill="currentColor"/><path d="M13 4l4 4M17 4l-4 4"/></symbol>
+  <symbol id="i-pclosed" viewBox="0 0 20 20"><path d="M4 15.5 6.5 5.5l6.5 2 3.5 8z" fill="currentColor" fill-opacity=".3"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 20 20"><path d="M10 3a7 7 0 0 0 0 14c1 0 1.5-.6 1.5-1.4 0-.9-.7-1.2-.7-2 0-.8.6-1.4 1.5-1.4H14a3 3 0 0 0 3-3C17 5.7 13.9 3 10 3z"/><circle cx="6.5" cy="9.5" r=".9" fill="currentColor"/><circle cx="9" cy="6.4" r=".9" fill="currentColor"/><circle cx="12.7" cy="7" r=".9" fill="currentColor"/></symbol>
+  <symbol id="i-group" viewBox="0 0 20 20"><rect x="3" y="3" width="8.5" height="8.5" rx="1.5"/><rect x="8.5" y="8.5" width="8.5" height="8.5" rx="1.5"/></symbol>
+  <symbol id="i-ungroup" viewBox="0 0 20 20"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="10" y="10" width="7" height="7" rx="1.5" stroke-dasharray="2 1.6"/></symbol>
+  <symbol id="i-enter" viewBox="0 0 20 20"><path d="M9 4H5.5A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H9M12 6.5l3.5 3.5-3.5 3.5M15.5 10H8"/></symbol>
+  <symbol id="i-up" viewBox="0 0 20 20"><path d="M10 16V4.5M5.5 9 10 4.5 14.5 9"/></symbol>
+  <symbol id="i-front" viewBox="0 0 20 20"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" fill-opacity=".35"/><path d="M3 13V4.5A1.5 1.5 0 0 1 4.5 3H13"/></symbol>
+  <symbol id="i-back" viewBox="0 0 20 20"><rect x="3" y="3" width="10" height="10" rx="1.5" fill="currentColor" fill-opacity=".35"/><path d="M17 7v8.5a1.5 1.5 0 0 1-1.5 1.5H7"/></symbol>
+  <symbol id="i-dup" viewBox="0 0 20 20"><rect x="6.5" y="6.5" width="10" height="10" rx="1.5"/><path d="M13.5 3.5H5A1.5 1.5 0 0 0 3.5 5v8.5"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header class="top">
+    <h1>截图工具栏 <small>主栏 · 二级栏 · 弹层</small></h1>
+    <div class="tog" id="themeTog" aria-label="主题"><button class="on" data-t="system">跟随系统</button><button data-t="dark">深色</button><button data-t="light">浅色</button></div>
+    <div class="tog" id="viewTog" role="tablist"><button id="vNew" class="on" data-v="new" role="tab">新方案</button><button id="vOld" data-v="old" role="tab">现状</button></div>
+  </header>
+  <p class="lede">二级栏控件统一成四种：色块、图标分段、数值框、图标开关，文字芯片只留给“完成选择”这类动作。在选区里直接画；数值框可单击、滚轮或按住左右拖动；悬停看提示。<kbd>0</kbd> 选择，<kbd>1</kbd>–<kbd>6</kbd> 切组，<kbd>Ctrl+Z</kbd> 撤销，<kbd>Del</kbd> 删除。切到“现状”对比当前 GPUI 的二级栏。</p>
+  <div class="ctl">
+    <span class="dim">跳到</span>
+    <div class="jump" id="jump">
+      <button data-j="pick">选中矩形</button><button data-j="shape.rect">矩形</button><button data-j="line.arrow">箭头</button><button data-j="line.poly">折线</button><button data-j="mark.pen">画笔</button><button data-j="mark.hl">荧光笔</button><button data-j="mark.spot">聚光灯</button><button data-j="text.text">文字</button><button data-j="text.watermark">水印</button><button data-j="redact.mosaic">马赛克</button><button data-j="redact.mbrush">打码笔</button><button data-j="redact.smart">智能打码</button><button data-j="eraser.perase">橡皮</button><button data-j="multi">多选</button>
+    </div>
+  </div>
+  <div class="ctl">
+    <span class="dim">选区</span>
+    <div class="tog" id="selTog"><button class="on" data-s="normal">常规</button><button data-s="wide">宽</button><button data-s="small">小 · 贴底</button><button data-s="full">全屏</button></div>
+    <label class="dim" for="budget">二级栏可用宽度</label>
+    <input type="range" id="budget" min="280" max="984" step="4">
+    <output id="budgetO" class="num"></output>
+    <button class="lnk" id="budgetAuto">跟随选区</button>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="stage-box" id="box">
+    <div class="stage" id="stage">
+      <div class="desk" aria-hidden="true">
+        <div class="win">
+          <div class="side"><div class="logo">Northwind 运营台</div><div class="on">经营概览</div><div>订单</div><div>客户</div><div>财务</div><div>报表</div><div>设置</div></div>
+        </div>
+        <div class="d-h">第三季度经营概览</div>
+        <div class="d-s">2026-07-01 至 09-30 · 更新于 10-15 09:20</div>
+        <div class="kpi" style="left:214px"><div class="l">营业收入</div><div class="v">¥4,286 万<em>+18.2%</em></div></div>
+        <div class="kpi" style="left:458px"><div class="l">毛利率</div><div class="v">37.4%<em>+1.6pt</em></div></div>
+        <div class="kpi" style="left:702px"><div class="l">活跃客户</div><div class="v">12,904<em class="dn">−2.1%</em></div></div>
+        <div class="chart" id="chart" style="left:214px;top:164px"><div class="t">周收入（万元）</div></div>
+        <div class="acct" style="left:574px"><div class="l" style="font-size:12px;color:#8e99a5">收款账户 · 招商银行</div><div class="n">6214 8302 1937 0482</div></div>
+        <div class="memo" style="left:574px">本季回款 96.1%，9 月第 3 周为峰值。华东大客户续约 3 家，待签 1 家。</div>
+        <div class="tbl" style="left:214px;top:328px">
+          <div><span>订单号</span><span>区域</span><span>金额</span><span>客户</span><span>状态</span></div>
+          <div><span>SO-24718</span><span>华东</span><span>¥82,400</span><span>远航物流</span><span>已发货</span></div>
+          <div><span>SO-24722</span><span>华南</span><span>¥46,150</span><span>青禾零售</span><span>待付款</span></div>
+          <div><span>SO-24730</span><span>西南</span><span>¥128,900</span><span>川云科技</span><span>已发货</span></div>
+          <div><span>SO-24741</span><span>华北</span><span>¥19,800</span><span>北辰教育</span><span>已取消</span></div>
+        </div>
+      </div>
+      <div class="selbox" id="selbox"></div>
+      <div class="fx" id="fx"></div>
+      <svg class="ann" id="ann" viewBox="0 0 1000 640">
+        <defs>
+          <pattern id="pmos" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="#56616d"/><rect width="5" height="5" fill="#7a8692"/><rect x="5" y="5" width="5" height="5" fill="#434c57"/></pattern>
+          <filter id="fblur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3"/></filter>
+          <clipPath id="selclip"><rect id="selclipr"/></clipPath>
+        </defs>
+        <g id="objs"></g><g id="ovl"></g>
+      </svg>
+      <div class="bar" id="mainbar"></div>
+      <div class="bar" id="subbar"></div>
+      <div class="fly" id="fly" hidden></div>
+      <div class="pop" id="pop" hidden></div>
+      <div class="tip" id="tip" role="tooltip" hidden></div>
+      <input class="textin" id="textIn" hidden autocomplete="off">
+    </div>
+  </div>
+
+  <section class="notes">
+    <div class="nb full">
+      <h2>控件规格</h2>
+      <p class="m">下面用原型同一套 CSS 静态绘制，随页面深浅色切换。GPUI 对齐时以这里的尺寸、颜色和状态为准。</p>
+      <div class="gal" inert>
+        <figure>
+          <div class="gbox"><div class="sws"><button class="sw on" style="--c:#ff4b5c"><i></i></button><button class="sw hv" style="--c:#ff934f"><i></i></button><button class="sw" style="--c:#ffd34d"><i></i></button><button class="sw" style="--c:#ffffff"><i></i></button><button class="sw" style="--c:#161b22"><i></i></button><button class="sw custom"><i><b></b></i></button><button class="sw custom has on" style="--cc:#2bb8c8"><i><b></b></i></button></div></div>
+          <figcaption><b>色块</b>选中、悬停、常规；白与黑靠 1px 内描边和底色分开。最后一格是自定义：没用过时是色环，当前色是自定义色时中心显示该色并带外环。</figcaption>
+        </figure>
+        <figure>
+          <div class="gbox"><div class="seg"><button class="on"><svg class="i"><use href="#i-solid"/></svg></button><button class="hv"><svg class="i"><use href="#i-dash"/></svg></button><button><svg class="i"><use href="#i-dot"/></svg></button></div><div class="seg"><button class="on"><svg class="i"><use href="#i-bold"/></svg></button><button class="on"><svg class="i"><use href="#i-italic"/></svg></button><button><svg class="i"><use href="#i-underline"/></svg></button><button><svg class="i"><use href="#i-strike"/></svg></button></div><div class="seg"><button class="on"><svg class="i"><use href="#i-e-end"/></svg></button><button aria-disabled="true"><svg class="i"><use href="#i-e-both"/></svg></button></div></div>
+          <figcaption><b>分段</b>2–3 个互斥选项放进一个槽，未选图标用次要色，选中用强调色底。字形是同一外观的多选。不可用的段降到 30%，悬停提示说原因。</figcaption>
+        </figure>
+        <figure>
+          <div class="gbox"><button class="vf"><span class="wdot" style="--d:4px"><i></i></span><span class="v" style="min-width:1.6ch">4</span><svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg></button><button class="vf hv"><svg class="i"><use href="#i-opacity"/></svg><span class="v">100%</span><svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg></button><button class="vf open"><svg class="i"><use href="#i-radius"/></svg><span class="v" style="min-width:1.6ch">8</span><svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg></button><button class="vf"><svg class="i"><use href="#i-rot"/></svg><span class="v">0°</span><svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg></button></div>
+          <figcaption><b>数值框</b>图标说明是什么，数字说明是多少；粗细用实心圆点直接示意。数字等宽并按最大值预留宽度，调值时栏不跳。弹层打开时描一圈强调色。</figcaption>
+        </figure>
+        <figure>
+          <div class="gbox"><button class="ib"><svg class="i"><use href="#i-smooth"/></svg></button><button class="ib on"><svg class="i"><use href="#i-pclosed"/></svg></button><button class="ib hv"><svg class="i"><use href="#i-line"/></svg></button><button class="ib" aria-disabled="true"><svg class="i"><use href="#i-delvtx"/></svg></button><button class="ib danger hv"><svg class="i"><use href="#i-trash"/></svg></button><div class="split on"><button class="ib"><svg class="i"><use href="#i-toutline"/></svg></button><button class="car"><svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg></button></div></div>
+          <figcaption><b>图标按钮</b>常规、开、悬停、不可用、删除悬停。拆分按钮左半是开关，右半 ▾ 打开细项（文字描边、底色）。</figcaption>
+        </figure>
+        <figure>
+          <div class="gbox"><button class="cb"><i style="--c:#ff4b5c"></i><svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg></button><button class="dd"><svg class="i"><use href="#i-dash"/></svg><svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg></button><button class="dd"><svg class="endsv" viewBox="0 0 30 16" width="30" height="16"><path d="M3 8H27" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M22.5 4 27 8 22.5 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg></button><button class="dd"><span class="fam">微软雅黑</span><svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg></button><button class="dd"><svg class="i"><use href="#i-sliders"/></svg><svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg></button></div>
+          <figcaption><b>下拉与收起形态</b>放不下时颜色收成一个色块按钮，分段收成显示当前值的下拉，最后整组收进“样式”。字体名超过 96 省略。</figcaption>
+        </figure>
+        <figure>
+          <div class="gbox" style="padding:14px"><div class="tip static"><span>线型</span><small>尖尾箭头不支持虚线</small></div><div class="tip static"><span>撤销</span><kbd>Ctrl+Z</kbd></div><button class="tb">完成选择</button><button class="tb primary">确定</button></div>
+          <figcaption><b>提示与文字按钮</b>纯图标控件都要有提示：名称、快捷键、一句说明。文字按钮只用于“完成选择”“确定”这类动作。</figcaption>
+        </figure>
+        <figure>
+          <div class="pop static" style="width:236px"><div class="ph"><h4>粗细</h4><label class="num-in"><input id="gNum" type="number" value="4" aria-label="粗细示例"><span>px</span></label></div><input class="sl" id="gSl" type="range" min="1" max="48" value="4" style="--p:6.4%" aria-label="粗细示例"><div class="pre"><button><span class="wdot" style="--d:2px"><i></i></span><span>2</span></button><button class="on"><span class="wdot" style="--d:4px"><i></i></span><span>4</span></button><button><span class="wdot" style="--d:8px"><i></i></span><span>8</span></button><button><span class="wdot" style="--d:14px"><i></i></span><span>16</span></button></div><div class="note">在栏上滚轮或左右拖动也能调，Shift 加快。</div></div>
+          <figcaption><b>数值弹层</b>标题和可输入的数字、滑杆、常用值三层。圆角弹层底部多一个“四角分别设置”。</figcaption>
+        </figure>
+        <figure>
+          <div class="pop static" style="width:252px"><div class="ph"><h4>自定义颜色</h4></div><div class="cp-sv" style="--h:186"><i style="left:78.5%;top:21.6%"></i></div><div class="cp-hue" style="--h:186"><i style="left:51.7%"></i></div><div class="cp-row"><span class="cmp"><i style="background:#ff4b5c"></i><i style="background:#2bb8c8"></i></span><label class="hex"><span>#</span><input id="gHex" value="2BB8C8" aria-label="十六进制示例"></label><button class="ib"><svg class="i"><use href="#i-eyedrop"/></svg></button></div><div class="cgrid"><button class="sw" style="--c:#ff4b5c"><i></i></button><button class="sw" style="--c:#ff934f"><i></i></button><button class="sw" style="--c:#ffd34d"><i></i></button><button class="sw" style="--c:#39c996"><i></i></button><button class="sw on" style="--c:#2bb8c8"><i></i></button><button class="sw" style="--c:#5796ff"><i></i></button><button class="sw" style="--c:#bc8bff"><i></i></button><button class="sw" style="--c:#ffffff"><i></i></button><button class="sw" style="--c:#8a94a0"><i></i></button><button class="sw" style="--c:#161b22"><i></i></button></div><div class="cp-act"><button class="tb">取消</button><button class="tb primary">确定</button></div></div>
+          <figcaption><b>取色器</b>拖动只预览，确定才提交一次并记入“最近使用”；Esc 或取消恢复原色，回到上一层弹层。</figcaption>
+        </figure>
+      </div>
+      <div class="tw"><table>
+        <thead><tr><th>控件</th><th>尺寸</th><th>状态</th><th>用在</th></tr></thead>
+        <tbody>
+          <tr><td>主栏按钮</td><td>32×32，圆角 7，图标 18；分组 = 30 + 下拉角 14</td><td>选中：selected 底 + accent 图标；选中对象所属组底部 2px accent 线；数字角标 8px</td><td>工具、识别、撤销重做、完成</td></tr>
+          <tr><td>二级栏</td><td>行高 32，内边距 4，圆角 10；控件间距 4；组间 1×18 竖线，两侧各 4</td><td>按“外观｜专属｜对象”整组换行</td><td>—</td></tr>
+          <tr><td>图标按钮</td><td>28×28，圆角 6，图标 16</td><td>悬停 hover；开 selected + accent；不可用 35%；删除悬停 danger</td><td>平滑、闭合、粗体、拉直、删除</td></tr>
+          <tr><td>分段</td><td>槽 track，内边距 2，圆角 8；每段 26×24，圆角 6</td><td>未选 muted；选中 selected + accent；不可用 30%，提示写原因</td><td>线型、填充、端点、头型、叠加、笔迹、对齐、打码效果与区域</td></tr>
+          <tr><td>色块</td><td>槽 26×28，色点 Ø18，1px 内描边</td><td>悬停 hover 底；选中 2px 底色间隙 + 1.5px ring 外环</td><td>8 个常用色 + 自定义</td></tr>
+          <tr><td>数值框</td><td>高 28，track 底，左图标 16，数字等宽并按最大值预留，右侧 9px 下拉角</td><td>悬停 track-hover；弹层打开 1px accent 内描边</td><td>粗细、字号、不透明度、圆角、强度、笔宽、角度</td></tr>
+          <tr><td>下拉</td><td>同数值框；字体名最宽 96 后省略</td><td>同数值框</td><td>字体、排列、收起后的分段</td></tr>
+          <tr><td>文字按钮</td><td>高 28，左右 10，1px border；主按钮 accent 底</td><td>—</td><td>完成选择、取色确定</td></tr>
+          <tr><td>弹层</td><td>圆角 10，内边距 12，行距 10，阴影 0 16 40；菜单内边距 4，行高 32</td><td>下方放不下翻到上方；点外部或 Esc 关闭</td><td>数值、颜色、菜单</td></tr>
+          <tr><td>提示</td><td>tip-bg 底，12px，内边距 5×8，圆角 6</td><td>悬停 450ms 出现；相邻控件间 40ms 切换；按下即隐藏</td><td>所有纯图标控件</td></tr>
+        </tbody>
+      </table></div>
+      <div class="tw"><table>
+        <thead><tr><th>新增颜色</th><th>深色</th><th>浅色</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>track</code></td><td><span class="chip" style="background:#262c35"></span>#262C35</td><td><span class="chip" style="background:#eef2f5"></span>#EEF2F5</td><td>分段槽、数值框、下拉、输入框底</td></tr>
+          <tr><td><code>track_hover</code></td><td><span class="chip" style="background:#323b47"></span>#323B47</td><td><span class="chip" style="background:#e1e8ed"></span>#E1E8ED</td><td>上述控件悬停、滑杆未填充段</td></tr>
+          <tr><td><code>ring</code></td><td><span class="chip" style="background:#e6edf3"></span>#E6EDF3</td><td><span class="chip" style="background:#374351"></span>#374351</td><td>选中色块外环（不用强调绿，免得和绿色色块混淆）</td></tr>
+          <tr><td><code>swatch_edge</code></td><td>白 20%</td><td>黑 16%</td><td>色点内描边</td></tr>
+          <tr><td><code>tip_bg / tip_fg</code></td><td><span class="chip" style="background:#0b0e12"></span>#0B0E12 / #E6EDF3</td><td><span class="chip" style="background:#2b333c"></span>#2B333C / #F4F7F9</td><td>提示</td></tr>
+          <tr><td><code>accent_hover</code></td><td><span class="chip" style="background:#5bd8ac"></span>#5BD8AC</td><td><span class="chip" style="background:#0e5a40"></span>#0E5A40</td><td>主按钮悬停</td></tr>
+          <tr><td><code>danger_bg</code></td><td>danger 14%</td><td>danger 10%</td><td>删除悬停底</td></tr>
+        </tbody>
+      </table></div>
+      <p class="m">其余沿用 <code>Palette</code> 现有的 background / foreground / muted / border / hover / selected / accent / on_accent / danger。</p>
+    </div>
+    <div class="nb full">
+      <h2>各工具二级栏</h2>
+      <div class="tw"><table>
+        <thead><tr><th>工具</th><th>外观</th><th>工具专属</th><th>对象</th><th>相对现状</th></tr></thead>
+        <tbody>
+          <tr><td>矩形 · 椭圆</td><td>色块 粗细 不透明度</td><td>描边/填充，实线/虚线/点线（分段）；圆角（矩形，弹层里可四角分设）</td><td>角度 排列 删除</td><td>“填充”“虚线”芯片改分段；点线 <span class="tag">提议</span></td></tr>
+          <tr><td>箭头 · 曲线箭头</td><td>同上</td><td>端点 无/单/双 + 头型 开口/实心/尖尾（两组分段，替代 6 项预设菜单）；线型；曲线加“拉直”</td><td>排列 删除</td><td>预设拆成两组；尖尾时“双”和虚线不可用</td></tr>
+          <tr><td>折线</td><td>同上</td><td>线型；平滑、闭合填充（开关）；删顶点</td><td>排列 删除</td><td>芯片改图标开关</td></tr>
+          <tr><td>画笔</td><td>同上</td><td>线型；保角平滑（开关）</td><td>角度 排列 删除</td><td>“保角平滑/原始笔迹”芯片改开关</td></tr>
+          <tr><td>荧光笔</td><td>色块 粗细 不透明度</td><td>正片叠底/透明叠加，手绘/拉直（分段）</td><td>角度 排列 删除</td><td>四个芯片改两组分段</td></tr>
+          <tr><td>高亮框</td><td>色块 不透明度</td><td>叠加方式；圆角</td><td>角度 排列 删除</td><td>同上</td></tr>
+          <tr><td>聚光灯</td><td>色块 边框 暗化</td><td>圆角</td><td>角度 排列 删除</td><td>“边框 n px”“暗化 n%”改数值框</td></tr>
+          <tr><td>文字</td><td>色块 字号 不透明度</td><td>字体（下拉）；粗斜下删（多选分段）；对齐（分段）；描边、底色（拆分开关，▾ 里设颜色、粗细、不透明度、圆角）</td><td>编辑 角度 排列 删除</td><td>“文字样式”弹层里的常用项搬到栏上</td></tr>
+          <tr><td>序号</td><td>色块 字号 不透明度</td><td>粗体</td><td>排列 删除</td><td>—</td></tr>
+          <tr><td>水印</td><td>文字输入、色块 字号 不透明度</td><td>角度</td><td>—</td><td>—</td></tr>
+          <tr><td>马赛克 · 模糊 · 打码笔 · 模糊笔 · 填充</td><td>强度；笔宽（涂抹类）</td><td>效果 马赛克/模糊/填充、区域 框选/涂抹（分段）；圆角（框选）；智能打码</td><td>角度 排列 删除</td><td>区域分段是新入口，映射到现有六个打码工具</td></tr>
+          <tr><td>智能打码</td><td>强度</td><td>效果分段；完成选择；操作说明</td><td>—</td><td>芯片改分段</td></tr>
+          <tr><td>橡皮</td><td>直径（局部）</td><td>一句说明</td><td>—</td><td>“直径 n px”改数值框</td></tr>
+          <tr><td>多选</td><td>数量</td><td>圆角（适用 n/m）</td><td>角度 排列 删除</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="nb">
+      <h2>放不下时怎么收</h2>
+      <ul>
+        <li><b>可用宽度</b> = max(选区宽, 主栏宽)，再受屏幕宽限制。每一级都按“外观｜专属｜对象”整组换行，两行放得下就停在这一级。</li>
+        <li><b>第 0 级</b> 全部展开。</li>
+        <li><b>第 1 级</b> 分段收成下拉：线型、填充、叠加、笔迹；箭头两组合成一个显示当前端点的下拉；文字只留粗体，其余字形和对齐收进“文字样式”。</li>
+        <li><b>第 2 级</b> 8 个色块收成一个颜色按钮，弹层里是 10 色、最近使用和自定义。</li>
+        <li><b>第 3 级</b> 专属组收进“样式”弹层（逐行标签 + 原控件），不透明度并入颜色弹层；“完成选择”和说明文字不收。</li>
+      </ul>
+    </div>
+    <div class="nb">
+      <h2>交互细节</h2>
+      <ul>
+        <li><b>数值框</b>：单击开弹层（数字输入、滑杆、常用值）；滚轮 ±1 步，Shift ×5，700ms 内连续滚动合成一次撤销；按住左右拖动连续调，松手算一次撤销。</li>
+        <li><b>色块</b>：单击即改并提交。自定义打开取色器，拖动只预览，确定才提交并记入“最近使用”，Esc 或取消恢复原色并回到上一层。</li>
+        <li><b>不可用</b>的分段和按钮仍能悬停，提示里写原因，例如“尖尾箭头不支持虚线”。</li>
+        <li><b>弹层</b>同一时间只开一个；下方放不下翻到上方，左右夹在屏幕内。</li>
+        <li><b>文字描边、底色</b>是拆分开关：左半开关，右半 ▾ 打开细项；在细项里改颜色会顺带打开开关。</li>
+      </ul>
+    </div>
+    <div class="nb">
+      <h2>落到 Rust 侧</h2>
+      <ul>
+        <li><code>capture_toolbar.rs</code> 的 <code>Palette</code> 增加上表 7 个颜色，深浅各一。</li>
+        <li>新建共用控件（如 <code>toolbar_widgets.rs</code>）：icon_button、segmented、swatch_row、value_field、dropdown、split_toggle；截图与贴图（<code>pin_property_bar.rs</code>）共用。</li>
+        <li><code>capture_properties.rs</code>：颜色行换 swatch_row；<code>property_selector</code> 换 value_field，保留滚轮；各芯片按上表换控件；箭头预设拆成端点 + 头型。</li>
+        <li><code>toolbar_layout.rs</code>：按控件实际宽度估算（色块 26/格、分段 26n + 2(n−1) + 4、数值框按最大值字符数），从第 0 级逐级尝试。</li>
+        <li>弹层：数值弹层加滑杆和数字框（可复用 <code>capture_color_dialog.rs</code> 的色相条拖动）；取色器按本稿换皮并加“最近使用”。</li>
+        <li><code>toolbar_icons.rs</code>：补端点、头型、叠加、对齐、字形、描边、底色、框选区域、删顶点、闭合、排列菜单等图标，本页 <code>&lt;symbol&gt;</code> 可直接转路径。</li>
+      </ul>
+    </div>
+    <div class="nb">
+      <h2>需要模型改动的提议</h2>
+      <ul>
+        <li><b>点线</b>：<code>Style.dashed: bool</code> 改为三值线型（实线、虚线、点线），渲染、导出、命中同步。</li>
+        <li><b>吸管</b>：取色器里从冻结画面取色，可复用 <code>capture_color_pick.rs</code> 的取色判断。原型按钮未接。</li>
+        <li><b>最近使用</b>：保存最近 10 个自定义颜色到偏好。</li>
+        <li><b>数值框拖动调值</b>与 <b>打码区域分段</b>只是界面，模型不变。</li>
+      </ul>
+      <h2 style="margin-top:12px">待定</h2>
+      <ul>
+        <li>色块用圆形还是圆角方形？本稿用圆形。</li>
+        <li>常用 8 色是否允许替换（例如右键色块“设为当前色”）？</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const stage = $('#stage'), box = $('#box');
+const SEL = { x: 200, y: 66, w: 640, h: 300 };
+const COLORS = ['#ff4b5c', '#ff934f', '#ffd34d', '#39c996', '#5796ff', '#bc8bff', '#ffffff', '#161b22'];
+const ic = (n, cls = 'i') => `<svg class="${cls}"><use href="#i-${n}"/></svg>`;
+const chev = `<svg class="c" viewBox="0 0 10 10"><use href="#i-chev"/></svg>`;
+
+const G = [
+  { id: 'shape', zh: '形状', key: '1', items: [
+    { id: 'rect', zh: '矩形' }, { id: 'ellipse', zh: '椭圆' }, { id: 'triangle', zh: '三角形', neu: 1 },
+    { id: 'diamond', zh: '菱形', neu: 1 }, { id: 'star', zh: '星形', neu: 1 }, { id: 'bubble', zh: '标注框', neu: 1 }] },
+  { id: 'line', zh: '线条', key: '2', items: [
+    { id: 'line', zh: '直线', set: { path: 'straight', start: 'none', end: 'none' } },
+    { id: 'arrow', zh: '箭头', set: { path: 'straight', start: 'none', end: 'open' } },
+    { id: 'double', zh: '双向箭头', set: { path: 'straight', start: 'open', end: 'open' } },
+    { id: 'poly', zh: '折线', set: { path: 'poly', start: 'none', end: 'none' } },
+    { id: 'curve', zh: '曲线箭头', set: { path: 'curve', start: 'none', end: 'open' } }] },
+  { id: 'mark', zh: '标记', key: '3', items: [
+    { id: 'pen', zh: '画笔' }, { id: 'hl', zh: '荧光笔' }, { id: 'hlbox', zh: '高亮框' }, { id: 'spot', zh: '聚光灯' }] },
+  { id: 'text', zh: '文字', key: '4', items: [
+    { id: 'text', zh: '文字' }, { id: 'serial', zh: '序号' }, { id: 'watermark', zh: '水印' }] },
+  { id: 'redact', zh: '打码', key: '5', items: [
+    { id: 'mosaic', zh: '马赛克' }, { id: 'blur', zh: '模糊' }, { id: 'mbrush', zh: '打码笔' },
+    { id: 'bbrush', zh: '模糊笔' }, { id: 'fill', zh: '填充' }, { id: 'smart', zh: '智能马赛克' }] },
+  { id: 'eraser', zh: '橡皮', key: '6', items: [{ id: 'perase', zh: '局部橡皮擦' }, { id: 'oerase', zh: '对象橡皮擦' }] },
+];
+const GM = Object.fromEntries(G.map(g => [g.id, g]));
+const ITEM = {}; G.forEach(g => g.items.forEach(it => ITEM[it.id] = { ...it, g: g.id }));
+const PATHS = [{ id: 'straight', zh: '直线', ic: 'line' }, { id: 'curve', zh: '曲线', ic: 'pcurve' }, { id: 'poly', zh: '折线', ic: 'poly' }];
+const DASH = [{ id: 'solid', zh: '实线', ic: 'solid' }, { id: 'dash', zh: '虚线', ic: 'dash' }, { id: 'dot', zh: '点线', ic: 'dot', neu: 1 }];
+const FILLS = [{ id: 'stroke', zh: '描边', ic: 'fstroke' }, { id: 'fill', zh: '填充', ic: 'ffill' }];
+const ENDM = [{ id: 'none', zh: '无箭头', ic: 'e-none' }, { id: 'end', zh: '单箭头', ic: 'e-end' }, { id: 'both', zh: '双箭头', ic: 'e-both' }];
+const HEADS = [{ id: 'open', zh: '开口', ic: 'h-open' }, { id: 'triangle', zh: '实心', ic: 'h-tri' }, { id: 'dart', zh: '尖尾', ic: 'h-dart' }];
+/* 与 Rust ArrowPreset 六项一一对应 */
+const ARROWS = [
+  { id: 'line', zh: '直线', start: 'none', end: 'none' }, { id: 'single', zh: '单箭头', start: 'none', end: 'open' },
+  { id: 'double', zh: '双箭头', start: 'open', end: 'open' }, { id: 'fsingle', zh: '实心箭头', start: 'none', end: 'triangle' },
+  { id: 'fdouble', zh: '实心双箭头', start: 'triangle', end: 'triangle' }, { id: 'dart', zh: '尖尾箭头', start: 'none', end: 'dart' }];
+const BLENDS = [{ id: 'multiply', zh: '正片叠底', ic: 'b-mul' }, { id: 'alpha', zh: '透明叠加', ic: 'b-alpha' }];
+const HLSH = [{ id: 'free', zh: '手绘', ic: 'smooth' }, { id: 'line', zh: '拉直', ic: 'line' }];
+const ALIGNS = [{ id: 'left', zh: '左对齐', ic: 'al-l' }, { id: 'center', zh: '居中', ic: 'al-c' }, { id: 'right', zh: '右对齐', ic: 'al-r' }];
+const FX = [{ id: 'mosaic', zh: '马赛克', ic: 'mosaic' }, { id: 'blur', zh: '模糊', ic: 'blur' }, { id: 'fill', zh: '填充', ic: 'fill' }];
+const REGION = [{ id: 'rect', zh: '框选', ic: 'region-rect' }, { id: 'brush', zh: '涂抹', ic: 'mbrush' }];
+const FAMS = ['微软雅黑', '等线', '黑体', '宋体', '楷体', 'Consolas'];
+const RECTV = new Set(['rect', 'ellipse', 'triangle', 'diamond', 'star', 'bubble', 'hlbox', 'spot', 'mosaic', 'blur', 'smart']);
+const PTSV = new Set(['pen', 'hl', 'mbrush', 'bbrush', 'fill']);
+const FXV = new Set(['mosaic', 'blur', 'smart']);
+const RADV = new Set(['rect', 'hlbox', 'spot', 'mosaic', 'blur']);
+/* 打码六项 = 效果 × 区域；填充只能涂抹 */
+const RED = { mosaic: ['mosaic', 'rect'], blur: ['blur', 'rect'], mbrush: ['mosaic', 'brush'], bbrush: ['blur', 'brush'], fill: ['fill', 'brush'] };
+const redVariant = (fx, rg) => fx === 'fill' ? 'fill' : rg === 'rect' ? fx : fx === 'mosaic' ? 'mbrush' : 'bbrush';
+
+const S = {
+  tool: 'shape',
+  variant: { shape: 'rect', line: 'arrow', mark: 'pen', text: 'text', redact: 'mosaic', eraser: 'perase' },
+  st: { color: '#ff4b5c', width: 4, opacity: 1, dash: 'solid', fill: 'stroke', radius: 0, radii: null, path: 'straight', start: 'none', end: 'open', head: 'open',
+        smooth: true, closed: false, hlShape: 'free', blend: 'multiply', dim: .55, spotW: 0, font: 22, bold: false, italic: false, underline: false, strike: false, align: 'left',
+        outline: false, olColor: '#ffffff', olWidth: 2, tbg: false, bgColor: '#ffffff', bgOpacity: .85, bgRadius: 4,
+        family: '微软雅黑', strength: 12, serial: 2, ewidth: 16, smartFx: 'mosaic', text: '内部资料 请勿外传' },
+  objs: [], sel: [], pop: null, fly: null, draft: null, nextId: 1, gid: 1, view: 'new', budget: null, budgetNow: 640,
+  cp: null, recent: [], levelNow: 0,
+};
+const hist = [], fut = [];
+const snap = () => { hist.push(JSON.stringify(S.objs)); if (hist.length > 120) hist.shift(); fut.length = 0; };
+const byId = id => S.objs.find(o => o.id === id);
+const selObjs = () => S.sel.map(byId).filter(Boolean);
+const one = () => { const s = selObjs(); return s.length === 1 ? s[0] : null; };
+
+/* ---------- 几何 ---------- */
+const mctx = document.createElement('canvas').getContext('2d');
+const textW = (t, size, bold) => { mctx.font = `${bold ? 600 : 400} ${size}px "Segoe UI","Microsoft YaHei UI",sans-serif`; return mctx.measureText(t).width; };
+const norm = o => ({ x: Math.min(o.x1, o.x2), y: Math.min(o.y1, o.y2), w: Math.abs(o.x2 - o.x1), h: Math.abs(o.y2 - o.y1) });
+function box0(o) {
+  if (RECTV.has(o.v)) return norm(o);
+  if (o.pts) { const xs = o.pts.map(p => p.x), ys = o.pts.map(p => p.y); const x = Math.min(...xs), y = Math.min(...ys); return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }; }
+  if (o.v === 'text') return { x: o.x, y: o.y, w: Math.max(8, textW(o.txt, o.s.font, o.s.bold)), h: o.s.font * 1.3 };
+  if (o.v === 'serial') { const r = o.s.font * .72; return { x: o.x - r, y: o.y - r, w: 2 * r, h: 2 * r }; }
+  return { x: 0, y: 0, w: 1000, h: 640 };
+}
+const center = o => { const b = box0(o); return { x: b.x + b.w / 2, y: b.y + b.h / 2 }; };
+const f = n => Math.round(n * 10) / 10;
+function rectPath(x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  if (!r) return `M${f(x)} ${f(y)}h${f(w)}v${f(h)}h${f(-w)}Z`;
+  return `M${f(x + r)} ${f(y)}H${f(x + w - r)}A${r} ${r} 0 0 1 ${f(x + w)} ${f(y + r)}V${f(y + h - r)}A${r} ${r} 0 0 1 ${f(x + w - r)} ${f(y + h)}H${f(x + r)}A${r} ${r} 0 0 1 ${f(x)} ${f(y + h - r)}V${f(y + r)}A${r} ${r} 0 0 1 ${f(x + r)} ${f(y)}Z`;
+}
+function shapePath(o) {
+  const { x, y, w, h } = norm(o), cx = x + w / 2, cy = y + h / 2;
+  switch (o.v) {
+    case 'ellipse': return `M${f(x)} ${f(cy)}a${f(w / 2)} ${f(h / 2)} 0 1 0 ${f(w)} 0a${f(w / 2)} ${f(h / 2)} 0 1 0 ${f(-w)} 0Z`;
+    case 'triangle': return `M${f(cx)} ${f(y)}L${f(x + w)} ${f(y + h)}H${f(x)}Z`;
+    case 'diamond': return `M${f(cx)} ${f(y)}L${f(x + w)} ${f(cy)}L${f(cx)} ${f(y + h)}L${f(x)} ${f(cy)}Z`;
+    case 'star': {
+      let d = '';
+      for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, k = i % 2 ? .42 : 1; d += (i ? 'L' : 'M') + f(cx + Math.cos(a) * w / 2 * k) + ' ' + f(cy + Math.sin(a) * h / 2 * k); }
+      return d + 'Z';
+    }
+    case 'bubble': {
+      const bh = h * .76, r = Math.max(0, Math.min(Math.max(o.s.radius, 8), w / 2, bh / 2));
+      return `M${f(x + r)} ${f(y)}H${f(x + w - r)}Q${f(x + w)} ${f(y)} ${f(x + w)} ${f(y + r)}V${f(y + bh - r)}Q${f(x + w)} ${f(y + bh)} ${f(x + w - r)} ${f(y + bh)}H${f(x + w * .36)}L${f(x + w * .14)} ${f(y + h)}L${f(x + w * .22)} ${f(y + bh)}H${f(x + r)}Q${f(x)} ${f(y + bh)} ${f(x)} ${f(y + bh - r)}V${f(y + r)}Q${f(x)} ${f(y)} ${f(x + r)} ${f(y)}Z`;
+    }
+    default: return o.v === 'rect' && o.s.radii ? rectPathR(x, y, w, h, o.s.radii) : rectPath(x, y, w, h, ['rect', 'hlbox', 'spot', 'mosaic', 'blur', 'smart'].includes(o.v) ? o.s.radius : 0);
+  }
+}
+function smoothD(pts) {
+  if (pts.length < 3) return `M${pts.map(p => f(p.x) + ' ' + f(p.y)).join('L')}`;
+  let d = `M${f(pts[0].x)} ${f(pts[0].y)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    d += `C${f(p1.x + (p2.x - p0.x) / 6)} ${f(p1.y + (p2.y - p0.y) / 6)} ${f(p2.x - (p3.x - p1.x) / 6)} ${f(p2.y - (p3.y - p1.y) / 6)} ${f(p2.x)} ${f(p2.y)}`;
+  }
+  return d;
+}
+const lineD = pts => 'M' + pts.map(p => f(p.x) + ' ' + f(p.y)).join('L');
+const dashArr = (dash, w) => dash === 'dash' ? `${w * 3} ${w * 2}` : dash === 'dot' ? `0.1 ${w * 2.2}` : 'none';
+function headSvg(tip, from, kind, w, color) {
+  if (kind === 'none') return '';
+  let dx = tip.x - from.x, dy = tip.y - from.y; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+  const sz = 7 + w * 2.4, px = -dy, py = dx, bx = tip.x - dx * sz, by = tip.y - dy * sz;
+  const l = `${f(bx + px * sz * .55)} ${f(by + py * sz * .55)}`, r = `${f(bx - px * sz * .55)} ${f(by - py * sz * .55)}`;
+  if (kind === 'dart') {
+    const L2 = sz * 1.5, bx2 = tip.x - dx * L2, by2 = tip.y - dy * L2, hw = sz * .32;
+    return `<path d="M${f(bx2 + px * hw)} ${f(by2 + py * hw)}L${f(tip.x)} ${f(tip.y)}L${f(bx2 - px * hw)} ${f(by2 - py * hw)}L${f(tip.x - dx * L2 * .7)} ${f(tip.y - dy * L2 * .7)}Z" fill="${color}"/>`;
+  }
+  if (kind === 'open') return `<path d="M${l}L${f(tip.x)} ${f(tip.y)}L${r}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if (kind === 'triangle') return `<path d="M${l}L${f(tip.x)} ${f(tip.y)}L${r}Z" fill="${color}" stroke="${color}" stroke-width="1" stroke-linejoin="round"/>`;
+  if (kind === 'dot') return `<circle cx="${f(tip.x)}" cy="${f(tip.y)}" r="${f(Math.max(3.5, w * 1.5))}" fill="${color}"/>`;
+  const h = Math.max(6, w * 2.2);
+  return `<path d="M${f(tip.x + px * h)} ${f(tip.y + py * h)}L${f(tip.x - px * h)} ${f(tip.y - py * h)}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;
+}
+function curvePts(p1, p2) {
+  const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2, dx = p2.x - p1.x, dy = p2.y - p1.y;
+  return [p1, { x: mx - dy * .22, y: my + dx * .22 }, p2];
+}
+function convertPath(o, path) {
+  const a = o.pts[0], b = o.pts[o.pts.length - 1];
+  if (path === 'straight') o.pts = [a, b];
+  else if (path === 'curve') o.pts = o.pts.length === 3 ? o.pts : curvePts(a, b);
+  else o.pts = o.pts.length >= 3 ? o.pts : curvePts(a, b);
+  o.s.path = path;
+}
+
+/* ---------- 渲染：对象 ---------- */
+function objSvg(o) {
+  const s = o.s, c = s.color, w = s.width;
+  const b = box0(o), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  const tf = o.rot && o.v !== 'watermark' ? ` transform="rotate(${f(o.rot)} ${f(cx)} ${f(cy)})"` : '';
+  let vis = '', hit = '';
+  const dash = dashArr(s.dash, w);
+  if (o.g === 'shape') {
+    const d = shapePath(o);
+    const fill = s.fill === 'stroke' ? 'none' : c, fo = 1, sw = w;
+    vis = `<path d="${d}" fill="${fill}" fill-opacity="${fo}" stroke="${c}" stroke-width="${sw}" stroke-dasharray="${dash}" stroke-linejoin="round" stroke-linecap="round" opacity="${s.opacity}"/>`;
+    hit = `<path d="${d}" fill="transparent" stroke="transparent" stroke-width="${w + 12}" pointer-events="all"/>`;
+  } else if (o.g === 'line') {
+    const pts = o.pts, n = pts.length;
+    const closed = s.path === 'poly' && s.closed && n > 2;
+    const d = (s.path === 'curve' && n === 3 ? `M${f(pts[0].x)} ${f(pts[0].y)}Q${f(pts[1].x)} ${f(pts[1].y)} ${f(pts[2].x)} ${f(pts[2].y)}` : s.path === 'poly' && s.smooth ? smoothD(pts) : lineD(pts)) + (closed ? 'Z' : '');
+    const prevE = s.path === 'curve' ? pts[1] : pts[n - 2], prevS = s.path === 'curve' ? pts[1] : pts[1];
+    const dsh = (s.start === 'dart' || s.end === 'dart') ? 'none' : dash;
+    vis = `<g opacity="${s.opacity}"><path d="${d}" fill="${closed ? c : 'none'}" stroke="${c}" stroke-width="${w}" stroke-dasharray="${dsh}" stroke-linecap="round" stroke-linejoin="round"/>${closed ? '' : headSvg(pts[n - 1], prevE, s.end, w, c) + headSvg(pts[0], prevS, s.start, w, c)}</g>`;
+    hit = `<path d="${d}" fill="none" stroke="transparent" stroke-width="${w + 14}" pointer-events="stroke"/>`;
+  } else if (o.v === 'pen' || o.v === 'hl') {
+    const hl = o.v === 'hl', sw = hl ? w * 3.5 : w;
+    const d = o.pts.length > 2 && (hl || s.smooth) ? smoothD(o.pts) : lineD(o.pts);
+    const blend = hl && s.blend === 'multiply' ? ' style="mix-blend-mode:multiply"' : '';
+    vis = `<path d="${d}" fill="none" stroke="${c}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" opacity="${hl ? (s.blend === 'multiply' ? 1 : .38) * s.opacity : s.opacity}" stroke-dasharray="${hl ? 'none' : dash}"${blend}/>`;
+    hit = `<path d="${d}" fill="none" stroke="transparent" stroke-width="${sw + 12}" pointer-events="stroke"/>`;
+  } else if (o.v === 'hlbox') {
+    const d = shapePath(o);
+    vis = s.blend === 'multiply' ? `<path d="${d}" fill="${c}" opacity="${s.opacity}" style="mix-blend-mode:multiply"/>` : `<path d="${d}" fill="${c}" fill-opacity="${.38 * s.opacity}"/>`;
+    hit = `<path d="${d}" fill="transparent" pointer-events="all"/>`;
+  } else if (o.v === 'spot') {
+    const d = shapePath(o);
+    vis = `<path d="M-50 -50H1050V700H-50Z${d}" fill="#000" fill-opacity="${s.dim}" fill-rule="evenodd"/>${s.spotW ? `<path d="${d}" fill="none" stroke="${c}" stroke-width="${s.spotW}"/>` : ''}`;
+    hit = `<path d="${d}" fill="none" stroke="transparent" stroke-width="12" pointer-events="stroke"/>`;
+  } else if (FXV.has(o.v)) {
+    hit = `<path d="${shapePath(o)}" fill="transparent" pointer-events="all"/>`;
+  } else if (o.v === 'mbrush' || o.v === 'bbrush' || o.v === 'fill') {
+    const d = smoothD(o.pts), sw = s.ewidth;
+    const stroke = o.v === 'mbrush' ? 'url(#pmos)' : o.v === 'fill' ? '#15191e' : '#4a5562';
+    vis = `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"${o.v === 'bbrush' ? ' filter="url(#fblur)" opacity=".85"' : ''}/>`;
+    hit = `<path d="${d}" fill="none" stroke="transparent" stroke-width="${sw}" pointer-events="stroke"/>`;
+  } else if (o.v === 'text') {
+    const deco = [s.underline && 'underline', s.strike && 'line-through'].filter(Boolean).join(' ') || 'none';
+    const ol = s.outline ? ` stroke="${s.olColor}" stroke-width="${f(s.olWidth * 2)}" paint-order="stroke" stroke-linejoin="round"` : '';
+    const bg = s.tbg ? `<rect x="${f(b.x - 6)}" y="${f(b.y - 3)}" width="${f(b.w + 12)}" height="${f(b.h + 4)}" rx="${s.bgRadius}" fill="${s.bgColor}" fill-opacity="${s.bgOpacity}"/>` : '';
+    vis = `<g opacity="${s.opacity}">${bg}<text x="${f(o.x)}" y="${f(o.y)}" font-size="${s.font}" font-weight="${s.bold ? 600 : 400}" font-style="${s.italic ? 'italic' : 'normal'}" text-decoration="${deco}" fill="${c}" dominant-baseline="hanging" font-family="${s.family}, Segoe UI, Microsoft YaHei UI, sans-serif"${ol}>${esc(o.txt)}</text></g>`;
+    hit = `<rect x="${f(b.x)}" y="${f(b.y)}" width="${f(b.w)}" height="${f(b.h)}" fill="transparent" pointer-events="all"/>`;
+  } else if (o.v === 'serial') {
+    const r = s.font * .72, light = lum(c) > .6;
+    vis = `<g opacity="${s.opacity}"><circle cx="${f(o.x)}" cy="${f(o.y)}" r="${f(r)}" fill="${c}"/><text x="${f(o.x)}" y="${f(o.y + 1)}" font-size="${f(s.font * .8)}" font-weight="${s.bold ? 700 : 600}" fill="${light ? '#161b22' : '#fff'}" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, sans-serif">${o.n}</text></g>`;
+    hit = `<circle cx="${f(o.x)}" cy="${f(o.y)}" r="${f(r)}" fill="transparent" pointer-events="all"/>`;
+  } else if (o.v === 'watermark') {
+    // 与 Rust 一致：对象覆盖整块画布，步距由字号与字数决定；角度即 rotation，绕画布中心转整张平铺。
+    const fs = s.font, n = [...(s.text || '')].length, sx = Math.max(160, fs * (n + 4)), sy = Math.max(120, fs * 5);
+    let t = '';
+    if (n) for (let yy = -440 + sy / 2; yy < 1080; yy += sy) for (let xx = -460; xx < 1460; xx += sx)
+      t += `<text x="${f(xx)}" y="${f(yy)}" font-size="${fs}" fill="${c}" font-family="Segoe UI, Microsoft YaHei UI, sans-serif">${esc(s.text)}</text>`;
+    // 对象覆盖整块画布，导出只取选区；这里只在选区内显示，避免误读成跑出选区
+    vis = `<g clip-path="url(#selclip)"><g transform="rotate(${f(o.rot || 0)} 500 320)" opacity="${s.opacity}">${t}</g></g>`;
+  }
+  return `<g data-oid="${o.id}"${tf}>${vis}${hit}</g>`;
+}
+const lum = hex => { const v = parseInt(hex.slice(1), 16); return ((v >> 16 & 255) * .299 + (v >> 8 & 255) * .587 + (v & 255) * .114) / 255; };
+const esc = t => String(t).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+
+function renderObjs() {
+  const all = S.draft ? [...S.objs, S.draft] : S.objs;
+  $('#objs').innerHTML = all.map(objSvg).join('');
+  $('#fx').innerHTML = all.filter(o => FXV.has(o.v)).map(o => {
+    const b = box0(o);
+    const blur = o.v === 'blur' || (o.v === 'smart' && o.s.smartFx === 'blur');
+    return `<div class="${blur ? 'fxb' : 'fxm'}${o.v === 'smart' ? ' fxs' : ''}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px;--b:${o.s.strength}px;border-radius:${Math.min(o.s.radius, b.w / 2, b.h / 2)}px;transform:rotate(${o.rot || 0}deg)"></div>`;
+  }).join('');
+  const sel = selObjs();
+  let ov = '';
+  sel.filter(o => o.v !== 'watermark').forEach(o => {
+    const b = box0(o), cx = b.x + b.w / 2, cy = b.y + b.h / 2, p = 5;
+    const tf = o.rot ? ` transform="rotate(${f(o.rot)} ${f(cx)} ${f(cy)})"` : '';
+    const x = b.x - p, y = b.y - p, w = b.w + 2 * p, h = b.h + 2 * p;
+    let g = `<rect x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" fill="none" stroke="#1498ff" stroke-width="1.2" stroke-dasharray="4 3"/>`;
+    if (o.g !== 'line') [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].forEach(([a, c]) => g += `<rect x="${f(a - 3.5)}" y="${f(c - 3.5)}" width="7" height="7" rx="1.5" fill="#fff" stroke="#1498ff" stroke-width="1.2"/>`);
+    if (sel.length === 1 && canRotate(o)) {
+      g += `<path d="M${f(cx)} ${f(y)}V${f(y - 20)}" stroke="#1498ff" stroke-width="1.2"/><circle data-h="rot" cx="${f(cx)}" cy="${f(y - 24)}" r="6" fill="#fff" stroke="#1498ff" stroke-width="1.5" pointer-events="all" style="cursor:grab"/>`;
+      if (o.g === 'line' && !o.rot) o.pts.forEach((pt, i) => g += `<circle data-h="v${i}" cx="${f(pt.x)}" cy="${f(pt.y)}" r="5" fill="${i === 1 && o.s.path === 'curve' ? '#1498ff' : '#fff'}" stroke="#1498ff" stroke-width="1.5" pointer-events="all" style="cursor:move"/>`);
+    }
+    ov += `<g${tf}>${g}</g>`;
+  });
+  $('#ovl').innerHTML = ov;
+}
+
+/* ---------- 渲染：工具栏 ---------- */
+const CN = { '#ff4b5c': '红', '#ff934f': '橙', '#ffd34d': '黄', '#39c996': '绿', '#2bb8c8': '青', '#5796ff': '蓝', '#bc8bff': '紫', '#ffffff': '白', '#8a94a0': '灰', '#161b22': '黑' };
+/* 取色器预设与 capture_color_dialog.rs 的 PRESETS 一致；栏上常用 8 色即 COLORS */
+const PRESETS = ['#ff4b5c', '#ff934f', '#ffd34d', '#39c996', '#2bb8c8', '#5796ff', '#bc8bff', '#ffffff', '#8a94a0', '#161b22'];
+const cname = c => CN[c] || c.toUpperCase();
+const tipA = (zh, key, more) => ` data-tip="${zh}"${key ? ` data-key="${key}"` : ''}${more ? ` data-more="${more}"` : ''}`;
+const pathIcon = path => path === 'curve' ? 'curve' : path === 'poly' ? 'poly' : 'line';
+const curVariant = g => { const o = one(); if (o && o.g === g) return g === 'line' ? lineVariantOf(o.s) : o.v; return g === 'line' ? lineVariantOf(S.st) : S.variant[g]; };
+const groupIcon = g => {
+  const o = one();
+  if (o && o.g === g) return g === 'line' ? (lineVariantOf(o.s) || pathIcon(o.s.path)) : o.v;
+  if (g === 'line') { const v = S.variant.line; return ITEM[v] ? v : pathIcon(S.st.path); }
+  return S.variant[g];
+};
+function lineVariantOf(s) { const it = GM.line.items.find(i => i.set.path === s.path && i.set.start === s.start && i.set.end === s.end); return it ? it.id : null; }
+
+/* 主栏：按钮 32×32，分组 = 30 + 下拉角 14（toolbar_groups.rs 的 TOOL_WIDTH / GROUP_WIDTH） */
+function mainNew() {
+  let h = `<div class="row"><span class="grip"${tipA('拖动工具栏')}></span>`;
+  h += `<button class="mb${S.tool === 'select' ? ' on' : ''}" data-act="tool" data-g="select"${tipA('选择', '0')}>${ic('pointer')}<span class="key">0</span></button><span class="sep"></span>`;
+  G.forEach(g => {
+    const on = S.tool === g.id, o = one(), cx = !on && o && o.g === g.id, it = ITEM[curVariant(g.id)];
+    h += `<div class="grp${on ? ' on' : ''}${cx ? ' ctx' : ''}" data-grp="${g.id}"><button class="mb" data-act="tool" data-g="${g.id}"${tipA(it ? it.zh : g.zh, g.key, cx ? '选中的对象属于这一组' : `再按 ${g.key} 换下一种`)}>${ic(groupIcon(g.id))}<span class="key">${g.key}</span></button><button class="mb car${S.fly === g.id ? ' open' : ''}" data-act="fly" data-g="${g.id}" aria-label="${g.zh}子类型">${chev}</button></div>`;
+  });
+  h += `<span class="sep"></span><div class="grp"><button class="mb"${tipA('文字识别')}>${ic('ocr')}</button><button class="mb car" aria-label="识别方式">${chev}</button></div>`;
+  h += `<span class="sep"></span><button class="mb" data-act="undo"${tipA('撤销', 'Ctrl+Z')}${hist.length ? '' : ' disabled'}>${ic('undo')}</button><button class="mb" data-act="redo"${tipA('重做', 'Ctrl+Y')}${fut.length ? '' : ' disabled'}>${ic('redo')}</button><button class="mb"${tipA('更多操作')}>${ic('more')}</button>`;
+  h += `<span class="sep"></span><button class="mb"${tipA('贴图')}>${ic('pin')}</button><button class="mb"${tipA('保存')}>${ic('save')}</button><button class="mb"${tipA('取消', 'Esc')}>${ic('close')}</button><button class="mb primary"${tipA('复制', 'Enter')}>${ic('check')}</button></div>`;
+  return h;
+}
+const wmObj = () => S.objs.find(o => o.v === 'watermark');
+const wmMode = () => S.tool === 'text' && S.variant.text === 'watermark';
+function ctx() {
+  const sel = selObjs();
+  if (sel.length > 1) return { g: 'multi', s: sel[0].s, sel };
+  if (sel.length === 1) return { g: sel[0].g, v: sel[0].v, s: sel[0].s, o: sel[0], sel };
+  if (wmMode()) { const o = wmObj(); return { g: 'text', v: 'watermark', s: o ? o.s : S.st, o, sel: [] }; }
+  return { g: S.tool, v: S.tool === 'line' ? lineVariantOf(S.st) : S.variant[S.tool], s: S.st, sel };
+}
+/* 属性修改的作用对象：选中对象；水印工具下是文档里唯一的水印 */
+const targets = () => { const s = selObjs(); if (s.length) return s; const w = wmMode() && wmObj(); return w ? [w] : []; };
+/* 角度只给转了有意义的对象：线条方向由端点决定，序号是圆，水印角度在它自己的参数里 */
+const canRotate = o => !(o.g === 'line' || o.v === 'serial' || o.v === 'watermark');
+
+/* ---------- 数值框：单击开弹层，滚轮 ±1 步（Shift ×5），按住左右拖动连续调 ---------- */
+const VF = {
+  width:    { zh: '粗细', k: 'width', min: 1, max: 48, step: 1, pre: [2, 4, 8, 16, 24], dot: 1 },
+  ewidth:   { zh: '笔宽', k: 'ewidth', min: 4, max: 80, step: 2, pre: [8, 16, 32, 48], dot: 1 },
+  spotW:    { zh: '边框', k: 'spotW', min: 0, max: 12, step: 1, pre: [0, 2, 4], dot: 1 },
+  font:     { zh: '字号', k: 'font', ic: 'size', min: 10, max: 96, step: 1, pre: [14, 18, 28, 40, 56] },
+  opacity:  { zh: '不透明度', k: 'opacity', ic: 'opacity', min: .1, max: 1, step: .05, pct: 1, pre: [.35, .65, 1] },
+  dim:      { zh: '暗化', k: 'dim', ic: 'spot', min: .2, max: .9, step: .05, pct: 1, pre: [.4, .55, .7] },
+  radius:   { zh: '圆角', k: 'radius', ic: 'radius', min: 0, max: 40, step: 1, pre: [0, 8, 20] },
+  strength: { zh: '色块大小', k: 'strength', ic: 'mosaic', min: 2, max: 64, step: 1, pre: [8, 16, 32] },
+  angle:    { zh: '角度', k: 'rot', ic: 'rot', min: -180, max: 180, step: 1, deg: 1, pre: [-90, -45, 0, 45, 90] },
+  wmAngle:  { zh: '水印角度', k: 'rot', ic: 'rot', min: -90, max: 90, step: 1, deg: 1, pre: [-45, -30, 0, 30, 45] },
+};
+const VFX = {};
+const fmtV = (d, x) => d.pct ? Math.round(x * 100) + '%' : d.deg ? Math.round(x) + '°' : String(Math.round(x));
+const clampV = (d, x) => +Math.min(d.max, Math.max(d.min, Math.round(x / d.step) * d.step)).toFixed(2);
+const rotTargets = () => targets().filter(o => o.v === 'watermark' || canRotate(o));
+function getV(d) { if (d.k === 'rot') { const t = rotTargets(); return t.length ? t[0].rot || 0 : 0; } return ctx().s[d.k]; }
+function setV(d, x, live) {
+  x = clampV(d, x);
+  if (d.k === 'rot') { const t = rotTargets(); if (!t.length) return; if (!live) snap(); t.forEach(o => o.rot = x); return; }
+  const radii = d.k === 'radius' && ctx().s.radii;
+  setStyle(d.k, x, live);
+  if (radii) setStyle('radii', null, true);
+}
+const dotIc = n => `<span class="wdot" style="--d:${Math.min(14, Math.max(2, n))}px"><i></i></span>`;
+function vf(key, over) {
+  const d = VFX[key] = { ...VF[key], ...(over || {}), key };
+  const val = getV(d), chars = Math.max(fmtV(d, d.min).length, fmtV(d, d.max).length);
+  const txt = d.k === 'radius' && ctx().s.radii ? '四角' : fmtV(d, val);
+  const lead = d.dot ? dotIc(d.k === 'ewidth' ? val / 3 : val) : ic(d.ic);
+  return `<button class="vf${S.pop === key ? ' open' : ''}" data-act="pop" data-k="${key}" data-vf="1"${tipA(d.zh, '', '滚轮或按住左右拖动调整')}>${lead}<span class="v" style="min-width:${chars - .4}ch">${txt}</span>${chev}</button>`;
+}
+function sliderLine(key) {
+  const d = VFX[key] || (VFX[key] = { ...VF[key], key }), val = getV(d);
+  return `<div class="sline"><input class="sl" type="range" data-vfk="${key}" min="${d.min}" max="${d.max}" step="${d.step}" value="${val}" style="--p:${(val - d.min) / (d.max - d.min) * 100}%" aria-label="${d.zh}"><output>${fmtV(d, val)}</output></div>`;
+}
+
+/* ---------- 颜色 ---------- */
+const swBtn = (col, cur, sk = 'color') => `<button class="sw${cur === col ? ' on' : ''}" style="--c:${col}" data-act="color" data-sk="${sk}" data-c="${col}" aria-pressed="${cur === col}"${tipA(cname(col))}><i></i></button>`;
+function customSw(cur, sk, from, list) {
+  const on = !list.includes(cur), inner = on ? cur : (S.recent[0] || '');
+  return `<button class="sw custom${on ? ' on' : ''}${inner ? ' has' : ''}" style="--cc:${inner || 'transparent'}" data-act="custom" data-sk="${sk}" data-from="${from}"${from ? '' : ' data-k="custom"'}${tipA('自定义颜色', '', on ? '当前 ' + cur.toUpperCase() : '打开取色器')}><i><b></b></i></button>`;
+}
+const swatchRow = s => `<div class="sws" role="radiogroup" aria-label="颜色">${COLORS.map(col => swBtn(col, s.color)).join('')}${customSw(s.color, 'color', '', COLORS)}</div>`;
+const colorBtn = (s, L) => `<button class="cb${S.pop === 'colors' || (S.cp && S.cp.from === 'colors') ? ' open' : ''}" data-act="pop" data-k="colors"${tipA('颜色', '', cname(s.color) + (L >= 3 ? ' · 含不透明度' : ''))}><i style="--c:${s.color}"></i>${L >= 3 && s.opacity < 1 ? `<span class="v">${Math.round(s.opacity * 100)}%</span>` : ''}${chev}</button>`;
+
+/* ---------- 分段、开关、下拉 ---------- */
+function seg(k, opts, cur, o = {}) {
+  return `<div class="seg" role="radiogroup" aria-label="${o.zh || ''}">${opts.map(x => {
+    const dis = o.dis && o.dis(x.id);
+    return `<button class="${cur === x.id ? 'on' : ''}" data-act="${o.act || 'set'}" data-k="${k}" data-v="${x.id}" role="radio" aria-checked="${cur === x.id}"${dis ? ' aria-disabled="true"' : ''}${tipA(x.zh + (x.neu ? '（提议）' : ''), '', dis ? o.why : '')}>${ic(x.ic)}</button>`;
+  }).join('')}</div>`;
+}
+const tgl = (k, icon, zh, on, more) => `<button class="ib${on ? ' on' : ''}" data-act="toggle" data-k="${k}" aria-pressed="${!!on}"${tipA(zh, '', more)}>${ic(icon)}</button>`;
+const multi = (items, s) => `<div class="seg">${items.map(([k, icon, zh]) => `<button class="${s[k] ? 'on' : ''}" data-act="toggle" data-k="${k}" aria-pressed="${!!s[k]}"${tipA(zh)}>${ic(icon)}</button>`).join('')}</div>`;
+const dd = (key, inner, zh, dis, more) => `<button class="dd${S.pop === key ? ' open' : ''}" data-act="pop" data-k="${key}"${dis ? ' aria-disabled="true"' : ''}${tipA(zh, '', more)}>${inner}${chev}</button>`;
+const split = (k, icon, zh, on) => `<div class="split${on ? ' on' : ''}"><button class="ib" data-act="toggle" data-k="${k}" aria-pressed="${!!on}"${tipA(zh)}>${ic(icon)}</button><button class="car${S.pop === k || (S.cp && S.cp.from === k) ? ' open' : ''}" data-act="pop" data-k="${k}"${tipA(zh + '设置')}>${chev}</button></div>`;
+const hint = t => `<span class="hint">${t}</span>`;
+const ENUM = { dash: { zh: '线型', opts: DASH }, fill: { zh: '填充方式', opts: FILLS }, blend: { zh: '叠加方式', opts: BLENDS }, hlShape: { zh: '笔迹', opts: HLSH }, align: { zh: '对齐', opts: ALIGNS } };
+const enumDD = k => { const E = ENUM[k], cur = E.opts.find(o => o.id === ctx().s[k]) || E.opts[0]; return dd('m-' + k, ic(cur.ic), E.zh, false, cur.zh); };
+const endMode = s => s.start === 'none' && s.end === 'none' ? 'none' : s.start !== 'none' ? 'both' : 'end';
+
+/* 工具专属控件：full 为展开形态，compact 为第 1–2 级形态（'' 表示收进别处），row 为“样式”弹层里的形态，keep 表示永不收起 */
+function toolCtl(c) {
+  const s = c.s, g = c.g, v = c.v, out = [];
+  const P = (zh, full, compact, extra) => out.push({ zh, full, compact: compact === undefined ? full : compact, ...(extra || {}) });
+  const dart = g === 'line' && (s.start === 'dart' || s.end === 'dart');
+  const dash = () => P('线型', seg('dash', DASH, dart ? 'solid' : s.dash, { zh: '线型', dis: () => dart, why: '尖尾箭头不支持虚线' }), dd('m-dash', ic(dart ? 'solid' : s.dash), '线型', dart, dart ? '尖尾箭头不支持虚线' : ''));
+  const radius = () => P('圆角', vf('radius'), undefined, { row: sliderLine('radius') });
+  if (g === 'shape') {
+    P('填充', seg('fill', FILLS, s.fill, { zh: '填充' }), enumDD('fill'));
+    dash();
+    if (v === 'rect') radius();
+  }
+  if (g === 'line') {
+    if (s.path !== 'poly') {
+      const em = endMode(s), head = s.end !== 'none' ? s.end : s.start !== 'none' ? s.start : s.head || 'open';
+      const ends = seg('ends', ENDM, em, { act: 'ends', zh: '端点', dis: id => id === 'both' && head === 'dart', why: '尖尾箭头只能单向' });
+      const heads = seg('head', HEADS, em === 'none' ? '' : head, { act: 'head', zh: '箭头样式', dis: () => em === 'none', why: '先选单箭头或双箭头' });
+      P('箭头', `<div class="pair">${ends}${heads}</div>`, dd('arrows', endsIcon(s.start, s.end), '箭头', false, (ARROWS.find(a => a.start === s.start && a.end === s.end) || { zh: '自定义' }).zh));
+    }
+    dash();
+    if (s.path === 'poly') {
+      P('平滑', tgl('smooth', 'smooth', '平滑曲线', s.smooth));
+      P('闭合', tgl('closed', 'pclosed', '闭合填充', s.closed));
+      P('顶点', `<button class="ib" aria-disabled="true"${tipA('删除顶点', 'Del', '先在折线上点选一个顶点')}>${ic('delvtx')}</button>`);
+    }
+    if (c.o && c.o.s.path === 'curve') P('拉直', `<button class="ib" data-act="path" data-v="straight"${tipA('拉直', '', '曲线箭头改回直线')}>${ic('line')}</button>`);
+  }
+  if (v === 'pen') { dash(); P('平滑', tgl('smooth', 'smooth', '保角平滑', s.smooth, s.smooth ? '' : '当前为原始笔迹')); }
+  if (v === 'hl' || v === 'hlbox') P('叠加', seg('blend', BLENDS, s.blend, { zh: '叠加方式' }), enumDD('blend'));
+  if (v === 'hl') P('笔迹', seg('hlShape', HLSH, s.hlShape, { zh: '笔迹' }), enumDD('hlShape'));
+  if (v === 'hlbox' || v === 'spot') radius();
+  if (v === 'text') {
+    P('字体', dd('family', `<span class="fam" style="font-family:'${s.family}'">${s.family}</span>`, '字体'));
+    P('字形', multi([['bold', 'bold', '粗体'], ['italic', 'italic', '斜体'], ['underline', 'underline', '下划线'], ['strike', 'strike', '删除线']], s),
+      `<div class="pair">${multi([['bold', 'bold', '粗体']], s)}${dd('tstyle', ic('font'), '文字样式', false, '斜体、下划线、删除线、对齐')}</div>`);
+    P('对齐', seg('align', ALIGNS, s.align, { zh: '对齐' }), '');
+    P('描边', split('outline', 'toutline', '描边', s.outline), undefined, { row: tgl('outline', 'toutline', '描边', s.outline) });
+    P('底色', split('tbg', 'tbg', '底色', s.tbg), undefined, { row: tgl('tbg', 'tbg', '底色', s.tbg) });
+  }
+  if (v === 'serial') P('粗体', tgl('bold', 'bold', '粗体', s.bold));
+  if (v === 'watermark') P('角度', vf('wmAngle'), undefined, { row: sliderLine('wmAngle') });
+  if (RED[v]) {
+    const [fx, rg] = RED[v];
+    P('效果', seg('fx', FX, fx, { act: 'redact', zh: '效果', dis: id => id === 'fill' && !!c.o && rg === 'rect', why: '框选的对象不能改成填充' }));
+    P('区域', seg('rg', REGION, rg, { act: 'redact', zh: '区域', dis: id => id !== rg && (!!c.o || fx === 'fill'), why: c.o ? '已画的对象不能切换区域' : '填充只能涂抹' }));
+    if (rg === 'rect') radius();
+    P('智能', `<button class="ib" data-act="smart"${tipA('智能打码', '', '自动找出文字区域')}>${ic('smart')}</button>`);
+  }
+  if (v === 'smart') {
+    P('效果', seg('smartFx', FX.slice(0, 2), s.smartFx, { zh: '效果' }));
+    P('完成', `<button class="tb" data-act="tool" data-g="select"${tipA('完成选择', 'Enter')}>完成选择</button>`, undefined, { keep: 1 });
+    P('说明', hint('点击切换区域 · 拖动多选 · Ctrl+A 全选'), undefined, { keep: 1 });
+  }
+  if (v === 'perase') P('说明', hint('恢复原图，保留标注'), undefined, { keep: 1 });
+  if (v === 'oerase') P('说明', hint('点中即删除整个对象'), undefined, { keep: 1 });
+  return out;
+}
+function objCtl(c) {
+  const h = [];
+  if (c.o && c.o.v === 'text') h.push(`<button class="ib" data-act="edittext"${tipA('编辑文字', '双击')}>${ic('pen')}</button>`);
+  if (c.sel.some(canRotate)) h.push(vf('angle'));
+  h.push(dd('arrange', ic('layers'), '排列与组合'));
+  h.push(`<button class="ib danger" data-act="del"${tipA('删除', 'Del')}>${ic('trash')}</button>`);
+  return h;
+}
+const LV = ['全部展开', '分段收为下拉', '颜色收为按钮', '样式收进弹层'];
+
+/* 每一级给出控件列表（组别：info / look 外观 / tool 工具专属 / obj 对象）；级别越高越省宽度 */
+function subItems(L) {
+  const c = ctx(), s = c.s, g = c.g, v = c.v, it = [];
+  const add = (grp, html) => { if (html) it.push({ grp, html }); };
+  Object.keys(VFX).forEach(k => delete VFX[k]);
+  if (g === 'select') { add('info', hint('点选对象 · Shift 加选 · 拖动移动')); return it; }
+  if (g === 'multi') {
+    add('info', `<span class="cnt">${c.sel.length} 个对象</span>`);
+    const n = c.sel.filter(o => RADV.has(o.v)).length;
+    if (n) { add('tool', vf('radius')); add('tool', hint(`圆角适用 ${n}/${c.sel.length}`)); }
+    objCtl(c).forEach(h => add('obj', h));
+    return it;
+  }
+  if (v === 'watermark') add('info', `<div class="wmin"><input class="tin" id="wmText" value="${esc(s.text)}" placeholder="输入水印文字" style="width:${L <= 1 ? 168 : 120}px" autocomplete="off" aria-label="水印文字"><button class="ib" data-act="wmclear"${tipA('清空水印')}>${ic('close')}</button></div>`);
+  const colored = ['shape', 'line', 'mark', 'text'].includes(g);
+  if (colored) add('look', L <= 1 ? swatchRow(s) : colorBtn(s, L));
+  if (['shape', 'line'].includes(g) || v === 'pen' || v === 'hl') add('look', vf('width'));
+  if (v === 'spot') add('look', vf('spotW'));
+  if (g === 'text') add('look', vf('font'));
+  if (colored && v !== 'spot') { if (L < 3) add('look', vf('opacity')); else VFX.opacity = { ...VF.opacity, key: 'opacity' }; }
+  if (v === 'spot') add('look', vf('dim'));
+  if (['mosaic', 'blur', 'smart', 'mbrush', 'bbrush'].includes(v)) {
+    const bl = v === 'blur' || v === 'bbrush' || (v === 'smart' && s.smartFx === 'blur');
+    add('look', vf('strength', bl ? { zh: '模糊强度', ic: 'blur' } : null));
+  }
+  if (['mbrush', 'bbrush', 'fill', 'perase'].includes(v)) add('look', vf('ewidth', v === 'perase' ? { zh: '直径' } : v === 'fill' ? { zh: '大小' } : null));
+  const tc = toolCtl(c);
+  if (L >= 3 && tc.some(t => !t.keep)) { add('tool', dd('style', ic('sliders'), '样式')); tc.filter(t => t.keep).forEach(t => add('tool', t.full)); }
+  else tc.forEach(t => add('tool', L === 0 ? t.full : t.compact));
+  if (c.sel.length) objCtl(c).forEach(h => add('obj', h));
+  return it;
+}
+/* 按组换行：整组放得下就同行（组间加分隔），否则整组换到下一行；单组超宽才在组内断开 */
+function packRows(ws, grps, B) {
+  const inner = B - 10, GAP = 4, SEP = 17, rows = [];
+  let cur;
+  const newRow = () => { cur = { items: [], w: 0 }; rows.push(cur); };
+  newRow();
+  const spans = [];
+  ws.forEach((w, i) => { if (!spans.length || spans[spans.length - 1].g !== grps[i]) spans.push({ g: grps[i], idx: [] }); spans[spans.length - 1].idx.push(i); });
+  for (const sp of spans) {
+    const gw = sp.idx.reduce((a, i) => a + ws[i], 0) + GAP * (sp.idx.length - 1);
+    const need = cur.items.length ? SEP + gw : gw;
+    if (cur.w + need <= inner) { if (cur.items.length) cur.items.push('sep'); sp.idx.forEach(i => cur.items.push(i)); cur.w += need; continue; }
+    if (cur.items.length) newRow();
+    for (const i of sp.idx) {
+      const add = cur.items.length ? GAP + ws[i] : ws[i];
+      if (cur.w + add > inner && cur.items.length) { newRow(); cur.items.push(i); cur.w = ws[i]; }
+      else { cur.items.push(i); cur.w += add; }
+    }
+  }
+  return rows;
+}
+/* 先换行、后收起：从第 0 级起，第一个能在两行内放下的级别胜出；最后一级不限行数 */
+function layoutSub(sb, B) {
+  let best = null;
+  for (let L = 0; L <= 3; L++) {
+    const items = subItems(L);
+    sb.innerHTML = `<div class="row">${items.map(i => i.html).join('')}</div>`;
+    const ws = [...sb.firstChild.children].map(el => el.offsetWidth);
+    const rows = packRows(ws, items.map(i => i.grp), B);
+    best = { L, items, rows };
+    if (rows.length <= 2) break;
+  }
+  sb.innerHTML = best.items.length ? best.rows.map(r => `<div class="row">${r.items.map(i => i === 'sep' ? '<span class="sep"></span>' : best.items[i].html).join('')}</div>`).join('') : '';
+  return best;
+}
+function endsIcon(a, b) {
+  return `<svg class="endsv" viewBox="0 0 30 16" width="30" height="16" style="flex:none"><path d="M3 8H27" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>${headSvg({ x: 3, y: 8 }, { x: 27, y: 8 }, a, 1.6, 'currentColor')}${headSvg({ x: 27, y: 8 }, { x: 3, y: 8 }, b, 1.6, 'currentColor')}</svg>`;
+}
+
+/* 现状：当前 GPUI 二级栏（工具名 + 12px 色点 + 调色盘 + 文字芯片） */
+function subOld() {
+  const c = ctx(), s = c.s, g = c.g, v = c.v;
+  const ch = (t, on, off) => `<span class="oc${on ? ' on' : ''}${off ? ' off' : ''}">${t}</span>`;
+  const sel = t => ch(`${t} ${chev}`);
+  const objs = () => `<span class="sep"></span>${c.sel.some(canRotate) ? sel(`角度 ${Math.round(c.sel[0].rot || 0)}°`) : ''}${sel('排列')}`;
+  if (g === 'select') return `<div class="row"><span class="hint">鼠标模式</span></div>`;
+  if (g === 'multi') return `<div class="row ow">${sel(`圆角 ${s.radius}`)}<span class="hint">适用 ${c.sel.filter(o => RADV.has(o.v)).length}/${c.sel.length} · 仅修改圆角</span>${objs()}</div>`;
+  const dots = () => `<span class="sep"></span><div class="odots">${COLORS.map(col => `<span class="od${s.color === col ? ' on' : ''}" style="--c:${col}" data-act="color" data-c="${col}"><i></i></span>`).join('')}</div>${ch(ic('palette'))}`;
+  if (v === 'watermark') return `<div class="row ow"><input class="tin" id="wmText" value="${esc(s.text)}" style="width:150px" autocomplete="off" aria-label="水印文字">${ch('清空')}${dots()}${sel(`字号 ${s.font}`)}${sel(`${Math.round(s.opacity * 100)}%`)}</div>`;
+  const r = [`<span class="lbl">${(ITEM[v] || { zh: '箭头' }).zh}</span>`];
+  const fx = !!RED[v] || v === 'smart';
+  if (!fx && g !== 'eraser') r.push(dots());
+  if (RED[v]) r.push(FX.map(x => ch(ic(x.ic), RED[v][0] === x.id)).join('') + ch(ic('ocr')));
+  if (v === 'smart') r.push(ch(`${ic('mosaic')}马赛克`, s.smartFx === 'mosaic'), ch(`${ic('blur')}模糊`, s.smartFx === 'blur'), sel(`强度 ${s.strength}`), ch('完成选择'));
+  if (RED[v] && v !== 'fill') r.push(sel(`强度 ${s.strength}`));
+  if (g === 'eraser') r.push(sel(`直径 ${s.ewidth}px`), hint(v === 'perase' ? '恢复原始底图，保留标注' : '删除整个命中对象'));
+  else if (g === 'text') { r.push(sel(`字号 ${s.font}`)); if (v === 'text') r.push(sel('字体'), sel('文字样式')); r.push(ch('粗体', s.bold)); }
+  else if (['mbrush', 'bbrush', 'fill'].includes(v)) r.push(sel(`${v === 'fill' ? '大小 ' : ''}${s.ewidth}px`));
+  else if (!fx && v !== 'hlbox') r.push(sel(v === 'spot' ? `边框 ${s.spotW}px` : `${s.width}px`));
+  if (g === 'shape') r.push(ch('填充', s.fill === 'fill'));
+  if (g === 'line' && s.path === 'poly') r.push(ch('闭合填充', s.closed));
+  if (RADV.has(v)) r.push(sel(`圆角 ${s.radius}`));
+  if (!fx && g !== 'eraser') r.push(sel(v === 'spot' ? `暗化 ${Math.round(s.dim * 100)}%` : `${Math.round(s.opacity * 100)}%`));
+  if (v === 'hl' || v === 'hlbox') r.push(ch('正片叠底', s.blend === 'multiply'), ch('透明叠加', s.blend === 'alpha'));
+  if (v === 'hl') r.push(ch('手绘', s.hlShape === 'free'), ch('拉线', s.hlShape === 'line'));
+  if (g === 'line' && s.path !== 'poly') r.push(sel((ARROWS.find(a => a.start === s.start && a.end === s.end) || { zh: '单箭头' }).zh));
+  if ((g === 'shape' || g === 'line' || v === 'pen') && !(g === 'line' && (s.start === 'dart' || s.end === 'dart'))) r.push(ch('虚线', s.dash !== 'solid'));
+  if (g === 'line' && s.path === 'poly') r.push(ch('平滑曲线', s.smooth), ch('删顶点', false, true));
+  if (g === 'line' && s.path !== 'poly') r.push(ch('拉直', false, !(c.o && c.o.pts.length >= 3)));
+  if (v === 'pen') r.push(ch(s.smooth ? '保角平滑' : '原始笔迹', s.smooth));
+  if (c.o && c.o.v === 'text') r.push(ch('编辑'));
+  if (c.sel.length) r.push(objs());
+  return `<div class="row ow">${r.join('')}</div>`;
+}
+
+function renderBars() {
+  const mb = $('#mainbar'), sb = $('#subbar');
+  mb.innerHTML = mainNew();
+  const mw = mb.offsetWidth, mh = mb.offsetHeight;
+  // 可用宽度 = max(选区宽, 主栏宽)，受屏幕限制；手动拖滑杆时用手动值
+  const auto = Math.round(Math.min(984, Math.max(280, SEL.w, mw)));
+  const B = S.budgetNow = S.budget ?? auto;
+  let level;
+  if (S.view === 'old') { sb.innerHTML = subOld(); level = '现状'; S.levelNow = 0; }
+  else { const r = layoutSub(sb, B); S.levelNow = r.L; level = `第 ${r.L} 级 · ${LV[r.L]}`; }
+  sb.hidden = !sb.querySelector('button,input,span');
+  const sw = sb.hidden ? 0 : sb.offsetWidth, sh = sb.hidden ? 0 : sb.offsetHeight;
+  const total = mh + (sh ? 6 + sh : 0);
+  let pos, mt, st;
+  if (SEL.y + SEL.h + 8 + total <= 632) { pos = '选区下方'; mt = SEL.y + SEL.h + 8; st = mt + mh + 6; }
+  else if (SEL.y - 8 - total >= 8) { pos = '选区上方，二级栏在外侧'; mt = SEL.y - 8 - mh; st = mt - 6 - sh; }
+  else { pos = '选区内右下角'; mt = SEL.y + SEL.h - 12 - mh; st = mt - 6 - sh; }
+  const right = Math.min(992, SEL.x + SEL.w), cl = (x, w) => Math.min(992 - w, Math.max(8, x));
+  mb.style.left = cl(right - mw, mw) + 'px'; mb.style.top = mt + 'px';
+  sb.style.left = cl(right - sw, sw) + 'px'; sb.style.top = st + 'px';
+  const lines = sb.hidden ? 0 : sb.querySelectorAll('.row').length;
+  $('#stats').innerHTML = `<span>可用 <b>${B}px</b>${S.budget == null ? '（跟随选区）' : '（手动）'}</span><span>二级栏 <b>${level}</b> · <b>${lines} 行</b> · <b>${sw}px</b></span><span>主栏 <b>${mw}px</b> · ${pos}</span><span>${ctxName()}</span>`;
+  const bi = $('#budget'); if (document.activeElement !== bi) bi.value = B;
+  $('#budgetO').textContent = B + 'px';
+}
+function ctxName() {
+  const c = ctx();
+  if (c.g === 'select') return '选择';
+  if (c.g === 'multi') return `${c.sel.length} 个对象`;
+  const it = ITEM[c.v]; return (GM[c.g] ? GM[c.g].zh : '') + (it ? ' › ' + it.zh : ' › 自定义端点') + (c.sel.length ? '（已选中）' : '');
+}
+
+/* ---------- 下拉与弹层 ---------- */
+function relRect(el) {
+  const r = el.getBoundingClientRect(), sr = stage.getBoundingClientRect(), k = sr.width / 1000;
+  return { x: (r.left - sr.left) / k, y: (r.top - sr.top) / k, w: r.width / k, h: r.height / k };
+}
+function renderFly() {
+  const fly = $('#fly');
+  if (!S.fly) { fly.hidden = true; return; }
+  const g = GM[S.fly], cur = curVariant(S.fly), o = one(), forObj = o && o.g === g.id;
+  fly.innerHTML = g.items.map(it => `<button class="fi${it.id === cur ? ' on' : ''}" data-act="variant" data-g="${g.id}" data-v="${it.id}">${ic(it.id)}<span>${it.zh}</span>${it.neu ? '<span class="tag">新</span>' : '<span></span>'}</button>`).join('') + `<div class="ff">${forObj ? '改选中对象 · ' : ''}再按 ${g.key} 轮换</div>`;
+  fly.hidden = false;
+  const a = relRect(document.querySelector(`[data-grp="${g.id}"]`));
+  const fh = fly.offsetHeight;
+  fly.style.left = a.x + 'px';
+  fly.style.top = (a.y + a.h + 6 + fh > 636 ? a.y - fh - 6 : a.y + a.h + 6) + 'px';
+}
+function hex2hsv(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+  let h = 0;
+  if (d) { h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; if (h < 0) h += 360; }
+  return { h, s: mx ? d / mx : 0, v: mx };
+}
+function hsv2hex(h, s, v) {
+  const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return '#' + [f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+}
+function valuePop(key) {
+  const c = ctx(), s = c.s, d = VFX[key], val = getV(d);
+  const unit = d.pct ? '%' : d.deg ? '°' : 'px', k100 = d.pct ? 100 : 1;
+  let h = `<div class="ph"><h4>${d.zh}</h4><label class="num-in"><input id="pvIn" type="number" data-vfk="${key}" value="${Math.round(val * k100)}" min="${Math.round(d.min * k100)}" max="${Math.round(d.max * k100)}" step="${Math.round(d.step * k100)}" aria-label="${d.zh}"><span>${unit}</span></label></div>`;
+  h += `<input class="sl" id="pvSl" type="range" data-vfk="${key}" min="${d.min}" max="${d.max}" step="${d.step}" value="${val}" style="--p:${(val - d.min) / (d.max - d.min) * 100}%" aria-label="${d.zh}">`;
+  h += `<div class="pre">${d.pre.map(n => `<button class="${Math.abs(n - val) < 1e-6 && !(d.k === 'radius' && s.radii) ? 'on' : ''}" data-act="pv" data-k="${key}" data-v="${n}">${d.dot ? dotIc(d.k === 'ewidth' ? n / 3 : n) : ''}<span>${d.k === 'radius' && n === 0 ? '直角' : fmtV(d, n)}</span></button>`).join('')}</div>`;
+  if (d.k === 'rot') h += `<div class="pre"><button data-act="rotby" data-d="-15">${ic('rotl')}15°</button><button data-act="rotby" data-d="15">${ic('rot')}15°</button></div>`;
+  if (d.k === 'radius' && (c.o ? c.o.v : c.v) === 'rect') {
+    const r = s.radii;
+    h += `<button class="mi sw2" data-act="radii"><span>四角分别设置</span><span class="tg${r ? ' on' : ''}"></span></button>`;
+    if (r) {
+      const cin = (i, area, zh) => `<input type="number" id="rc${i}" data-corner="${i}" value="${r[i]}" min="0" max="40" style="grid-area:${area}" aria-label="${zh}圆角">`;
+      h += `<div class="corners">${cin(0, '1 / 1', '左上')}<div class="cbox" style="border-radius:${r.map(x => Math.min(x, 26) + 'px').join(' ')}"></div>${cin(1, '1 / 3', '右上')}${cin(3, '2 / 1', '左下')}${cin(2, '2 / 3', '右下')}</div>`;
+    }
+  }
+  h += `<div class="note">${d.k === 'rot' ? '画布上拖旋转柄更快，按住 Shift 吸附 15°。' : '在栏上滚轮或按住左右拖动也能调，Shift 加快。'}</div>`;
+  return h;
+}
+function enumPop(k) {
+  const E = ENUM[k], cur = ctx().s[k];
+  return `<div class="menu">${E.opts.map(o => `<button class="mi${cur === o.id ? ' on' : ''}" data-act="set" data-k="${k}" data-v="${o.id}">${ic(o.ic)}<span>${o.zh}${o.neu ? ' <span class="tag">提议</span>' : ''}</span>${cur === o.id ? ic('check') : '<span></span>'}</button>`).join('')}</div>`;
+}
+function pickerHTML() {
+  const p = S.cp, hex = hsv2hex(p.h, p.s, p.v);
+  return `<div class="ph"><h4>${p.title}</h4><span class="dim">Enter 确定 · Esc 返回</span></div>
+<div class="cp-sv" id="cpSV" style="--h:${p.h}"><i style="left:${p.s * 100}%;top:${(1 - p.v) * 100}%"></i></div>
+<div class="cp-hue" id="cpHue" style="--h:${p.h}"><i style="left:${p.h / 360 * 100}%"></i></div>
+<div class="cp-row"><span class="cmp"${tipA('原色 / 新色')}><i style="background:${p.orig}"></i><i id="cpNew" style="background:${hex}"></i></span><label class="hex"><span>#</span><input id="cpHex" value="${hex.slice(1).toUpperCase()}" maxlength="7" spellcheck="false" autocomplete="off" aria-label="十六进制颜色"></label><button class="ib" aria-disabled="true"${tipA('从截图取色', '', '提议，原型未实现')}>${ic('eyedrop')}</button></div>
+<div class="cgrid">${PRESETS.map(col => `<button class="sw${col === hex ? ' on' : ''}" style="--c:${col}" data-act="cpset" data-c="${col}"${tipA(cname(col))}><i></i></button>`).join('')}</div>
+${S.recent.length ? `<h4>最近使用</h4><div class="cgrid">${S.recent.slice(0, 5).map(col => `<button class="sw${col === hex ? ' on' : ''}" style="--c:${col}" data-act="cpset" data-c="${col}"${tipA(col.toUpperCase())}><i></i></button>`).join('')}</div>` : ''}
+<div class="cp-act"><button class="tb" data-act="cpcancel">取消</button><button class="tb primary" data-act="cpok">确定</button></div>`;
+}
+const MENUS = new Set(['arrows', 'family', 'arrange']);
+const POPW = { colors: 236, custom: 252, arrows: 196, family: 200, tstyle: 236, outline: 252, tbg: 252, style: 316, arrange: 240 };
+function popHTML(k) {
+  const c = ctx(), s = c.s;
+  if (VFX[k]) return valuePop(k);
+  if (k.startsWith('m-')) return enumPop(k.slice(2));
+  switch (k) {
+    case 'colors': return `<div class="ph"><h4>颜色</h4><span class="mono dim">${s.color.toUpperCase()}</span></div><div class="cgrid">${PRESETS.map(col => swBtn(col, s.color)).join('')}</div>${S.recent.length ? `<h4>最近使用</h4><div class="cgrid">${S.recent.slice(0, 5).map(col => swBtn(col, s.color)).join('')}</div>` : ''}<div class="menu"><button class="mi" data-act="custom" data-sk="color" data-from="colors"><span class="rb"></span><span>自定义颜色…</span><span></span></button></div>${S.levelNow >= 3 && VFX.opacity ? `<div class="srow"><span class="dim">不透明度</span>${sliderLine('opacity')}</div>` : ''}`;
+    case 'custom': return pickerHTML();
+    case 'arrows': { const cur = ARROWS.find(a => a.start === s.start && a.end === s.end); return `<div class="menu">${ARROWS.map(a => `<button class="mi${cur === a ? ' on' : ''}" data-act="arrow" data-v="${a.id}">${endsIcon(a.start, a.end)}<span>${a.zh}</span>${cur === a ? ic('check') : '<span></span>'}</button>`).join('')}</div>`; }
+    case 'family': return `<div class="menu">${FAMS.map(n => `<button class="mi${s.family === n ? ' on' : ''}" data-act="set" data-k="family" data-v="${n}"><span></span><span style="font-family:'${n}'">${n}</span>${s.family === n ? ic('check') : '<span></span>'}</button>`).join('')}</div><div class="note" style="padding:4px 8px 6px">原型为示例；实际列系统字体，最近用过的置顶。</div>`;
+    case 'tstyle': return `<div class="srow"><span class="dim">字形</span>${multi([['italic', 'italic', '斜体'], ['underline', 'underline', '下划线'], ['strike', 'strike', '删除线']], s)}</div><div class="srow"><span class="dim">对齐</span>${seg('align', ALIGNS, s.align, { zh: '对齐' })}</div><div class="note">对齐只影响多行文字。</div>`;
+    case 'outline': {
+      const L = ['#ffffff', '#161b22', '#ff4b5c', '#ffd34d'];
+      return `<button class="mi sw2" data-act="toggle" data-k="outline"><span>描边</span><span class="tg${s.outline ? ' on' : ''}"></span></button><div class="srow"><span class="dim">粗细</span><div class="pre">${[1, 2, 3, 4].map(n => `<button class="${s.olWidth === n ? 'on' : ''}" data-act="set" data-k="olWidth" data-num="1" data-v="${n}">${n}</button>`).join('')}</div></div><div class="srow"><span class="dim">颜色</span><div class="sws">${L.map(col => swBtn(col, s.olColor, 'olColor')).join('')}${customSw(s.olColor, 'olColor', 'outline', L)}</div></div>`;
+    }
+    case 'tbg': {
+      const L = ['#ffffff', '#161b22', '#ffd34d', '#5796ff'];
+      return `<button class="mi sw2" data-act="toggle" data-k="tbg"><span>底色</span><span class="tg${s.tbg ? ' on' : ''}"></span></button><div class="srow"><span class="dim">颜色</span><div class="sws">${L.map(col => swBtn(col, s.bgColor, 'bgColor')).join('')}${customSw(s.bgColor, 'bgColor', 'tbg', L)}</div></div><div class="srow"><span class="dim">不透明度</span><div class="pre">${[.35, .85, 1].map(n => `<button class="${s.bgOpacity === n ? 'on' : ''}" data-act="set" data-k="bgOpacity" data-num="1" data-v="${n}">${Math.round(n * 100)}%</button>`).join('')}</div></div><div class="srow"><span class="dim">圆角</span><div class="pre">${[0, 4, 8].map(n => `<button class="${s.bgRadius === n ? 'on' : ''}" data-act="set" data-k="bgRadius" data-num="1" data-v="${n}">${n ? n : '直角'}</button>`).join('')}</div></div>`;
+    }
+    case 'style': return toolCtl(c).filter(t => !t.keep).map(t => `<div class="srow"><span class="dim">${t.zh}</span>${t.row || t.full}</div>`).join('');
+    case 'arrange': {
+      const sel = selObjs(), grouped = sel.some(o => o.gid);
+      const mi = (op, icon, zh, kbd, en = true, cls = '') => `<button class="mi${cls}" data-act="arr" data-op="${op}"${en ? '' : ' aria-disabled="true"'}>${ic(icon)}<span>${zh}</span><kbd>${kbd}</kbd></button>`;
+      return `<div class="menu">${mi('group', 'group', '组合', 'Ctrl+G', sel.length > 1)}${mi('ungroup', 'ungroup', '拆分', 'Ctrl+Shift+G', grouped)}${mi('enter', 'enter', '进入组合', '双击', grouped)}${mi('up', 'up', '返回上层', 'Esc', false)}<div class="mh"></div>${mi('front', 'front', '置顶层', 'Ctrl+]')}${mi('back', 'back', '置底层', 'Ctrl+[')}<div class="mh"></div>${mi('dup', 'dup', '复制对象', 'Ctrl+D')}${mi('del', 'trash', '删除', 'Del', true, ' danger')}</div>`;
+    }
+  }
+  return '';
+}
+function renderPop() {
+  const pop = $('#pop');
+  const ak = S.pop === 'custom' ? (S.cp && S.cp.from) || 'custom' : S.pop;
+  const anchor = S.pop && S.view !== 'old' && document.querySelector(`#subbar [data-k="${ak}"]`);
+  if (!anchor) { if (S.pop === 'custom') cpRestore(); pop.hidden = true; S.pop = null; S.cp = null; return; }
+  pop.innerHTML = popHTML(S.pop);
+  pop.classList.toggle('menu-pop', MENUS.has(S.pop) || S.pop.startsWith('m-'));
+  pop.style.width = (VFX[S.pop] ? 236 : S.pop.startsWith('m-') ? 164 : POPW[S.pop] || 236) + 'px';
+  pop.hidden = false;
+  const a = relRect(anchor), ph = pop.offsetHeight, pw = pop.offsetWidth;
+  pop.style.left = Math.min(992 - pw, Math.max(8, a.x)) + 'px';
+  pop.style.top = (a.y + a.h + 8 + ph > 636 ? Math.max(4, a.y - ph - 8) : a.y + a.h + 8) + 'px';
+}
+function render() { renderObjs(); renderBars(); renderFly(); renderPop(); stage.classList.toggle('selecting', S.tool === 'select'); }
+function rectPathR(x, y, w, h, rr) {
+  const m = Math.min(w / 2, h / 2), [a, b, c, d] = rr.map(v => Math.max(0, Math.min(v, m)));
+  return `M${f(x + a)} ${f(y)}H${f(x + w - b)}${b ? `A${b} ${b} 0 0 1 ${f(x + w)} ${f(y + b)}` : ''}V${f(y + h - c)}${c ? `A${c} ${c} 0 0 1 ${f(x + w - c)} ${f(y + h)}` : ''}H${f(x + d)}${d ? `A${d} ${d} 0 0 1 ${f(x)} ${f(y + h - d)}` : ''}V${f(y + a)}${a ? `A${a} ${a} 0 0 1 ${f(x + a)} ${f(y)}` : ''}Z`;
+}
+
+/* ---------- 状态修改 ---------- */
+function setStyle(k, val, live) {
+  const sel = targets();
+  if (sel.length && !live) snap();
+  S.st[k] = val;
+  sel.forEach(o => { o.s[k] = val; });
+  if (k === 'path' || k === 'start' || k === 'end') S.variant.line = lineVariantOf(S.st) || S.variant.line;
+}
+function setTool(g) {
+  if (S.draft) finishDraft();
+  S.tool = g; S.sel = []; S.fly = null; S.pop = null;
+  if (g === 'line') { const it = ITEM[S.variant.line]; if (it) Object.assign(S.st, it.set); }
+}
+function setVariant(g, v) {
+  const o = one();
+  if (o && o.g === g) {
+    snap();
+    if (g === 'line') { const set = ITEM[v].set; convertPath(o, set.path); Object.assign(o.s, set); }
+    else if (g === 'mark' || g === 'text' || g === 'redact') { if (compatible(o.v, v)) o.v = v; }
+    else o.v = v;
+  } else if (o) S.sel = [];
+  if (v === 'watermark') S.sel = [];
+  S.variant[g] = v;
+  if (g === 'line') Object.assign(S.st, ITEM[v].set);
+  if (S.tool !== g && !(o && o.g === g)) S.tool = g;
+  S.fly = null;
+}
+const compatible = (a, b) => (RECTV.has(a) && RECTV.has(b) && !FXV.has(a) === !FXV.has(b)) || (PTSV.has(a) && PTSV.has(b)) || (['text'].includes(a) && b === 'text');
+function setPath(path) {
+  const sel = selObjs().filter(o => o.g === 'line');
+  if (sel.length) snap();
+  sel.forEach(o => convertPath(o, path));
+  S.st.path = path; S.variant.line = lineVariantOf(S.st) || S.variant.line;
+}
+function rotate(delta, abs) {
+  const sel = targets(); if (!sel.length) return; snap();
+  sel.forEach(o => { let a = abs != null ? abs : (o.rot || 0) + delta; a = ((a + 180) % 360 + 360) % 360 - 180; o.rot = a; });
+}
+function del() { if (!S.sel.length) return; snap(); S.objs = S.objs.filter(o => !S.sel.includes(o.id)); S.sel = []; S.pop = null; }
+function arrange(op) {
+  const sel = selObjs(); if (!sel.length) return;
+  if (op === 'enter' || op === 'up') return;
+  snap();
+  if (op === 'front') S.objs = [...S.objs.filter(o => !S.sel.includes(o.id)), ...sel];
+  if (op === 'back') S.objs = [...sel, ...S.objs.filter(o => !S.sel.includes(o.id))];
+  if (op === 'group' && sel.length > 1) { const id = S.gid++; sel.forEach(o => o.gid = id); }
+  if (op === 'ungroup') sel.forEach(o => delete o.gid);
+  if (op === 'dup') { const copies = sel.map(o => { const c = JSON.parse(JSON.stringify(o)); c.id = S.nextId++; delete c.gid; moveObj(c, 16, 16); return c; }); S.objs.push(...copies); S.sel = copies.map(c => c.id); }
+  S.pop = null;
+}
+function wmSetText(t, live) {
+  let o = wmObj();
+  if (!o) { if (!t) return; snap(); o = newObj('text', 'watermark', {}); o.s.opacity = .3; S.objs.push(o); }
+  else if (!live) snap();
+  o.s.text = t; S.st.text = t;
+}
+function moveObj(o, dx, dy) {
+  if (RECTV.has(o.v)) { o.x1 += dx; o.x2 += dx; o.y1 += dy; o.y2 += dy; }
+  else if (o.pts) o.pts = o.pts.map(p => ({ x: p.x + dx, y: p.y + dy }));
+  else if (o.x != null) { o.x += dx; o.y += dy; }
+}
+function selectId(id, add) {
+  const o = byId(id); if (!o) return;
+  const ids = o.gid ? S.objs.filter(x => x.gid === o.gid).map(x => x.id) : [id];
+  if (add) { const has = ids.every(i => S.sel.includes(i)); S.sel = has ? S.sel.filter(i => !ids.includes(i)) : [...new Set([...S.sel, ...ids])]; }
+  else if (!S.sel.includes(id)) S.sel = ids;
+}
+function undo() { if (!hist.length) return; fut.push(JSON.stringify(S.objs)); S.objs = JSON.parse(hist.pop()); S.sel = S.sel.filter(byId); }
+function redo() { if (!fut.length) return; hist.push(JSON.stringify(S.objs)); S.objs = JSON.parse(fut.pop()); S.sel = S.sel.filter(byId); }
+
+/* ---------- 指针 ---------- */
+let drag = null;
+function pt(e) { const r = stage.getBoundingClientRect(), k = r.width / 1000; return { x: (e.clientX - r.left) / k, y: (e.clientY - r.top) / k }; }
+function newObj(g, v, extra) { return { id: S.nextId++, g, v, rot: 0, s: JSON.parse(JSON.stringify(S.st)), ...extra }; }
+function finishDraft() {
+  const d = S.draft; S.draft = null; if (!d) return;
+  d.pts.pop();
+  if (d.pts.length >= 2) { snap(); S.objs.push(d); S.sel = [d.id]; }
+}
+stage.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('.bar,.pop,.fly,.textin')) return;
+  if (S.pop || S.fly) { closePop(); S.fly = null; render(); return; }
+  if (!$('#textIn').hidden) { commitText(); return; }
+  const p = pt(e), hEl = e.target.closest('[data-h]'), oEl = e.target.closest('[data-oid]');
+  const hid = oEl ? +oEl.dataset.oid : null;
+  stage.setPointerCapture(e.pointerId);
+  if (hEl) {
+    const o = one(); if (!o) return; snap();
+    const h = hEl.dataset.h;
+    drag = h === 'rot' ? { mode: 'rot', o, c: center(o) } : { mode: 'vtx', o, i: +h.slice(1) };
+    return;
+  }
+  if (S.draft) { S.draft.pts.push({ ...p }); render(); return; }
+  const tool = S.tool;
+  if (tool === 'select' || (hid != null && S.sel.includes(hid))) {
+    if (hid != null) { selectId(hid, e.shiftKey); snap(); drag = { mode: 'move', last: p, moved: false }; }
+    else S.sel = [];
+    render(); return;
+  }
+  if (tool === 'eraser') { snap(); drag = { mode: 'erase', any: false }; eraseAt(e); return; }
+  const v = tool === 'line' ? null : S.variant[tool];
+  S.sel = [];
+  if (tool === 'line') {
+    if (S.st.path === 'poly') { S.draft = newObj('line', S.variant.line || 'poly', { pts: [{ ...p }, { ...p }] }); render(); return; }
+    const o = newObj('line', S.variant.line, { pts: [{ ...p }, { ...p }] }); S.objs.push(o); drag = { mode: 'line', o, start: p }; render(); return;
+  }
+  if (tool === 'text' && v !== 'watermark') {
+    if (v === 'text') { openText(p); return; }
+    snap(); S.objs.push(newObj('text', 'serial', { x: p.x, y: p.y, n: S.st.serial++ })); S.sel = [S.objs[S.objs.length - 1].id]; render(); return;
+  }
+  if (v === 'watermark') { const t = $('#wmText'); if (t) t.focus(); return; }
+  if (PTSV.has(v) && !(v === 'hl' && S.st.hlShape === 'line')) { const o = newObj(tool, v, { pts: [{ ...p }] }); S.objs.push(o); drag = { mode: 'free', o }; render(); return; }
+  if (v === 'hl') { const o = newObj(tool, v, { pts: [{ ...p }, { ...p }] }); S.objs.push(o); drag = { mode: 'hline', o }; render(); return; }
+  const o = newObj(tool, v, { x1: p.x, y1: p.y, x2: p.x, y2: p.y }); S.objs.push(o); drag = { mode: 'rect', o, start: p }; render();
+});
+stage.addEventListener('pointermove', e => {
+  const p = pt(e);
+  if (S.draft && !drag) { const d = S.draft.pts; d[d.length - 1] = p; renderObjs(); return; }
+  if (!drag) return;
+  const o = drag.o;
+  switch (drag.mode) {
+    case 'rect': {
+      let x2 = p.x, y2 = p.y;
+      if (e.shiftKey) { const s = Math.max(Math.abs(x2 - drag.start.x), Math.abs(y2 - drag.start.y)); x2 = drag.start.x + Math.sign(x2 - drag.start.x || 1) * s; y2 = drag.start.y + Math.sign(y2 - drag.start.y || 1) * s; }
+      o.x2 = x2; o.y2 = y2; break;
+    }
+    case 'line': {
+      let q = p;
+      if (e.shiftKey) { const a = Math.round(Math.atan2(p.y - drag.start.y, p.x - drag.start.x) / (Math.PI / 4)) * Math.PI / 4, L = Math.hypot(p.x - drag.start.x, p.y - drag.start.y); q = { x: drag.start.x + Math.cos(a) * L, y: drag.start.y + Math.sin(a) * L }; }
+      o.pts = o.s.path === 'curve' ? curvePts(drag.start, q) : [drag.start, q]; break;
+    }
+    case 'hline': o.pts[1] = p; break;
+    case 'free': { const l = o.pts[o.pts.length - 1]; if (Math.hypot(p.x - l.x, p.y - l.y) > 2) o.pts.push(p); break; }
+    case 'move': { const dx = p.x - drag.last.x, dy = p.y - drag.last.y; drag.last = p; drag.moved = true; selObjs().forEach(x => moveObj(x, dx, dy)); break; }
+    case 'rot': { let a = Math.atan2(p.y - drag.c.y, p.x - drag.c.x) * 180 / Math.PI + 90; if (e.shiftKey) a = Math.round(a / 15) * 15; o.rot = ((a + 180) % 360 + 360) % 360 - 180; renderObjs(); renderBars(); return; }
+    case 'vtx': o.pts[drag.i] = p; break;
+    case 'erase': eraseAt(e); return;
+  }
+  renderObjs();
+});
+stage.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const d = drag; drag = null;
+  if (d.mode === 'rect' || d.mode === 'line' || d.mode === 'free' || d.mode === 'hline') {
+    const o = d.o, b = box0(o);
+    S.objs.pop();
+    if (b.w > 3 || b.h > 3) { snap(); S.objs.push(o); S.sel = [o.id]; }
+  }
+  if (d.mode === 'move' && !d.moved) hist.pop();
+  if (d.mode === 'erase' && !d.any) hist.pop();
+  render();
+});
+stage.addEventListener('dblclick', e => {
+  if (S.draft) { S.draft.pts.pop(); finishDraft(); render(); return; }
+  const hit = document.elementFromPoint(e.clientX, e.clientY), oEl = hit && hit.closest('[data-oid]'); const o = oEl && byId(+oEl.dataset.oid);
+  if (o && o.v === 'text') { S.objs = S.objs.filter(x => x !== o); openText({ x: o.x, y: o.y }, o); }
+});
+function eraseAt(e) {
+  const el = document.elementFromPoint(e.clientX, e.clientY), oEl = el && el.closest && el.closest('[data-oid]');
+  if (oEl) { const id = +oEl.dataset.oid; S.objs = S.objs.filter(o => o.id !== id); drag.any = true; S.sel = []; render(); }
+}
+/* 文字输入 */
+let textEdit = null;
+function openText(p, old) {
+  const inp = $('#textIn');
+  textEdit = { p, old };
+  inp.value = old ? old.txt : '';
+  inp.style.left = p.x + 'px'; inp.style.top = p.y + 'px';
+  inp.style.fontSize = S.st.font + 'px'; inp.style.color = S.st.color; inp.style.height = (S.st.font * 1.35) + 'px';
+  inp.placeholder = '输入文字，Enter 完成';
+  inp.hidden = false; setTimeout(() => inp.focus(), 0);
+  render();
+}
+function commitText() {
+  const inp = $('#textIn'); if (inp.hidden) return;
+  const t = inp.value.trim(); inp.hidden = true;
+  if (textEdit) {
+    if (t) { snap(); const o = textEdit.old ? { ...textEdit.old, txt: t } : newObj('text', 'text', { x: textEdit.p.x, y: textEdit.p.y, txt: t }); S.objs.push(o); S.sel = [o.id]; }
+    else if (textEdit.old) S.objs.push(textEdit.old);
+  }
+  textEdit = null; render();
+}
+$('#textIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commitText(); } if (e.key === 'Escape') { $('#textIn').value = textEdit && textEdit.old ? textEdit.old.txt : ''; commitText(); } e.stopPropagation(); });
+$('#textIn').addEventListener('blur', () => setTimeout(commitText, 0));
+
+/* ---------- 箭头、打码、取色 ---------- */
+function setEnds(m) {
+  const s = ctx().s, h0 = s.end !== 'none' ? s.end : s.start !== 'none' ? s.start : s.head || 'open';
+  const h = m === 'both' && h0 === 'dart' ? 'open' : h0;
+  setStyle('end', m === 'none' ? 'none' : h); setStyle('start', m === 'both' ? h : 'none', true); setStyle('head', h, true);
+}
+function setHead(h) {
+  const s = ctx().s, st = s.start, en = s.end;
+  setStyle('head', h);
+  if (en !== 'none') setStyle('end', h, true);
+  if (st !== 'none') setStyle('start', h === 'dart' ? 'none' : h, true);
+}
+function applyArrow(id) {
+  const a = ARROWS.find(x => x.id === id); if (!a) return;
+  setStyle('end', a.end); setStyle('start', a.start, true); if (a.end !== 'none') setStyle('head', a.end, true);
+}
+function setRedact(k, val) {
+  const [fx0, rg0] = RED[ctx().v] || ['mosaic', 'rect'];
+  const fx = k === 'fx' ? val : fx0, rg = fx === 'fill' ? 'brush' : k === 'rg' ? val : rg0;
+  setVariant('redact', redVariant(fx, rg));
+}
+function openPicker(sk, from) {
+  const cur = ctx().s[sk];
+  S.cp = { sk, from, orig: cur, ...hex2hsv(cur), title: { color: '自定义颜色', olColor: '描边颜色', bgColor: '底色颜色' }[sk] };
+  S.pop = 'custom'; S.fly = null;
+}
+const cpHex = () => hsv2hex(S.cp.h, S.cp.s, S.cp.v);
+/* 拖动中只刷新取色器局部与画布，不重建弹层 */
+function cpLive(hex, fromHex) {
+  if (!S.cp) return;
+  if (hex) { const hsv = hex2hsv(hex); if (!hsv.s) hsv.h = S.cp.h; Object.assign(S.cp, hsv); }
+  const x = cpHex();
+  setStyle(S.cp.sk, x, true);
+  const sv = $('#cpSV'), hue = $('#cpHue');
+  if (sv) { sv.style.setProperty('--h', S.cp.h); sv.firstElementChild.style.left = S.cp.s * 100 + '%'; sv.firstElementChild.style.top = (1 - S.cp.v) * 100 + '%'; }
+  if (hue) { hue.style.setProperty('--h', S.cp.h); hue.firstElementChild.style.left = S.cp.h / 360 * 100 + '%'; }
+  const nw = $('#cpNew'); if (nw) nw.style.background = x;
+  const hx = $('#cpHex'); if (hx && !fromHex) hx.value = x.slice(1).toUpperCase();
+  document.querySelectorAll('#pop .cgrid .sw').forEach(b => b.classList.toggle('on', b.dataset.c === x));
+  renderObjs(); renderBars();
+}
+function cpRestore() { if (S.cp) setStyle(S.cp.sk, S.cp.orig, true); }
+function cpOk() {
+  const p = S.cp; if (!p) return;
+  const nv = cpHex();
+  setStyle(p.sk, p.orig, true); setStyle(p.sk, nv);
+  if (p.sk === 'olColor' && !ctx().s.outline) setStyle('outline', true, true);
+  if (p.sk === 'bgColor' && !ctx().s.tbg) setStyle('tbg', true, true);
+  if (!PRESETS.includes(nv)) S.recent = [nv, ...S.recent.filter(x => x !== nv)].slice(0, 10);
+  S.cp = null; S.pop = p.from && p.from !== 'colors' ? p.from : null;
+}
+function cpCancel() { const p = S.cp; cpRestore(); S.cp = null; S.pop = p && p.from ? p.from : null; }
+function closePop() { if (S.pop === 'custom') cpRestore(); S.pop = null; S.cp = null; }
+
+/* ---------- 点击动作 ---------- */
+let hoverT = null, scrub = null, wheelT = 0, cpDrag = null;
+stage.addEventListener('click', e => {
+  const a = e.target.closest('[data-act]'); if (!a || a.disabled || a.getAttribute('aria-disabled') === 'true') return;
+  if (scrub && scrub.moved) return;
+  hideTip();
+  const d = a.dataset;
+  switch (d.act) {
+    case 'tool': setTool(d.g); break;
+    case 'fly': S.fly = S.fly === d.g ? null : d.g; closePop(); break;
+    case 'variant': setVariant(d.g, d.v); break;
+    case 'smart': S.sel = []; setVariant('redact', 'smart'); break;
+    case 'path': setPath(d.v); break;
+    case 'pop': if (S.pop === d.k) closePop(); else { closePop(); S.pop = d.k; } S.fly = null; break;
+    case 'color': {
+      const sk = d.sk || 'color';
+      setStyle(sk, d.c);
+      if (sk === 'olColor' && !ctx().s.outline) setStyle('outline', true, true);
+      if (sk === 'bgColor' && !ctx().s.tbg) setStyle('tbg', true, true);
+      if (S.pop === 'colors') S.pop = null;
+      break;
+    }
+    case 'custom': if (S.pop === 'custom' && S.cp && S.cp.sk === d.sk) closePop(); else { closePop(); openPicker(d.sk, d.from || ''); } break;
+    case 'cpset': cpLive(d.c); break;
+    case 'cpok': cpOk(); break;
+    case 'cpcancel': cpCancel(); break;
+    case 'set': setStyle(d.k, d.num ? +d.v : d.v); if (S.pop && (S.pop.startsWith('m-') || MENUS.has(S.pop))) S.pop = null; break;
+    case 'pv': { const vd = VFX[d.k]; if (vd) setV(vd, +d.v); break; }
+    case 'ends': setEnds(d.v); break;
+    case 'head': setHead(d.v); break;
+    case 'arrow': applyArrow(d.v); S.pop = null; break;
+    case 'redact': setRedact(d.k, d.v); break;
+    case 'radii': { const s = ctx().s; setStyle('radii', s.radii ? null : [s.radius, s.radius, s.radius, s.radius]); break; }
+    case 'wmclear': wmSetText(''); break;
+    case 'toggle': setStyle(d.k, !ctx().s[d.k]); break;
+    case 'edittext': { const o = one(); if (o && o.v === 'text') { S.objs = S.objs.filter(x => x !== o); S.sel = []; S.pop = null; openText({ x: o.x, y: o.y }, o); } break; }
+    case 'rotby': rotate(+d.d); break;
+    case 'rotset': rotate(0, +d.d); break;
+    case 'arr': if (d.op === 'del') del(); else arrange(d.op); break;
+    case 'del': del(); break;
+    case 'undo': undo(); break;
+    case 'redo': redo(); break;
+  }
+  render();
+});
+/* 主栏分组悬停展开（与现状的 60ms / 120ms 延时一致） */
+stage.addEventListener('pointerover', e => {
+  if (drag || scrub) return;
+  const grp = e.target.closest('[data-grp]'), fly = e.target.closest('#fly');
+  if (grp || fly) {
+    clearTimeout(hoverT);
+    if (grp && S.fly !== grp.dataset.grp) hoverT = setTimeout(() => { S.fly = grp.dataset.grp; closePop(); renderBars(); renderFly(); renderPop(); }, 60);
+  } else if (S.fly) { clearTimeout(hoverT); hoverT = setTimeout(() => { S.fly = null; renderBars(); renderFly(); }, 120); }
+});
+
+/* ---------- 悬停提示：450ms 出现，相邻控件 40ms 切换 ---------- */
+const tipEl = $('#tip');
+let tipT = 0, tipFor = null, tipLast = 0;
+function hideTip() { clearTimeout(tipT); if (!tipEl.hidden) tipLast = performance.now(); tipEl.hidden = true; tipFor = null; }
+function showTip(el) {
+  if (!el.isConnected) return;
+  const d = el.dataset, k = d.k;
+  if (k && (S.pop === k || (S.pop === 'custom' && S.cp && (S.cp.from || 'custom') === k))) return;
+  const grp = el.closest('[data-grp]'); if (grp && S.fly === grp.dataset.grp) return;
+  tipEl.innerHTML = `<span>${d.tip}</span>${d.key ? `<kbd>${d.key}</kbd>` : ''}${d.more ? `<small>${d.more}</small>` : ''}`;
+  tipEl.hidden = false;
+  const a = relRect(el), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+  let y = a.y - h - 6; if (y < 4) y = a.y + a.h + 6;
+  tipEl.style.left = Math.min(996 - w, Math.max(4, a.x + a.w / 2 - w / 2)) + 'px';
+  tipEl.style.top = y + 'px';
+}
+stage.addEventListener('pointerover', e => {
+  const el = e.target.closest('[data-tip]');
+  if (el === tipFor) return;
+  const warm = !tipEl.hidden || performance.now() - tipLast < 400;
+  hideTip();
+  if (!el || drag || scrub) return;
+  tipFor = el;
+  tipT = setTimeout(() => showTip(el), warm ? 40 : 450);
+});
+stage.addEventListener('pointerleave', hideTip);
+stage.addEventListener('pointerdown', hideTip, true);
+
+/* ---------- 数值框：滚轮 ±1 步（700ms 内合成一次撤销），按住左右拖动连续调 ---------- */
+const subEl = $('#subbar');
+subEl.addEventListener('wheel', e => {
+  const el = e.target.closest('[data-vf]'); if (!el) return;
+  const d = VFX[el.dataset.k]; if (!d) return;
+  e.preventDefault(); hideTip();
+  const now = performance.now(); if (now - wheelT > 700 && (targets().length || d.k === 'rot')) snap(); wheelT = now;
+  setV(d, getV(d) + (e.deltaY < 0 ? 1 : -1) * d.step * (e.shiftKey ? 5 : 1), true);
+  renderObjs(); renderBars(); if (S.pop === el.dataset.k) renderPop();
+}, { passive: false });
+subEl.addEventListener('pointerdown', e => {
+  const el = e.target.closest('[data-vf]'); if (!el || e.button !== 0) return;
+  const d = VFX[el.dataset.k]; if (!d) return;
+  scrub = { d, x0: e.clientX, v0: getV(d), moved: false };
+});
+window.addEventListener('pointermove', e => {
+  if (!scrub) return;
+  const dx = (e.clientX - scrub.x0) / (stage.getBoundingClientRect().width / 1000);
+  if (!scrub.moved && Math.abs(dx) < 4) return;
+  if (!scrub.moved) { scrub.moved = true; if (targets().length) snap(); document.body.classList.add('scrubbing'); hideTip(); closePop(); }
+  setV(scrub.d, scrub.v0 + Math.round(dx / 6) * scrub.d.step, true);
+  renderObjs(); renderBars(); renderPop();
+});
+window.addEventListener('pointerup', () => {
+  if (!scrub) return;
+  document.body.classList.remove('scrubbing');
+  const s0 = scrub; setTimeout(() => { if (scrub === s0) scrub = null; }, 0);
+});
+
+/* ---------- 弹层：滑杆按下记一次撤销，拖动实时；取色器拖动只预览 ---------- */
+const popEl = $('#pop');
+function cpMove(e) {
+  const r = cpDrag.el.getBoundingClientRect();
+  const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+  if (cpDrag.mode === 'sv') { S.cp.s = x; S.cp.v = 1 - y; } else S.cp.h = Math.min(359.9, x * 360);
+  cpLive(null);
+}
+popEl.addEventListener('pointerdown', e => {
+  if (e.target.type === 'range' && targets().length) snap();
+  const sv = e.target.closest('#cpSV'), hue = e.target.closest('#cpHue');
+  if (!S.cp || (!sv && !hue)) return;
+  cpDrag = { el: sv || hue, mode: sv ? 'sv' : 'hue' };
+  cpDrag.el.setPointerCapture(e.pointerId);
+  e.preventDefault(); cpMove(e);
+});
+popEl.addEventListener('pointermove', e => { if (cpDrag) cpMove(e); });
+popEl.addEventListener('pointerup', () => { cpDrag = null; });
+popEl.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'cpHex') {
+    const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(t.value.trim());
+    if (m) { const x = m[1].length === 3 ? [...m[1]].map(ch => ch + ch).join('') : m[1]; cpLive('#' + x.toLowerCase(), true); }
+    return;
+  }
+  const key = t.dataset.vfk, d = key && VFX[key];
+  if (!d || t.type !== 'range') return;
+  setV(d, +t.value, true);
+  t.style.setProperty('--p', (+t.value - d.min) / (d.max - d.min) * 100 + '%');
+  const pin = $('#pvIn'); if (pin && pin.dataset.vfk === key) pin.value = Math.round(+t.value * (d.pct ? 100 : 1));
+  const out = t.parentElement.querySelector('output'); if (out) out.textContent = fmtV(d, +t.value);
+  renderObjs(); renderBars();
+});
+popEl.addEventListener('change', e => {
+  const t = e.target, key = t.dataset.vfk;
+  if (t.type === 'number' && key && VFX[key]) { const d = VFX[key]; setV(d, d.pct ? +t.value / 100 : +t.value); render(); return; }
+  if (t.dataset.corner != null) {
+    const s = ctx().s, r = [...(s.radii || [s.radius, s.radius, s.radius, s.radius])];
+    r[+t.dataset.corner] = Math.max(0, Math.min(40, Math.round(+t.value || 0)));
+    setStyle('radii', r); render();
+  }
+});
+popEl.addEventListener('keydown', e => { if (e.key === 'Enter' && S.pop === 'custom') { e.preventDefault(); cpOk(); render(); } });
+
+/* 水印文字：输入即预览，聚焦时记一次撤销（对应 Rust 的输入历史分组） */
+stage.addEventListener('focusin', e => { if (e.target.id === 'wmText' && wmObj()) snap(); });
+stage.addEventListener('input', e => { if (e.target.id === 'wmText') { wmSetText(e.target.value, true); renderObjs(); } });
+stage.addEventListener('keydown', e => { if (e.target.id === 'wmText' && (e.key === 'Enter' || e.key === 'Escape')) { e.target.blur(); render(); } });
+document.addEventListener('pointerdown', e => { if (!stage.contains(e.target) && (S.pop || S.fly)) { closePop(); S.fly = null; render(); } });
+
+/* ---------- 键盘 ---------- */
+document.addEventListener('keydown', e => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'INPUT' && document.activeElement.type !== 'range' && e.key !== 'Escape') return;
+  const k = e.key, ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && (k === 'z' || k === 'Z')) { e.shiftKey ? redo() : undo(); }
+  else if (ctrl && (k === 'y' || k === 'Y')) redo();
+  else if (ctrl && (k === 'g' || k === 'G')) arrange(e.shiftKey ? 'ungroup' : 'group');
+  else if (ctrl && (k === 'd' || k === 'D')) arrange('dup');
+  else if (ctrl && k === ']') arrange('front');
+  else if (ctrl && k === '[') arrange('back');
+  else if (ctrl) return;
+  else if (k === 'Escape') { if (S.pop === 'custom') cpCancel(); else if (S.pop || S.fly) { closePop(); S.fly = null; } else if (S.draft) S.draft = null; else S.sel = []; if (tag === 'INPUT') document.activeElement.blur(); }
+  else if (k === 'Enter') { if (S.pop === 'custom') cpOk(); else if (S.draft) finishDraft(); else return; }
+  else if (k === 'Delete' || k === 'Backspace') del();
+  else if (k === '0') setTool('select');
+  else if (/^[1-6]$/.test(k)) {
+    const g = G[+k - 1];
+    if (S.tool === g.id || (one() && one().g === g.id)) {
+      const cur = curVariant(g.id), i = g.items.findIndex(it => it.id === cur);
+      setVariant(g.id, g.items[(i + 1) % g.items.length].id);
+    } else setTool(g.id);
+  } else return;
+  e.preventDefault(); render();
+});
+
+/* ---------- 主题与跳转 ---------- */
+function applyTheme(t) {
+  if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  document.querySelectorAll('#themeTog button').forEach(x => x.classList.toggle('on', x.dataset.t === (t || 'system')));
+}
+document.querySelectorAll('#themeTog button').forEach(b => b.addEventListener('click', () => {
+  applyTheme(b.dataset.t);
+  try { localStorage.setItem('rustshot-toolbar-theme', b.dataset.t); } catch (err) { /* 存储不可用时只影响本次 */ }
+}));
+try { const t = localStorage.getItem('rustshot-toolbar-theme'); if (t) applyTheme(t); } catch (err) { /* 忽略 */ }
+$('#jump').addEventListener('click', e => {
+  const b = e.target.closest('[data-j]'); if (!b) return;
+  const j = b.dataset.j;
+  if (!$('#textIn').hidden) commitText();
+  closePop(); S.fly = null;
+  if (j === 'pick') { const r = S.objs.find(o => o.v === 'rect'); setTool('shape'); S.sel = r ? [r.id] : []; }
+  else if (j === 'multi') { setTool('select'); S.sel = S.objs.filter(o => o.v !== 'watermark').map(o => o.id); }
+  else {
+    const [g, v] = j.split('.');
+    setTool(g); setVariant(g, v);
+    if (v === 'watermark' && !wmObj()) { wmSetText(S.st.text); hist.pop(); }
+  }
+  render();
+});
+
+/* ---------- 视图切换、缩放、初始内容 ---------- */
+document.querySelectorAll('#viewTog button').forEach(b => b.addEventListener('click', () => {
+  S.view = b.dataset.v; S.fly = null; S.pop = null;
+  document.querySelectorAll('#viewTog button').forEach(x => x.classList.toggle('on', x === b));
+  render();
+}));
+function fit() { const k = Math.min(1, box.clientWidth / 1000); stage.style.transform = `scale(${k})`; box.style.height = (640 * k) + 'px'; }
+new ResizeObserver(fit).observe(box);
+
+const chart = $('#chart');
+[38, 46, 41, 55, 60, 52, 66, 71, 64, 92, 78, 74].forEach((h, i) => {
+  const s = document.createElement('span'); s.style.left = (16 + i * 27) + 'px'; s.style.height = h + 'px'; if (i === 9) s.className = 'pk'; chart.appendChild(s);
+  if (i % 3 === 0) { const t = document.createElement('i'); t.style.left = (14 + i * 27) + 'px'; t.textContent = ['7月', '8月', '9月', ''][i / 3]; chart.appendChild(t); }
+});
+const SELS = { normal: { x: 200, y: 66, w: 640, h: 300 }, wide: { x: 40, y: 60, w: 920, h: 300 }, small: { x: 600, y: 458, w: 300, h: 150 }, full: { x: 0, y: 0, w: 1000, h: 640 } };
+function applySel() {
+  const sb = $('#selbox'); Object.assign(sb.style, { left: SEL.x + 'px', top: SEL.y + 'px', width: SEL.w + 'px', height: SEL.h + 'px' });
+  const cr = $('#selclipr'); ['x', 'y'].forEach(k => cr.setAttribute(k, SEL[k])); cr.setAttribute('width', SEL.w); cr.setAttribute('height', SEL.h);
+}
+applySel();
+document.querySelectorAll('#selTog button').forEach(b => b.addEventListener('click', () => {
+  Object.assign(SEL, SELS[b.dataset.s]); S.budget = null; S.pop = null; S.fly = null; applySel();
+  document.querySelectorAll('#selTog button').forEach(x => x.classList.toggle('on', x === b));
+  render();
+}));
+$('#budget').addEventListener('input', e => { S.budget = +e.target.value; S.pop = null; renderBars(); renderFly(); });
+$('#budgetAuto').addEventListener('click', () => { S.budget = null; render(); });
+
+const seed = (g, v, extra, st) => { const o = newObj(g, v, extra); Object.assign(o.s, st || {}); S.objs.push(o); return o; };
+const r1 = seed('shape', 'rect', { x1: 208, y1: 72, x2: 452, y2: 154 }, { width: 3, radius: 6 });
+seed('text', 'serial', { x: 452, y: 72, n: 1 }, { font: 20 });
+seed('line', 'curve', { pts: [{ x: 606, y: 336 }, { x: 536, y: 334 }, { x: 494, y: 214 }] }, { width: 3, path: 'curve', start: 'none', end: 'open' });
+seed('text', 'text', { x: 614, y: 326, txt: '9 月峰值' }, { font: 18, bold: true });
+seed('redact', 'mosaic', { x1: 584, y1: 189, x2: 792, y2: 216 }, {});
+S.sel = [r1.id];
+fit(); render();
+/* 锚点直达：#wide / #small / #full 选区预设，#watermark 打开水印工具 */
+const hash = location.hash.slice(1);
+if (SELS[hash]) document.querySelector(`#selTog [data-s="${hash}"]`).click();
+if (hash === 'watermark') { setTool('text'); setVariant('text', 'watermark'); wmSetText(S.st.text); hist.length = 0; render(); }
+})();
+</script>

@@ -1,0 +1,2670 @@
+{
+  "schema_version": 1,
+  "fixtures": [
+    {
+      "name": "wired-light",
+      "image": "images/wired-light.png",
+      "tags": [
+        "wired",
+        "light"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 40,
+            "y": 45,
+            "width": 39,
+            "height": 14
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 170,
+            "y": 42,
+            "width": 32,
+            "height": 19
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 300,
+            "y": 44,
+            "width": 46,
+            "height": 15
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 170,
+            "y": 133,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wired-dark",
+      "image": "images/wired-dark.png",
+      "tags": [
+        "wired",
+        "dark"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 40,
+            "y": 45,
+            "width": 39,
+            "height": 14
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 170,
+            "y": 42,
+            "width": 32,
+            "height": 19
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 300,
+            "y": 44,
+            "width": 46,
+            "height": 15
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 170,
+            "y": 133,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wired-striped",
+      "image": "images/wired-striped.png",
+      "tags": [
+        "wired",
+        "striped"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 40,
+            "y": 45,
+            "width": 39,
+            "height": 14
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 170,
+            "y": 42,
+            "width": 32,
+            "height": 19
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 300,
+            "y": 44,
+            "width": 46,
+            "height": 15
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 170,
+            "y": 133,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wired-thick",
+      "image": "images/wired-thick.png",
+      "tags": [
+        "wired",
+        "thick"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 40,
+            "y": 45,
+            "width": 39,
+            "height": 14
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 170,
+            "y": 42,
+            "width": 32,
+            "height": 19
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 300,
+            "y": 44,
+            "width": 46,
+            "height": 15
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 170,
+            "y": 133,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wired-colspan",
+      "image": "images/wired-colspan.png",
+      "tags": [
+        "wired",
+        "merged"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 3,
+          "text": "Summary Item Quantity Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Summary Item Quantity Code",
+          "rect": {
+            "x": 95,
+            "y": 42,
+            "width": 259,
+            "height": 20
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 170,
+            "y": 133,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wired-rowspan",
+      "image": "images/wired-rowspan.png",
+      "tags": [
+        "wired",
+        "merged"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 2,
+          "colspan": 1,
+          "text": "Group"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 40,
+            "y": 45,
+            "width": 39,
+            "height": 14
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 170,
+            "y": 42,
+            "width": 32,
+            "height": 19
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 300,
+            "y": 44,
+            "width": 46,
+            "height": 15
+          }
+        },
+        {
+          "text": "Group",
+          "rect": {
+            "x": 40,
+            "y": 108,
+            "width": 56,
+            "height": 19
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 170,
+            "y": 133,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wired-dense",
+      "image": "images/wired-dense.png",
+      "tags": [
+        "wired",
+        "dense"
+      ],
+      "rows": 4,
+      "columns": 8,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162,
+        206
+      ],
+      "column_edges": [
+        30,
+        130,
+        230,
+        330,
+        430,
+        530,
+        630,
+        730,
+        830
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "H1"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "H2"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "H3"
+        },
+        {
+          "row": 0,
+          "column": 3,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "H4"
+        },
+        {
+          "row": 0,
+          "column": 4,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "H5"
+        },
+        {
+          "row": 0,
+          "column": 5,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "H6"
+        },
+        {
+          "row": 0,
+          "column": 6,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "H7"
+        },
+        {
+          "row": 0,
+          "column": 7,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "H8"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "10"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "11"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "12"
+        },
+        {
+          "row": 1,
+          "column": 3,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "13"
+        },
+        {
+          "row": 1,
+          "column": 4,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "14"
+        },
+        {
+          "row": 1,
+          "column": 5,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "15"
+        },
+        {
+          "row": 1,
+          "column": 6,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "16"
+        },
+        {
+          "row": 1,
+          "column": 7,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "17"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "20"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "21"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "22"
+        },
+        {
+          "row": 2,
+          "column": 3,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "23"
+        },
+        {
+          "row": 2,
+          "column": 4,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "24"
+        },
+        {
+          "row": 2,
+          "column": 5,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "25"
+        },
+        {
+          "row": 2,
+          "column": 6,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "26"
+        },
+        {
+          "row": 2,
+          "column": 7,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "27"
+        },
+        {
+          "row": 3,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "30"
+        },
+        {
+          "row": 3,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "31"
+        },
+        {
+          "row": 3,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "32"
+        },
+        {
+          "row": 3,
+          "column": 3,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "33"
+        },
+        {
+          "row": 3,
+          "column": 4,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "34"
+        },
+        {
+          "row": 3,
+          "column": 5,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "35"
+        },
+        {
+          "row": 3,
+          "column": 6,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "36"
+        },
+        {
+          "row": 3,
+          "column": 7,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "37"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "H1",
+          "rect": {
+            "x": 40,
+            "y": 45,
+            "width": 25,
+            "height": 14
+          }
+        },
+        {
+          "text": "H2",
+          "rect": {
+            "x": 140,
+            "y": 45,
+            "width": 25,
+            "height": 14
+          }
+        },
+        {
+          "text": "H3",
+          "rect": {
+            "x": 240,
+            "y": 45,
+            "width": 25,
+            "height": 14
+          }
+        },
+        {
+          "text": "H4",
+          "rect": {
+            "x": 340,
+            "y": 45,
+            "width": 25,
+            "height": 14
+          }
+        },
+        {
+          "text": "H5",
+          "rect": {
+            "x": 440,
+            "y": 45,
+            "width": 25,
+            "height": 14
+          }
+        },
+        {
+          "text": "H6",
+          "rect": {
+            "x": 540,
+            "y": 45,
+            "width": 25,
+            "height": 14
+          }
+        },
+        {
+          "text": "H7",
+          "rect": {
+            "x": 640,
+            "y": 45,
+            "width": 25,
+            "height": 14
+          }
+        },
+        {
+          "text": "H8",
+          "rect": {
+            "x": 740,
+            "y": 45,
+            "width": 25,
+            "height": 14
+          }
+        },
+        {
+          "text": "10",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "11",
+          "rect": {
+            "x": 140,
+            "y": 89,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "12",
+          "rect": {
+            "x": 240,
+            "y": 89,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "13",
+          "rect": {
+            "x": 340,
+            "y": 89,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "14",
+          "rect": {
+            "x": 440,
+            "y": 89,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "15",
+          "rect": {
+            "x": 540,
+            "y": 89,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "16",
+          "rect": {
+            "x": 640,
+            "y": 89,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "17",
+          "rect": {
+            "x": 740,
+            "y": 89,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "20",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "21",
+          "rect": {
+            "x": 140,
+            "y": 133,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "22",
+          "rect": {
+            "x": 240,
+            "y": 133,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "23",
+          "rect": {
+            "x": 340,
+            "y": 133,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "24",
+          "rect": {
+            "x": 440,
+            "y": 133,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "25",
+          "rect": {
+            "x": 540,
+            "y": 133,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "26",
+          "rect": {
+            "x": 640,
+            "y": 133,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "27",
+          "rect": {
+            "x": 740,
+            "y": 133,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "30",
+          "rect": {
+            "x": 40,
+            "y": 177,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "31",
+          "rect": {
+            "x": 140,
+            "y": 177,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "32",
+          "rect": {
+            "x": 240,
+            "y": 177,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "33",
+          "rect": {
+            "x": 340,
+            "y": 177,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "34",
+          "rect": {
+            "x": 440,
+            "y": 177,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "35",
+          "rect": {
+            "x": 540,
+            "y": 177,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "36",
+          "rect": {
+            "x": 640,
+            "y": 177,
+            "width": 22,
+            "height": 14
+          }
+        },
+        {
+          "text": "37",
+          "rect": {
+            "x": 740,
+            "y": 177,
+            "width": 22,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wireless-light",
+      "image": "images/wireless-light.png",
+      "tags": [
+        "wireless",
+        "light"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 40,
+            "y": 45,
+            "width": 39,
+            "height": 14
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 170,
+            "y": 42,
+            "width": 32,
+            "height": 19
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 300,
+            "y": 44,
+            "width": 46,
+            "height": 15
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 170,
+            "y": 133,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wireless-dark",
+      "image": "images/wireless-dark.png",
+      "tags": [
+        "wireless",
+        "dark"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 40,
+            "y": 45,
+            "width": 39,
+            "height": 14
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 170,
+            "y": 42,
+            "width": 32,
+            "height": 19
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 300,
+            "y": 44,
+            "width": 46,
+            "height": 15
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 170,
+            "y": 133,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wireless-empty",
+      "image": "images/wireless-empty.png",
+      "tags": [
+        "wireless",
+        "empty"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": ""
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 40,
+            "y": 45,
+            "width": 39,
+            "height": 14
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 170,
+            "y": 42,
+            "width": 32,
+            "height": 19
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 300,
+            "y": 44,
+            "width": 46,
+            "height": 15
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wireless-colspan",
+      "image": "images/wireless-colspan.png",
+      "tags": [
+        "wireless",
+        "merged"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 3,
+          "text": "Summary Item Quantity Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Summary Item Quantity Code",
+          "rect": {
+            "x": 95,
+            "y": 42,
+            "width": 259,
+            "height": 20
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 170,
+            "y": 133,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "ruled-light",
+      "image": "images/ruled-light.png",
+      "tags": [
+        "ruled",
+        "light"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        30,
+        74,
+        118,
+        162
+      ],
+      "column_edges": [
+        30,
+        160,
+        290,
+        420
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 40,
+            "y": 45,
+            "width": 39,
+            "height": 14
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 170,
+            "y": 42,
+            "width": 32,
+            "height": 19
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 300,
+            "y": 44,
+            "width": 46,
+            "height": 15
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 40,
+            "y": 89,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 170,
+            "y": 89,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 300,
+            "y": 89,
+            "width": 44,
+            "height": 14
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 40,
+            "y": 133,
+            "width": 55,
+            "height": 14
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 170,
+            "y": 133,
+            "width": 11,
+            "height": 14
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 300,
+            "y": 133,
+            "width": 44,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "wired-dpi-2",
+      "image": "images/wired-dpi-2.png",
+      "tags": [
+        "wired",
+        "dpi-2"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        60,
+        148,
+        236,
+        324
+      ],
+      "column_edges": [
+        60,
+        320,
+        580,
+        840
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 80,
+            "y": 90,
+            "width": 80,
+            "height": 28
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 340,
+            "y": 85,
+            "width": 64,
+            "height": 37
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 600,
+            "y": 89,
+            "width": 93,
+            "height": 30
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 80,
+            "y": 178,
+            "width": 113,
+            "height": 28
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 340,
+            "y": 178,
+            "width": 22,
+            "height": 28
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 600,
+            "y": 178,
+            "width": 88,
+            "height": 28
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 80,
+            "y": 266,
+            "width": 113,
+            "height": 28
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 340,
+            "y": 266,
+            "width": 22,
+            "height": 28
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 600,
+            "y": 266,
+            "width": 88,
+            "height": 28
+          }
+        }
+      ]
+    },
+    {
+      "name": "wireless-dpi-2",
+      "image": "images/wireless-dpi-2.png",
+      "tags": [
+        "wireless",
+        "dpi-2"
+      ],
+      "rows": 3,
+      "columns": 3,
+      "row_edges": [
+        60,
+        148,
+        236,
+        324
+      ],
+      "column_edges": [
+        60,
+        320,
+        580,
+        840
+      ],
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item"
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Qty"
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Code"
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 1"
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "2"
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0001"
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "Item 2"
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "4"
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "rowspan": 1,
+          "colspan": 1,
+          "text": "0002"
+        }
+      ],
+      "ocr": [
+        {
+          "text": "Item",
+          "rect": {
+            "x": 80,
+            "y": 90,
+            "width": 80,
+            "height": 28
+          }
+        },
+        {
+          "text": "Qty",
+          "rect": {
+            "x": 340,
+            "y": 85,
+            "width": 64,
+            "height": 37
+          }
+        },
+        {
+          "text": "Code",
+          "rect": {
+            "x": 600,
+            "y": 89,
+            "width": 93,
+            "height": 30
+          }
+        },
+        {
+          "text": "Item 1",
+          "rect": {
+            "x": 80,
+            "y": 178,
+            "width": 113,
+            "height": 28
+          }
+        },
+        {
+          "text": "2",
+          "rect": {
+            "x": 340,
+            "y": 178,
+            "width": 22,
+            "height": 28
+          }
+        },
+        {
+          "text": "0001",
+          "rect": {
+            "x": 600,
+            "y": 178,
+            "width": 88,
+            "height": 28
+          }
+        },
+        {
+          "text": "Item 2",
+          "rect": {
+            "x": 80,
+            "y": 266,
+            "width": 113,
+            "height": 28
+          }
+        },
+        {
+          "text": "4",
+          "rect": {
+            "x": 340,
+            "y": 266,
+            "width": 22,
+            "height": 28
+          }
+        },
+        {
+          "text": "0002",
+          "rect": {
+            "x": 600,
+            "y": 266,
+            "width": 88,
+            "height": 28
+          }
+        }
+      ]
+    }
+  ]
+}

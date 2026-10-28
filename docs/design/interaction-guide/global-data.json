@@ -1,0 +1,21 @@
+{
+  "scenes": [{
+    "id": "global", "title": "全局与托盘", "summary": "托盘常驻时的系统级入口。以下为默认组合，可在主界面快捷键设置中修改或禁用；快捷动作需自行分配组合。",
+    "shortcuts": [
+      {"keys":["Ctrl+1"],"action":"启动区域截图","when":"托盘正在运行，热键注册成功；默认设置","detail":"设置中可改为自定义组合、PrintScreen 或禁用。当前全局组合以托盘注册状态为准。","source":"src/hotkey.rs:20; src/preferences.rs:376"},
+      {"keys":["Ctrl+2"],"action":"剪贴板贴图","when":"托盘正在运行，热键注册成功；剪贴板有支持的图片或文本","detail":"图片可带 RaiShot 私有落点信息；文本创建文字贴图。设置中可改键或禁用。","source":"src/hotkey.rs:20; src/preferences.rs:376"},
+      {"keys":["自定义组合"],"action":"执行快捷动作","when":"设置 → 快捷动作，为启用动作分配了有效热键","detail":"内置动作默认都没有热键；最多分配 16 个快捷动作热键。组合不能与截图、剪贴板贴图或其它动作冲突。","source":"src/quick_action.rs:525; src/quick_action.rs:321; src/quick_action.rs:556"}
+    ],
+    "interactions": [
+      {"name":"托盘图标","gesture":"左键单击；键盘激活","result":"启动区域截图。旧式托盘消息兼容双击。","source":"src/tray.rs:61"},
+      {"name":"托盘右键菜单","gesture":"右键单击；系统上下文菜单","result":"显示截图、剪贴板贴图、文件贴图、贴图管理、历史、设置、帮助和退出入口。","source":"src/tray.rs:73; src/tray.rs:106"},
+      {"name":"当前屏幕 / 所有屏幕截图","gesture":"托盘菜单点击对应条目","result":"以当前屏幕或整个虚拟桌面为范围启动截图。没有统一默认全局组合。","source":"src/tray.rs:151"},
+      {"name":"快捷动作子菜单","gesture":"托盘 → 快捷动作 → 点击动作","result":"按动作配置执行取图、复制、贴图、保存、识别、翻译、表格或二维码等流程；只列已启用且允许显示在托盘的动作。","source":"src/tray.rs:127; src/quick_action.rs:393"},
+      {"name":"剪贴板 / 文件贴图","gesture":"托盘选择剪贴板贴图或打开图片贴图…","result":"将剪贴板图片、文本或选中的本地图片变为桌面贴图。","source":"src/tray.rs:165"},
+      {"name":"贴图管理","gesture":"托盘 → 管理贴图…；或贴图管理子菜单","result":"打开主界面贴图页；可隐藏/显示当前分组、恢复交互、关闭全部贴图或清空已关闭记录。","source":"src/tray.rs:181"},
+      {"name":"恢复最近关闭贴图","gesture":"托盘点击恢复最近关闭的贴图","result":"从工作区最近关闭记录恢复贴图；不是从截图历史恢复。","source":"src/tray.rs:188"},
+      {"name":"主界面与帮助","gesture":"托盘 → 截图历史 / 设置 / 帮助与快捷键","result":"打开对应主界面页面或帮助入口。","source":"src/tray.rs:234"},
+      {"name":"退出","gesture":"托盘 → 退出 RaiShot","result":"退出本实例托盘，并按本实例的生命周期处理其子进程。","source":"src/tray.rs:246"}
+    ]
+  }]
+}

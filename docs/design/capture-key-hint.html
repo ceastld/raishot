@@ -1,0 +1,495 @@
+<title>截图快捷键提示卡</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 布局：上方阶段切换，中间是一块冻结桌面示意（提示卡贴当前屏左下），下方是规格与待定项 */
+:root {
+  /* 页面：默认深色（截图界面常在深色桌面上），浅色只在系统或开关要求时 */
+  --page: #111318;
+  --page-2: #171a21;
+  --ink: #e7e9ee;
+  --ink-2: #a3a9b6;
+  --line: #2a2f3a;
+  --accent: #4c8dff;   /* 选区蓝 */
+  /* 提示卡：与产品 palette.background + 0xd8 透明度一致的半透明面 */
+  --card: rgba(24, 27, 36, 0.88);
+  --card-line: rgba(255, 255, 255, 0.08);
+  --card-ink: #e9ecf2;
+  --card-ink-2: rgba(233, 236, 242, 0.62);
+  --chip-line: rgba(255, 255, 255, 0.22);
+  --chip-ink: #dfe4ee;
+  --bar: rgba(255, 255, 255, 0.12);
+  /* 冻结桌面示意 */
+  --desk-a: #1d2230;
+  --desk-b: #262c3b;
+  --desk-win: #2d3445;
+  --desk-win-2: #353d50;
+  --mask: rgba(0, 0, 0, 0.42);
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --page: #f3f4f7; --page-2: #ffffff; --ink: #1b1f27; --ink-2: #5d6472; --line: #dde0e7; --accent: #2f6fe8;
+    --card: rgba(250, 251, 253, 0.92); --card-line: rgba(20, 28, 45, 0.10); --card-ink: #1d222c; --card-ink-2: rgba(29, 34, 44, 0.60);
+    --chip-line: rgba(20, 28, 45, 0.24); --chip-ink: #2a303b; --bar: rgba(20, 28, 45, 0.10);
+    --desk-a: #c9d3e6; --desk-b: #dfe6f2; --desk-win: #f4f6fa; --desk-win-2: #e8ecf3; --mask: rgba(0, 0, 0, 0.28);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --page: #f3f4f7; --page-2: #ffffff; --ink: #1b1f27; --ink-2: #5d6472; --line: #dde0e7; --accent: #2f6fe8;
+  --card: rgba(250, 251, 253, 0.92); --card-line: rgba(20, 28, 45, 0.10); --card-ink: #1d222c; --card-ink-2: rgba(29, 34, 44, 0.60);
+  --chip-line: rgba(20, 28, 45, 0.24); --chip-ink: #2a303b; --bar: rgba(20, 28, 45, 0.10);
+  --desk-a: #c9d3e6; --desk-b: #dfe6f2; --desk-win: #f4f6fa; --desk-win-2: #e8ecf3; --mask: rgba(0, 0, 0, 0.28);
+  color-scheme: light;
+}
+
+/* 配色方案：只改提示卡相关 token；藏青是未覆盖的默认值 */
+:root { --chip-bg: transparent; }
+.stage[data-pal="graphite"] {
+  --card: rgba(38, 38, 40, 0.86); --card-line: rgba(255, 255, 255, 0.07); --card-ink: #f3f3f3; --card-ink-2: rgba(243, 243, 243, 0.58);
+  --chip-line: transparent; --chip-bg: rgba(255, 255, 255, 0.10); --chip-ink: #f3f3f3; --bar: rgba(255, 255, 255, 0.12);
+}
+.stage[data-pal="ink"] {
+  --card: rgba(10, 10, 10, 0.72); --card-line: rgba(255, 255, 255, 0.06); --card-ink: rgba(255, 255, 255, 0.94); --card-ink-2: rgba(255, 255, 255, 0.55);
+  --chip-line: rgba(255, 255, 255, 0.28); --chip-bg: transparent; --chip-ink: #ffffff; --bar: rgba(255, 255, 255, 0.14);
+}
+.stage[data-pal="warm"] {
+  --card: rgba(41, 38, 35, 0.88); --card-line: rgba(255, 236, 214, 0.08); --card-ink: #f2ede7; --card-ink-2: rgba(242, 237, 231, 0.58);
+  --chip-line: transparent; --chip-bg: rgba(255, 236, 214, 0.09); --chip-ink: #f2ede7; --bar: rgba(255, 236, 214, 0.12);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .stage[data-pal="graphite"] {
+    --card: rgba(251, 251, 251, 0.90); --card-line: rgba(0, 0, 0, 0.08); --card-ink: #1c1c1c; --card-ink-2: rgba(28, 28, 28, 0.56);
+    --chip-line: transparent; --chip-bg: rgba(0, 0, 0, 0.06); --chip-ink: #1c1c1c; --bar: rgba(0, 0, 0, 0.08);
+  }
+  :root:not([data-theme="dark"]) .stage[data-pal="ink"] {
+    --card: rgba(255, 255, 255, 0.80); --card-line: rgba(0, 0, 0, 0.06); --card-ink: rgba(0, 0, 0, 0.88); --card-ink-2: rgba(0, 0, 0, 0.52);
+    --chip-line: rgba(0, 0, 0, 0.28); --chip-bg: transparent; --chip-ink: #000000; --bar: rgba(0, 0, 0, 0.10);
+  }
+  :root:not([data-theme="dark"]) .stage[data-pal="warm"] {
+    --card: rgba(250, 247, 243, 0.92); --card-line: rgba(60, 40, 20, 0.10); --card-ink: #2b2620; --card-ink-2: rgba(43, 38, 32, 0.56);
+    --chip-line: transparent; --chip-bg: rgba(60, 40, 20, 0.07); --chip-ink: #2b2620; --bar: rgba(60, 40, 20, 0.10);
+  }
+}
+:root[data-theme="light"] .stage[data-pal="graphite"] {
+  --card: rgba(251, 251, 251, 0.90); --card-line: rgba(0, 0, 0, 0.08); --card-ink: #1c1c1c; --card-ink-2: rgba(28, 28, 28, 0.56);
+  --chip-line: transparent; --chip-bg: rgba(0, 0, 0, 0.06); --chip-ink: #1c1c1c; --bar: rgba(0, 0, 0, 0.08);
+}
+:root[data-theme="light"] .stage[data-pal="ink"] {
+  --card: rgba(255, 255, 255, 0.80); --card-line: rgba(0, 0, 0, 0.06); --card-ink: rgba(0, 0, 0, 0.88); --card-ink-2: rgba(0, 0, 0, 0.52);
+  --chip-line: rgba(0, 0, 0, 0.28); --chip-bg: transparent; --chip-ink: #000000; --bar: rgba(0, 0, 0, 0.10);
+}
+:root[data-theme="light"] .stage[data-pal="warm"] {
+  --card: rgba(250, 247, 243, 0.92); --card-line: rgba(60, 40, 20, 0.10); --card-ink: #2b2620; --card-ink-2: rgba(43, 38, 32, 0.56);
+  --chip-line: transparent; --chip-bg: rgba(60, 40, 20, 0.07); --chip-ink: #2b2620; --bar: rgba(60, 40, 20, 0.10);
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--page); color: var(--ink); font: 14px/1.55 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+header h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: 0.01em; text-wrap: balance; }
+header p { margin: 6px 0 0; color: var(--ink-2); max-width: 68ch; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--page-2); }
+.seg button {
+  font: inherit; font-size: 13px; color: var(--ink-2); background: transparent; border: 0; padding: 6px 12px; cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { color: var(--ink); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.seg button:focus-visible, .act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.act {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--page-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer;
+}
+.label { font-size: 12px; color: var(--ink-2); letter-spacing: 0.04em; }
+
+/* 冻结桌面示意：一个屏，提示卡相对它定位 */
+.stage {
+  position: relative; width: 100%; height: clamp(440px, 54vw, 580px); border-radius: 10px; overflow: hidden;
+  background: linear-gradient(135deg, var(--desk-a), var(--desk-b)); border: 1px solid var(--line);
+  cursor: crosshair; user-select: none;
+}
+.win { position: absolute; background: var(--desk-win); border-radius: 6px; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.win::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 26px; background: var(--desk-win-2); border-radius: 6px 6px 0 0; }
+.win i { position: absolute; left: 14px; right: 30%; height: 7px; border-radius: 4px; background: var(--desk-win-2); }
+.mask { position: absolute; inset: 0; background: var(--mask); pointer-events: none; transition: opacity .15s; }
+.sel {
+  position: absolute; border: 1px solid var(--accent); box-shadow: 0 0 0 9999px var(--mask); pointer-events: none;
+}
+.sel .size {
+  position: absolute; left: 0; top: -24px; font: 11px/18px var(--mono); padding: 0 6px; border-radius: 4px;
+  background: var(--accent); color: #fff; font-variant-numeric: tabular-nums;
+}
+.draft { position: absolute; pointer-events: none; }
+
+/* 提示卡本体：左列按键芯片、右列说明右对齐 */
+.hint {
+  position: absolute; left: 20px; bottom: 20px; min-width: 268px; max-width: calc(100% - 40px);
+  padding: 9px 12px 10px; border-radius: 8px; background: var(--card); border: 1px solid var(--card-line);
+  color: var(--card-ink); font: 13px/1.4 var(--ui);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 8px 28px rgba(0,0,0,.22);
+  transition: opacity .12s ease, transform .12s ease;
+}
+.hint.top { bottom: auto; top: 20px; }
+.hint.gone { opacity: 0; transform: translateY(4px); pointer-events: none; }
+.rows { display: grid; grid-template-columns: auto auto; column-gap: 22px; row-gap: 4px; align-items: center; }
+.keys { display: flex; flex-wrap: wrap; gap: 4px; }
+.k {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px;
+  border: 1px solid var(--chip-line); background: var(--chip-bg); color: var(--chip-ink); font-size: 12px; white-space: nowrap;
+}
+.k.mouse { border-color: var(--chip-ink); border-color: color-mix(in srgb, var(--chip-ink) 35%, transparent); background: transparent; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--line); }
+.k.mouse { border-style: dashed !important; }
+.desc { justify-self: end; text-align: right; white-space: nowrap; }
+.sep { grid-column: 1 / -1; height: 1px; background: var(--card-line); margin: 3px 0; }
+.foot { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 12px; color: var(--card-ink-2); font-size: 12px; }
+
+/* 状态行：与提示卡同一外壳 */
+.status-line { display: flex; flex-direction: column; gap: 6px; min-width: 300px; }
+.status-line .t { display: flex; justify-content: space-between; gap: 16px; }
+.status-line .n { color: var(--card-ink-2); font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12px; }
+.prog { height: 3px; border-radius: 2px; background: var(--bar); overflow: hidden; }
+.prog b { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s linear; }
+
+.toast {
+  position: absolute; left: 20px; bottom: 20px; padding: 6px 10px; border-radius: 8px; background: var(--card);
+  border: 1px solid var(--card-line); color: var(--card-ink); font-size: 12px; display: flex; gap: 6px; align-items: center;
+  transition: opacity .2s; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+.cursor-note {
+  position: absolute; right: 14px; top: 12px; font-size: 12px; color: var(--card-ink-2); background: var(--card);
+  border: 1px solid var(--card-line); padding: 3px 8px; border-radius: 6px; pointer-events: none;
+}
+
+/* 规格 */
+.spec { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.spec section { background: var(--page-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.spec h2 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.spec ul { margin: 0; padding-left: 18px; color: var(--ink-2); display: flex; flex-direction: column; gap: 4px; }
+.spec li b { color: var(--ink); font-weight: 600; }
+.spec code { font: 12px var(--mono); color: var(--ink); }
+.ask { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+
+@media (prefers-reduced-motion: reduce) { .hint, .toast, .prog b, .mask { transition: none; } }
+@media (max-width: 560px) {
+  .hint { min-width: 0; left: 12px; bottom: 12px; max-width: calc(100% - 24px); }
+  .hint.top { top: 12px; }
+  .rows { column-gap: 12px; }
+  .desc { white-space: normal; }
+  .status-line { min-width: 0; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>截图快捷键提示卡</h1>
+    <p>截图界面左下角的提示改成“按键 → 动作”两列卡片，按当前阶段只列能用的键；状态提示（下载、复制结果）用同一外壳。把鼠标移到卡片附近，或在“已有选区”里把选区放到左下，看避让。</p>
+  </header>
+
+  <div class="controls">
+    <span class="label">阶段</span>
+    <div class="seg" id="stage-seg">
+      <button type="button" id="st-idle" data-stage="idle" aria-pressed="true">框选前</button>
+      <button type="button" id="st-sel" data-stage="sel" aria-pressed="false">已有选区</button>
+      <button type="button" id="st-draw" data-stage="draw" aria-pressed="false">绘制箭头</button>
+      <button type="button" id="st-status" data-stage="status" aria-pressed="false">状态提示</button>
+    </div>
+    <span class="label">配色</span>
+    <div class="seg" id="pal-seg">
+      <button type="button" id="pl-graphite" data-pal="graphite" aria-pressed="true"><span class="swatch" style="background:#2a2a2c"></span>石墨</button>
+      <button type="button" id="pl-ink" data-pal="ink" aria-pressed="false"><span class="swatch" style="background:#0a0a0a"></span>墨黑</button>
+      <button type="button" id="pl-warm" data-pal="warm" aria-pressed="false"><span class="swatch" style="background:#2c2825"></span>暖灰</button>
+      <button type="button" id="pl-navy" data-pal="navy" aria-pressed="false"><span class="swatch" style="background:#1c2030"></span>藏青</button>
+    </div>
+    <span class="label">语言</span>
+    <div class="seg" id="lang-seg">
+      <button type="button" id="lg-zh" data-lang="zh" aria-pressed="true">中文</button>
+      <button type="button" id="lg-en" data-lang="en" aria-pressed="false">English</button>
+    </div>
+    <span class="label">主题</span>
+    <div class="seg" id="theme-seg">
+      <button type="button" id="th-sys" data-theme-set="" aria-pressed="true">跟随系统</button>
+      <button type="button" id="th-dark" data-theme-set="dark" aria-pressed="false">深色</button>
+      <button type="button" id="th-light" data-theme-set="light" aria-pressed="false">浅色</button>
+    </div>
+    <button type="button" class="act" id="f1">按 F1</button>
+    <button type="button" class="act" id="sel-corner" hidden>选区移到左下</button>
+  </div>
+
+  <div class="stage" id="stage" data-pal="graphite" aria-label="冻结桌面示意">
+    <div class="win" style="left:6%;top:8%;width:46%;height:52%"><i style="top:44px"></i><i style="top:62px;right:45%"></i><i style="top:80px;right:38%"></i></div>
+    <div class="win" style="left:40%;top:30%;width:52%;height:56%"><i style="top:44px"></i><i style="top:62px;right:52%"></i><i style="top:80px;right:41%"></i><i style="top:98px;right:60%"></i></div>
+    <div class="mask" id="mask"></div>
+    <div class="sel" id="sel" hidden><span class="size" id="sel-size"></span></div>
+    <svg class="draft" id="draft" hidden width="100%" height="100%" style="inset:0">
+      <line id="draft-line" x1="0" y1="0" x2="0" y2="0" stroke="#ff4d4f" stroke-width="3" stroke-linecap="round"/>
+      <circle id="draft-dot" r="4" fill="#ff4d4f"/>
+    </svg>
+    <div class="hint" id="hint"></div>
+    <div class="toast" id="toast" hidden></div>
+    <div class="cursor-note" id="note">移动鼠标试避让</div>
+  </div>
+
+  <div class="spec">
+    <section>
+      <h2>内容</h2>
+      <ul>
+        <li><b>按阶段换内容</b>：框选前、已有选区、绘制中各一张，只列此刻按下就有效的键；最后一行固定是 F1。</li>
+        <li><b>行数上限 11</b>：超出的放进 F1 完整帮助，不缩字号。</li>
+        <li><b>鼠标操作</b>用虚线芯片（拖动、单击、中键、右键），与键盘键区分。</li>
+        <li><b>不再写版本号和屏幕数</b>：移到完整帮助页眉；卡片只讲操作。</li>
+        <li>按键名取自实际路由，与 <code>shortcut_hints</code> 同源，改键后卡片跟着变。</li>
+      </ul>
+    </section>
+    <section>
+      <h2>外观</h2>
+      <ul>
+        <li>两列网格：左列芯片左对齐，右列说明右对齐；行高 24，芯片高 20、圆角 4。</li>
+        <li>底色沿用 <code>palette.background</code> 加约 88% 不透明度和背景模糊；深浅色跟随主题，不进入导出。</li>
+        <li>宽度按最长一行实测（同设置侧栏的 <code>text_width</code>），最小 268；英文更短，不会溢出。</li>
+        <li>状态提示同一外壳：一行文字＋可选进度条＋右侧数值，替代原先整行灰条。</li>
+      </ul>
+    </section>
+    <section>
+      <h2>避让</h2>
+      <ul>
+        <li>指针进入卡片外扩 24px 区域，或选区／吸附框与卡片相交：<b>移到同屏左上</b>，不再直接消失。</li>
+        <li>左上也被占用时才隐藏；指针离开后 150ms 回到左下，避免来回跳。</li>
+        <li>多屏只出现在指针所在屏，切屏跟随。</li>
+      </ul>
+    </section>
+    <section class="ask">
+      <h2>待你定</h2>
+      <ul>
+        <li><b>配色（已定：石墨）</b>：中性灰面＋浅底芯片，不带蓝调，已进产品；其余三套仅留作对照。</li>
+        <li><b>F1 的含义</b>：原型按“F1 显示／隐藏提示卡（记住选择）”做，完整帮助移到 Shift+F1 和工具栏帮助按钮。另一种是 F1 仍开完整帮助，卡片只在设置里开关。</li>
+        <li><b>已有选区时是否显示</b>：工具栏已在旁边，原型默认显示，可改为只在框选前显示。</li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const T = (zh, en) => ({ zh, en });
+  const M = "mouse";
+  const STAGES = {
+    idle: [
+      [[T("拖动","Drag",M)], T("框选区域（可跨屏）","Select area (across screens)"), M],
+      [[T("单击","Click")], T("选择吸附窗口","Pick snapped window"), M],
+      [[T("Ctrl+A","Ctrl+A")], T("当前屏 / 全部屏幕","Current / all screens")],
+      [[T("Alt+A","Alt+A")], T("指针所在屏幕","Screen under pointer")],
+      [[T("←","←"),T("→","→"),T("↑","↑"),T("↓","↓")], T("微调指针 1 像素","Nudge pointer 1 px")],
+      [[T("Shift","Shift")], T("切换颜色格式","Switch color format")],
+      [[T("C","C")], T("复制放大镜颜色","Copy magnifier color")],
+      [[T("R","R")], T("识别悬停区域文字","Read hovered text")],
+      [[T("F5","F5")], T("刷新底图","Refresh desktop")],
+      [[T("Esc","Esc")], T("取消截图","Cancel capture")],
+    ],
+    sel: [
+      [[T("Enter","Enter"),T("Ctrl+C","Ctrl+C")], T("复制并完成","Copy and finish")],
+      [[T("Ctrl+S","Ctrl+S")], T("保存","Save")],
+      [[T("Ctrl+Shift+S","Ctrl+Shift+S")], T("快速保存","Quick save")],
+      [[T("中键","Middle")], T("贴图","Pin"), M],
+      [[T("R","R")], T("文字识别","Recognize text")],
+      [[T("T","T")], T("识别并翻译","Recognize and translate")],
+      [[T("空格","Space")], T("显示 / 隐藏工具栏","Show / hide toolbar")],
+      [[T("方向键","Arrows")], T("移动选区（Shift ×10）","Move selection (Shift ×10)")],
+      [[T("Alt+方向键","Alt+Arrows")], T("调整宽高","Resize")],
+      [[T("右键","Right-click")], T("重选","Reselect"), M],
+      [[T("Esc","Esc")], T("取消截图","Cancel capture")],
+    ],
+    draw: [
+      [[T("单击","Click")], T("确定箭头终点","Set arrow end"), M],
+      [[T("Shift","Shift")], T("约束角度","Constrain angle")],
+      [[T("Esc","Esc"),T("右键","Right-click")], T("取消这支箭头","Cancel this arrow")],
+    ],
+  };
+  const F1_ROW = [[T("F1","F1")], T("显示或隐藏快捷键提示","Show or hide shortcut hints")];
+  const UI = {
+    hidden: T("快捷键提示已隐藏","Shortcut hints hidden"),
+    shown: T("恢复","to restore"),
+    dl: T("首次使用，正在下载文字识别模型","Downloading OCR models (first use)"),
+    dlDone: T("模型已就绪，正在识别…","Models ready, recognizing…"),
+    cancel: T("取消识别","Cancel recognition"),
+    note: T("移动鼠标试避让","Move the pointer to test avoidance"),
+    f1: T("按 F1","Press F1"),
+    corner: T("选区移到左下","Move selection to bottom-left"),
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const stage = $("stage"), hint = $("hint"), toast = $("toast"), sel = $("sel"), draft = $("draft");
+  let state = { stage: "idle", lang: "zh", hidden: false, selCorner: false, progress: 0 };
+  let leaveTimer = 0, dlTimer = 0, toastTimer = 0;
+  const t = (x) => x[state.lang];
+
+  function chip(text, mouse) {
+    const s = document.createElement("span");
+    s.className = "k" + (mouse ? " mouse" : "");
+    s.textContent = text;
+    return s;
+  }
+
+  function renderHint() {
+    hint.innerHTML = "";
+    if (state.stage === "status") {
+      const box = document.createElement("div");
+      box.className = "status-line";
+      const done = state.progress >= 1;
+      const total = 7.3;
+      box.innerHTML = `<div class="t"><span></span><span class="n"></span></div><div class="prog"><b></b></div>`;
+      box.querySelector(".t span").textContent = done ? t(UI.dlDone) : t(UI.dl);
+      box.querySelector(".n").textContent = done ? "" : `${(total * state.progress).toFixed(1)} / ${total} MB`;
+      box.querySelector(".prog b").style.width = `${Math.round(state.progress * 100)}%`;
+      const rows = document.createElement("div");
+      rows.className = "rows";
+      const keys = document.createElement("div"); keys.className = "keys"; keys.append(chip("Esc"));
+      const d = document.createElement("div"); d.className = "desc"; d.textContent = t(UI.cancel);
+      rows.append(keys, d);
+      rows.style.marginTop = "2px";
+      box.append(rows);
+      hint.append(box);
+      return;
+    }
+    const rows = document.createElement("div");
+    rows.className = "rows";
+    const list = STAGES[state.stage].concat([null, F1_ROW]);
+    for (const row of list) {
+      if (!row) { const s = document.createElement("div"); s.className = "sep"; rows.append(s); continue; }
+      const [keys, desc, mouse] = row;
+      const k = document.createElement("div"); k.className = "keys";
+      keys.forEach((key) => k.append(chip(t(key), mouse === M)));
+      const d = document.createElement("div"); d.className = "desc"; d.textContent = t(desc);
+      rows.append(k, d);
+    }
+    hint.append(rows);
+  }
+
+  function rect(el) { return el.getBoundingClientRect(); }
+  function hit(a, b) { return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom; }
+  function grow(r, n) { return { left: r.left - n, top: r.top - n, right: r.right + n, bottom: r.bottom + n }; }
+
+  // 按“左下 → 左上 → 隐藏”的顺序找一个不挡指针和选区的位置
+  function place(px, py) {
+    if (state.hidden) { hint.classList.add("gone"); return; }
+    const blockers = [];
+    if (!sel.hidden) blockers.push(rect(sel));
+    if (!draft.hidden) blockers.push(grow(rect($("draft-dot")), 20));
+    const blocked = (top) => {
+      hint.classList.toggle("top", top);
+      const r = grow(rect(hint), 24);
+      const pointer = px != null && px >= r.left && px <= r.right && py >= r.top && py <= r.bottom;
+      return pointer || blockers.some((b) => hit(r, b));
+    };
+    const wasTop = hint.classList.contains("top");
+    let top = false;
+    if (blocked(false)) top = !blocked(true) ? true : null;
+    if (top === null) { hint.classList.toggle("top", wasTop); hint.classList.add("gone"); return; }
+    hint.classList.remove("gone");
+    if (!top && wasTop) {
+      // 回到左下前稍等，避免指针在边界附近时来回跳
+      hint.classList.add("top");
+      clearTimeout(leaveTimer);
+      leaveTimer = setTimeout(() => { hint.classList.remove("top"); }, 150);
+      return;
+    }
+    clearTimeout(leaveTimer);
+    hint.classList.toggle("top", top);
+  }
+
+  function layoutScene() {
+    const s = rect(stage);
+    sel.hidden = state.stage !== "sel";
+    draft.hidden = state.stage !== "draw";
+    $("mask").style.opacity = state.stage === "sel" ? "0" : "1";
+    $("sel-corner").hidden = state.stage !== "sel";
+    if (!sel.hidden) {
+      const w = Math.round(s.width * 0.42), h = Math.round(s.height * 0.38);
+      const x = state.selCorner ? 36 : Math.round(s.width * 0.44), y = state.selCorner ? Math.round(s.height - h - 40) : Math.round(s.height * 0.16);
+      Object.assign(sel.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" });
+      const dpr = 1.25;
+      $("sel-size").textContent = `${Math.round(w * dpr)} × ${Math.round(h * dpr)}`;
+    }
+    if (!draft.hidden) {
+      const x1 = s.width * 0.30, y1 = s.height * 0.30, x2 = s.width * 0.58, y2 = s.height * 0.55;
+      const l = $("draft-line");
+      l.setAttribute("x1", x1); l.setAttribute("y1", y1); l.setAttribute("x2", x2); l.setAttribute("y2", y2);
+      $("draft-dot").setAttribute("cx", x1); $("draft-dot").setAttribute("cy", y1);
+    }
+  }
+
+  function refresh(px, py) { renderHint(); layoutScene(); place(px, py); }
+
+  function startDownload() {
+    clearInterval(dlTimer);
+    state.progress = 0;
+    dlTimer = setInterval(() => {
+      state.progress = Math.min(1, state.progress + 0.035 + Math.random() * 0.03);
+      if (state.stage !== "status") { clearInterval(dlTimer); return; }
+      renderHint();
+      if (state.progress >= 1) { clearInterval(dlTimer); setTimeout(() => { if (state.stage === "status") startDownload(); }, 2200); }
+    }, 220);
+  }
+
+  function showToast() {
+    toast.innerHTML = "";
+    toast.append(document.createTextNode(t(UI.hidden) + " · "), chip("F1"), document.createTextNode(" " + t(UI.shown)));
+    toast.hidden = false; toast.style.opacity = "1";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => (toast.hidden = true), 220); }, 1600);
+  }
+
+  function toggleF1() {
+    if (state.stage === "status") return;
+    state.hidden = !state.hidden;
+    if (state.hidden) showToast(); else toast.hidden = true;
+    place();
+  }
+
+  function press(groupId, attr, value) {
+    document.querySelectorAll(`#${groupId} button`).forEach((b) => b.setAttribute("aria-pressed", String(b.getAttribute(attr) === value)));
+  }
+
+  $("stage-seg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    state.stage = b.dataset.stage; state.selCorner = false;
+    press("stage-seg", "data-stage", state.stage);
+    if (state.stage === "status") { state.hidden = false; toast.hidden = true; startDownload(); }
+    refresh();
+  });
+  $("lang-seg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    state.lang = b.dataset.lang; press("lang-seg", "data-lang", state.lang);
+    $("note").textContent = t(UI.note); $("f1").textContent = t(UI.f1); $("sel-corner").textContent = t(UI.corner);
+    refresh();
+  });
+  $("theme-seg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const v = b.dataset.themeSet;
+    if (v) document.documentElement.setAttribute("data-theme", v); else document.documentElement.removeAttribute("data-theme");
+    press("theme-seg", "data-theme-set", v);
+  });
+  $("pal-seg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    stage.dataset.pal = b.dataset.pal; press("pal-seg", "data-pal", b.dataset.pal);
+  });
+  $("f1").addEventListener("click", toggleF1);
+  $("sel-corner").addEventListener("click", () => { state.selCorner = !state.selCorner; refresh(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "F1") { e.preventDefault(); toggleF1(); } });
+  stage.addEventListener("mousemove", (e) => place(e.clientX, e.clientY));
+  stage.addEventListener("mouseleave", () => place());
+  addEventListener("resize", () => refresh());
+
+  refresh();
+})();
+</script>

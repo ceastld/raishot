@@ -1,0 +1,268 @@
+<title>选区圆角方案对比</title>
+<style>
+/* 布局：方案切换 → 1000×560 冻结桌面舞台（按宽度缩放）→ 当前导出结果与方案说明。深色优先，配色沿用 GPUI Palette。 */
+:root {
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --selected: #28473d; --accent: #40ce9d; --off: #5b6673;
+  --page: #0f1317; --sel: #1498ff; --desk: #0c0e11; --desk-2: #15191e; --desk-line: #2a3038;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --off: #a9b4be; --page: #e8edf1; color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --off: #a9b4be; --page: #e8edf1; color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); padding-block: 18px 40px; padding-inline: 16px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button:disabled { cursor: not-allowed; }
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+h1 { font-size: 17px; font-weight: 600; margin: 0; }
+.tog { margin-left: auto; display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); flex-wrap: wrap; }
+.tog button { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.tog button.on { background: var(--bg); color: var(--fg); font-weight: 600; }
+.stage-box { width: 100%; overflow: hidden; border-radius: 10px; border: 1px solid var(--border); }
+.stage { position: relative; width: 1000px; height: 560px; transform-origin: 0 0; overflow: hidden; background: var(--desk); user-select: none; }
+.desk { position: absolute; left: 0; top: 0; width: 1000px; height: 560px; color: #aab4bf; font: 13px/1.5 var(--ui); background: var(--desk); }
+.desk .win { position: absolute; left: 30px; top: 24px; width: 940px; height: 512px; background: var(--desk-2); border: 1px solid var(--desk-line); border-radius: 8px; overflow: hidden; }
+.desk .side { position: absolute; left: 0; top: 0; bottom: 0; width: 180px; border-right: 1px solid var(--desk-line); padding: 16px 14px; display: flex; flex-direction: column; gap: 14px; font-size: 12.5px; color: #8e99a5; }
+.desk .main { position: absolute; left: 210px; right: 28px; top: 28px; display: flex; flex-direction: column; gap: 12px; }
+.desk .h { font-size: 19px; color: #e6edf3; font-weight: 600; }
+.desk .card { border: 1px solid var(--desk-line); border-radius: 6px; padding: 10px 12px; background: #1a1f25; }
+.desk .chart { height: 130px; border-radius: 6px; background: linear-gradient(180deg,#1c2b38,#17202a); position: relative; }
+.desk .chart span { position: absolute; bottom: 0; width: 28px; border-radius: 3px 3px 0 0; background: #2f7fb8; }
+.mask { position: absolute; inset: 0; background: rgba(0,0,0,.5); pointer-events: none; }
+.sel { position: absolute; left: 300px; top: 150px; width: 420px; height: 250px; }
+.shot { position: absolute; inset: 0; overflow: hidden; transition: border-radius .15s, box-shadow .15s; }
+.shot .desk { left: -300px; top: -150px; }
+.bord { position: absolute; inset: 0; pointer-events: none; transition: border-radius .15s; }
+.edge { position: absolute; inset: 0; border: 1.5px dashed var(--sel); pointer-events: none; opacity: .7; }
+.h8 { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 1.5px solid var(--sel); transform: translate(-50%,-50%); }
+
+.bar { position: absolute; left: 300px; top: 106px; z-index: 5; display: flex; align-items: center; gap: 2px; height: 34px; padding: 0 3px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0,0,0,.35); font: 12px/1 var(--ui); white-space: nowrap; color: var(--fg); }
+.bb { height: 28px; min-width: 28px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.bb:hover:not(:disabled) { background: var(--hover); }
+.bb.on { background: var(--selected); color: var(--accent); font-weight: 600; }
+.bb.open { background: var(--hover); }
+.bb:disabled { color: var(--off); }
+.num { font-variant-numeric: tabular-nums; }
+.dim { color: var(--muted); font-weight: 400; }
+.sep { width: 1px; height: 16px; background: var(--border); margin: 0 3px; flex: none; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.s { width: 11px; height: 11px; }
+.thumb { width: 22px; height: 16px; display: grid; place-items: center; }
+.thumb i { display: block; width: 14px; height: 10px; background: #7d8a97; }
+.new { position: absolute; top: -7px; right: -5px; font-size: 9px; line-height: 1; padding: 2px 4px; border-radius: 6px; background: var(--accent); color: var(--bg); font-weight: 700; }
+.rel { position: relative; }
+
+.pop { position: absolute; z-index: 6; top: 146px; width: 270px; padding: 10px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 16px 40px rgba(0,0,0,.5); font: 12px/1.4 var(--ui); display: flex; flex-direction: column; gap: 6px; color: var(--fg); }
+.pop .ttl { font-weight: 600; font-size: 12px; color: var(--muted); padding: 0 2px 2px; }
+.prow { display: grid; grid-template-columns: 86px 1fr 34px; align-items: center; gap: 8px; min-height: 30px; padding: 0 2px; }
+.prow.off { color: var(--off); }
+.sw { display: inline-flex; align-items: center; gap: 7px; height: 26px; }
+.sw b { width: 26px; height: 15px; border-radius: 8px; background: var(--off); position: relative; flex: none; transition: background .12s; }
+.sw b::after { content: ""; position: absolute; left: 2px; top: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; transition: left .12s; }
+.sw.on b { background: var(--accent); }
+.sw.on b::after { left: 13px; }
+.sw.lock b { opacity: .55; }
+.sw:disabled b { opacity: .35; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=range]:disabled { opacity: .35; }
+.pv { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.lockt { font-size: 11px; color: var(--muted); }
+.cols { display: flex; gap: 6px; padding: 0 2px 4px 2px; align-items: center; }
+.cols .lab { width: 80px; color: var(--muted); }
+.cols button { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border); }
+.cols button.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.info { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; }
+.box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.box h2 { font-size: 13px; margin: 0 0 8px; font-weight: 600; }
+.box ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.res { font-size: 13px; }
+.res code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; background: var(--hover); padding: 1px 6px; border-radius: 4px; }
+.warn { color: #e8a54b; }
+.ok { color: var(--accent); }
+@media (max-width: 700px) { .info { grid-template-columns: 1fr; } .tog { margin-left: 0; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>选区样式里的圆角放哪</h1>
+    <div class="tog" role="tablist">
+      <button id="t-now" data-s="now">现状</button>
+      <button id="t-a" data-s="a" class="on">方案 A · 圆角独立</button>
+      <button id="t-b" data-s="b">方案 B · 三开关</button>
+      <button id="t-b2" data-s="b2">方案 B · 仅图标</button>
+    </div>
+  </div>
+  <div class="stage-box"><div class="stage" id="stage"></div></div>
+  <div class="info">
+    <div class="box"><h2>现在会导出</h2><div class="res" id="res"></div></div>
+    <div class="box"><h2 id="note-h"></h2><ul id="note"></ul></div>
+  </div>
+</div>
+
+<script>
+const S = { shadowColor: "#000000", borderColor: "#40ce9d", scheme: "a", preset: "raw", corner: true, radius: 8, shadow: false, border: false, cardShadow: true, pop: null };
+const PRESETS = [["raw"], ["card"], ["stroke"]];
+const NAME = { now: { raw: "原样", card: "卡片", stroke: "描边" }, a: { raw: "纯图", card: "卡片", stroke: "描边" } };
+
+function deskHTML() {
+  const bars = [40,72,55,96,80,110,64,88,120,70,100,58].map((h,i)=>`<span style="left:${18+i*42}px;height:${h}px"></span>`).join("");
+  return `<div class="desk"><div class="win"><div class="side"><b style="color:#e6edf3">项目看板</b><span>概览</span><span>任务</span><span>发布</span><span>设置</span></div>
+  <div class="main"><div class="h">10 月发布进度</div><div class="card">已完成 38 项 · 进行中 12 项 · 阻塞 2 项</div>
+  <div class="chart">${bars}</div><div class="card">下一次版本：0.5.0 · 预计 10-22</div></div></div></div>`;
+}
+
+// 各方案把界面状态解析成实际外观。
+function effective() {
+  const s = S;
+  if (s.scheme === "b" || s.scheme === "b2") return { corner: s.corner, shadow: s.shadow, border: s.border };
+  if (s.preset === "raw") return { corner: s.scheme === "a" && s.corner, shadow: false, border: false };
+  if (s.preset === "card") return { corner: s.corner, shadow: true, border: false };
+  return { corner: s.corner, shadow: s.shadow, border: true };
+}
+
+const ic = {
+  chev: `<svg class="i s" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>`,
+  corner: `<svg class="i" viewBox="0 0 16 16"><path d="M3 13V8a5 5 0 0 1 5-5h5"/></svg>`,
+  shadow: `<svg class="i" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="9" height="9" rx="1"/><path d="M13.5 5v8.5H5" opacity=".55"/></svg>`,
+  border: `<svg class="i" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="1" stroke-width="2.4"/></svg>`,
+  refresh: `<svg class="i" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v3h-3"/></svg>`,
+  more: `<svg class="i" viewBox="0 0 16 16"><circle cx="4" cy="8" r=".9" fill="currentColor"/><circle cx="8" cy="8" r=".9" fill="currentColor"/><circle cx="12" cy="8" r=".9" fill="currentColor"/></svg>`,
+  check: `<svg class="i s" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></svg>`,
+};
+function thumb(p, corner) {
+  const r = corner ? "3px" : "0";
+  const st = p === "card" ? `box-shadow:2px 2px 0 rgba(0,0,0,.55);` : p === "stroke" ? `outline:2px solid var(--accent);outline-offset:1px;` : "";
+  return `<span class="thumb"><i style="border-radius:${r};${st}"></i></span>`;
+}
+
+function barHTML() {
+  const s = S, e = effective();
+  let h = `<button class="bb num" title="位置和尺寸">420 × 250 ${ic.chev}</button><span class="sep"></span>`;
+  if (s.scheme === "b" || s.scheme === "b2") {
+    const text = s.scheme === "b";
+    for (const [k, label] of [["corner","圆角"],["shadow","阴影"],["border","边框"]]) {
+      const on = s[k];
+      const extra = text && k === "corner" && on ? ` <span class="num dim">${s.radius}</span>` : "";
+      h += `<button class="bb ${on?"on":""}" data-tg="${k}" title="${label}${on?"（开）":"（关）"} · 点击开关${k==="corner"?" · 滚轮调半径":""}">${ic[k]}${text?label:""}${extra}</button>`;
+    }
+    h += `<button class="bb ${s.pop==="panel"?"open":""}" data-pop="panel" title="参数">${ic.chev}</button>`;
+  } else {
+    for (const [p] of PRESETS) {
+      const cur = p === s.preset;
+      h += `<button class="bb ${cur?"on":""}" data-preset="${p}" title="${NAME[s.scheme][p]}">${thumb(p, s.scheme==="now" ? (p!=="raw" && s.corner) : s.corner)}</button>`;
+    }
+    h += `<button class="bb ${s.pop==="panel"?"open":""}" data-pop="panel" title="样式参数">${ic.chev}</button>`;
+    if (s.scheme === "a") {
+      h += `<span class="sep"></span><span class="rel"><button class="bb ${s.corner?"on":""}" data-tg="corner" title="圆角 · 点击开关 · 滚轮调半径">${ic.corner}<span class="num">${s.corner ? s.radius : "直角"}</span></button><span class="new">新</span></span>`;
+    }
+  }
+  h += `<span class="sep"></span><button class="bb" title="刷新">${ic.refresh}</button><button class="bb" title="更多">${ic.more}</button>`;
+  return h;
+}
+
+function sw(id, on, opts = {}) {
+  return `<button class="sw ${on?"on":""} ${opts.lock?"lock":""}" data-tg="${id}" ${opts.disabled||opts.lock?"disabled":""}><b></b>${opts.text||""}</button>`;
+}
+function colorsHTML(key, list) {
+  return `<div class="cols"><span class="lab">颜色</span>${list.map(c=>`<button class="${S[key]===c?"on":""}" data-color="${key}" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("")}</div>`;
+}
+function popHTML() {
+  const s = S, e = effective();
+  const multi = s.scheme === "b" || s.scheme === "b2";
+  const raw = !multi && s.preset === "raw";
+  let rows = "";
+  if (!multi) {
+    rows += `<div class="ttl">${NAME[s.scheme][s.preset]} · 参数</div>`;
+  } else rows += `<div class="ttl">效果参数</div>`;
+  // 圆角
+  const cornerDisabled = s.scheme === "now" && raw;
+  rows += `<div class="prow ${cornerDisabled?"off":""}"><span>${sw("corner", s.corner && !cornerDisabled, {disabled: cornerDisabled, text: "圆角"})}</span>
+    <input type="range" id="r-radius" min="2" max="40" value="${s.radius}" ${cornerDisabled||!s.corner?"disabled":""}><span class="pv">${s.radius}</span></div>`;
+  // 阴影
+  let shadowRow;
+  if (multi) shadowRow = sw("shadow", s.shadow, {text:"阴影"});
+  else if (raw) shadowRow = sw("shadow", false, {disabled:true, text:"阴影"});
+  else if (s.preset === "card") shadowRow = sw("shadow", true, {lock:true, text:"阴影 <span class='lockt'>自带</span>"});
+  else shadowRow = sw("shadow", s.shadow, {text:"阴影"});
+  rows += `<div class="prow ${raw?"off":""}"><span>${shadowRow}</span><input type="range" min="0" max="40" value="16" ${e.shadow?"":"disabled"}><span class="pv">16</span></div>`;
+  if (e.shadow) rows += colorsHTML("shadowColor", ["#000000","#1f2a44","#3b2a1a","#2b1f3a"]);
+  // 边框
+  let borderRow;
+  if (multi) borderRow = sw("border", s.border, {text:"边框"});
+  else if (s.preset === "stroke") borderRow = sw("border", true, {lock:true, text:"边框 <span class='lockt'>自带</span>"});
+  else borderRow = sw("border", false, {disabled:true, text:"边框"});
+  rows += `<div class="prow ${e.border?"":"off"}"><span>${borderRow}</span><input type="range" min="1" max="12" value="3" ${e.border?"":"disabled"}><span class="pv">3</span></div>`;
+  if (e.border) rows += colorsHTML("borderColor", ["#40ce9d","#ffffff","#1498ff","#ff5a5a","#f5c542"]);
+  if (s.scheme === "now" && raw) rows += `<div class="lockt warn" style="padding:2px">原样下开关置灰：想要“原图 + 圆角”没有办法</div>`;
+  return rows;
+}
+
+function render() {
+  const s = S, e = effective();
+  const st = document.getElementById("stage");
+  const r = e.corner ? s.radius : 0;
+  const handles = [[0,0],[50,0],[100,0],[100,50],[100,100],[50,100],[0,100],[0,50]].map(([x,y])=>`<span class="h8" style="left:${x}%;top:${y}%"></span>`).join("");
+  st.innerHTML = deskHTML() + `<div class="mask"></div>
+    <div class="sel"><div class="shot" style="border-radius:${r}px;${e.shadow?"box-shadow:0 10px 30px ${S.shadowColor}c0,0 2px 6px ${S.shadowColor}99;":""}">${deskHTML()}</div>
+    ${e.border?`<div class="bord" style="border-radius:${r?r+3:0}px;inset:-3px;border:3px solid ${S.borderColor}"></div>`:""}
+    <div class="edge"></div>${handles}</div>
+    <div class="bar" id="bar">${barHTML()}</div>
+    ${s.pop==="panel"?`<div class="pop" id="pop" style="left:${s.scheme==="b"?520:s.scheme==="b2"?330:400}px">${popHTML()}</div>`:""}`;
+  document.querySelectorAll(".tog button").forEach(b=>b.classList.toggle("on", b.dataset.s===s.scheme));
+  // 结果
+  const parts = [];
+  if (NAME[s.scheme]) parts.push(NAME[s.scheme][s.preset]);
+  parts.push(e.corner ? `圆角 ${s.radius}px` : "直角");
+  if (e.shadow) parts.push("阴影");
+  if (e.border) parts.push("边框 3px");
+  let extra = "";
+  if (s.scheme === "now" && s.preset === "raw" && s.corner) extra = `<p class="warn">圆角开关是开着的，但原样把它屏蔽了，结果仍是直角。</p>`;
+  if (s.scheme === "a" && s.preset === "raw" && s.corner) extra = `<p class="ok">纯图也能带圆角：这就是现在缺的组合。</p>`;
+  document.getElementById("res").innerHTML = `<p style="margin:0 0 6px"><code>${parts.join(" + ")}</code></p>${extra}<p class="dim" style="margin:0;font-size:12px">点条上的按钮试试；圆角按钮上可以滚滚轮调半径。</p>`;
+  const notes = {
+    now: ["现状", ["原样 / 卡片 / 描边三选一，圆角开关藏在面板里", "原样下圆角、阴影都置灰，所以“原图只加圆角”做不到", "开关是跨样式共享的记忆，看不出当前样式到底用没用上"]],
+    a: ["方案 A：圆角从样式里拿出来", ["样式只管装饰：纯图 / 卡片（自带阴影）/ 描边（自带边框）", "圆角是条上独立的按钮，三个样式都生效，开着时显示半径", "点按钮开关，滚轮调半径；面板里圆角一行也永远可用", "“原样”改名“纯图”，配置里仍存 raw，不用迁移"]],
+    b: ["方案 B：三个独立开关", ["圆角 / 阴影 / 边框各一个带文字的开关，任意组合", "最灵活，但条更宽（约多 90px），窄屏要收起", "回到“只看开关”的模型，样式缩略图一键切换没了", "之前改样式就是因为开关多了分不清，这里靠加文字来补"]],
+    b2: ["方案 B · 仅图标", ["和方案 B 同一套逻辑，只是三个开关只留图标，条最窄（比现状还窄约 20px）", "开着的开关整格高亮，悬停提示写明名称和开/关", "圆角按钮上滚轮调半径，但条上看不到半径数值", "这和改样式之前最早的版本很像，当时的问题是三个图标难分、开没开看不清；要靠图标画得够有区别"]],
+  }[s.scheme];
+  document.getElementById("note-h").textContent = notes[0];
+  document.getElementById("note").innerHTML = notes[1].map(t=>`<li>${t}</li>`).join("");
+  fit();
+}
+
+function fit() {
+  const box = document.querySelector(".stage-box"), st = document.getElementById("stage");
+  const k = Math.min(1, box.clientWidth / 1000);
+  st.style.transform = `scale(${k})`; box.style.height = 560 * k + "px";
+}
+
+document.addEventListener("click", ev => {
+  const t = ev.target.closest("button"); if (!t || t.disabled) return;
+  if (t.dataset.s) { S.scheme = t.dataset.s; S.pop = null; }
+  else if (t.dataset.preset) {
+    if (S.preset === t.dataset.preset) S.pop = S.pop ? null : "panel"; else S.preset = t.dataset.preset;
+  }
+  else if (t.dataset.pop) S.pop = S.pop ? null : "panel";
+  else if (t.dataset.tg) S[t.dataset.tg] = !S[t.dataset.tg];
+  else if (t.dataset.color) S[t.dataset.color] = t.dataset.c;
+  else return;
+  render();
+});
+document.addEventListener("input", ev => {
+  if (ev.target.id === "r-radius") { S.radius = +ev.target.value; const keep = S.pop; render(); S.pop = keep; document.getElementById("r-radius")?.focus(); }
+});
+document.addEventListener("wheel", ev => {
+  const t = ev.target.closest('[data-tg="corner"]'); if (!t || !S.corner) return;
+  ev.preventDefault(); S.radius = Math.max(2, Math.min(40, S.radius + (ev.deltaY < 0 ? 1 : -1))); render();
+}, { passive: false });
+addEventListener("resize", fit);
+render();
+</script>

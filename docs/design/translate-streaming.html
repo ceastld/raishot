@@ -1,0 +1,236 @@
+<title>RaiShot 流式翻译</title>
+<style>
+/* 布局：顶部情景切换 + 三栏并排的“译文”页（窄屏堆叠），同一套模拟时序同时播放，便于比较首字与完成时间。 */
+:root {
+  /* 与 design/ocr-panel.html、src/capture_toolbar.rs Palette 一致；深色为默认 */
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --accent: #40ce9d; --accent-fg: #0e1d17;
+  --page: #0f1317; --skeleton: #2b333d; --gold: #f2b632; --danger: #ff6b7a;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+    --hover: #eaf0f3; --accent: #126d4e; --accent-fg: #ffffff;
+    --page: #e8edf1; --skeleton: #e2e8ed; --gold: #b07800; --danger: #c23a4a;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+  --hover: #eaf0f3; --accent: #126d4e; --accent-fg: #ffffff;
+  --page: #e8edf1; --skeleton: #e2e8ed; --gold: #b07800; --danger: #c23a4a;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); margin: 0; padding-inline: 16px; padding-block: 18px 40px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.top h1 { font-size: 17px; font-weight: 600; margin: 0; text-wrap: balance; }
+.top h1 span { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.ctrls { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg); }
+.seg button { height: 30px; padding: 0 12px; font-size: 13px; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.seg button:not([aria-pressed="true"]):hover { background: var(--hover); }
+.btn { height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); font-size: 13px; }
+.btn:hover { background: var(--hover); }
+.note { color: var(--muted); font-size: 13px; margin: 0; max-width: 90ch; }
+.note b { color: var(--fg); font-weight: 600; }
+
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 960px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+.panel { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; min-width: 0; }
+.ph { display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px; border-bottom: 1px solid var(--border); }
+.ph h2 { font-size: 13.5px; font-weight: 600; margin: 0; }
+.tag { font-size: 11px; letter-spacing: .04em; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.tag.done { border-color: var(--accent); color: var(--accent); }
+.tag.idea { border-color: var(--gold); color: var(--gold); }
+.ph .tag { margin-left: auto; }
+.how { font-size: 12px; color: var(--muted); padding: 6px 12px 0; margin: 0; }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 8px 12px 10px; font-variant-numeric: tabular-nums; }
+.metrics div { display: flex; flex-direction: column; }
+.metrics span { font-size: 11px; color: var(--muted); letter-spacing: .03em; }
+.metrics strong { font: 600 16px/1.3 var(--mono); }
+.metrics strong.wait { color: var(--muted); font-weight: 400; }
+.body { border-top: 1px solid var(--border); padding: 6px; height: 460px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.status { padding: 4px 6px 8px; font-size: 12px; color: var(--muted); }
+.card { padding: 6px 8px; border-radius: 6px; display: flex; flex-direction: column; gap: 3px; }
+.card:hover { background: var(--hover); }
+.src { font-size: 11.5px; line-height: 17px; color: var(--muted); }
+.dst { font-size: 13px; line-height: 21px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.caret::after { content: ""; display: inline-block; width: 7px; height: 14px; margin-left: 2px; vertical-align: -2px; background: var(--accent); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.skel { display: flex; flex-direction: column; gap: 7px; padding: 6px 8px; }
+.skel i { display: block; height: 10px; border-radius: 5px; background: var(--skeleton); animation: pulse 1.4s ease-in-out infinite; }
+.card .skel { padding: 4px 0 2px; }
+@keyframes pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .caret::after, .skel i { animation: none; } }
+.foot { color: var(--muted); font-size: 12px; margin: 0; }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>流式翻译体验<span>OCR 面板 · 译文页</span></h1>
+    <div class="ctrls">
+      <div class="seg" role="group" aria-label="服务情景" id="presets"></div>
+      <button class="btn" id="replay" type="button">重新播放</button>
+    </div>
+  </div>
+  <p class="note" id="presetNote"></p>
+
+  <div class="grid">
+    <section class="panel" id="pA">
+      <div class="ph"><h2>整段等待</h2><span class="tag">旧版</span></div>
+      <p class="how">一次请求，全部生成完才显示。</p>
+      <div class="metrics"></div>
+      <div class="body"></div>
+    </section>
+    <section class="panel" id="pB">
+      <div class="ph"><h2>流式</h2><span class="tag done">已实现</span></div>
+      <p class="how">同一个请求，边生成边逐段对照显示。</p>
+      <div class="metrics"></div>
+      <div class="body"></div>
+    </section>
+    <section class="panel" id="pC">
+      <div class="ph"><h2>分段并发 × 4 + 流式</h2><span class="tag idea">候选</span></div>
+      <p class="how">每段一个请求，4 路同时跑，各自流式。</p>
+      <div class="metrics"></div>
+      <div class="body"></div>
+    </section>
+  </div>
+  <p class="foot">模拟时序，不连真实服务。三栏使用同一次随机排队时间；每次“重新播放”换一组。中文译文按约 1.5 字／token 换算生成速度。</p>
+</div>
+
+<script>
+const PARAS = [
+  { src: "RaiShot 0.9 adds a recognition menu next to the capture toolbar. Text recognition, table recognition, image translation and QR codes now share one button that remembers your last choice.",
+    dst: "RaiShot 0.9 在截图工具栏旁新增了识别菜单。文字识别、表格识别、图片翻译和二维码现在共用一个按钮，并会记住你上次的选择。" },
+  { src: "The OCR panel opens next to the selection and keeps the original layout: paragraphs are merged by line spacing and indentation, and tables stay inline as real rows and columns.",
+    dst: "OCR 面板在选区旁打开并保留原始版式：段落按行距和缩进合并，表格以真实的行和列内嵌显示。" },
+  { src: "Hovering a paragraph in the panel highlights the matching region on the screenshot, so you can check what was recognized without leaving the capture.",
+    dst: "在面板中悬停某个段落时，截图上对应的区域会高亮，无需离开截图即可核对识别结果。" },
+  { src: "Translation only sends the recognized text to the service you configure. Images, the clipboard and other parts of the screenshot never leave your computer.",
+    dst: "翻译只会把识别出的文字发送到你配置的服务。图片、剪贴板和截图的其他部分都不会离开你的电脑。" },
+  { src: "Pinned screenshots keep annotations as vectors. Copying, saving or dragging a pin renders the image at that moment, so zooming never blurs arrows or text.",
+    dst: "贴图以矢量形式保存标注。复制、保存或拖出贴图时才渲染图片，因此缩放不会让箭头或文字变模糊。" },
+  { src: "Press Esc at any time to leave the text layer. Your selection and annotations stay exactly where they were.",
+    dst: "随时按 Esc 即可退出文字层，选区和标注都会保持原样。" },
+];
+
+const PRESETS = {
+  healthy: { label: "服务空闲", queue: [1.4, 3.2], cps: 30,
+    note: "<b>默认服务空闲时</b>：实测首字 1.7–6 秒，生成约 20 token/s（约 30 个汉字／秒）。流式让第一段在首字后马上可读；分段并发把总时间压到约三分之一。" },
+  busy: { label: "服务繁忙", queue: [4.5, 8], cps: 22,
+    note: "<b>默认服务繁忙时</b>（今晚实测）：排队 4 秒以上，很多请求直接 503／504。流式只能缩短排队之后的等待；分段并发会让更多请求排队失败，这里未模拟失败。" },
+  fast: { label: "快速服务", queue: [0.3, 0.7], cps: 90,
+    note: "<b>带密钥的商用兼容服务</b>（估计量级）：首字不到 1 秒、生成快数倍。换服务对速度的影响远大于显示方式。" },
+};
+const WORKERS = 4;
+let preset = "healthy";
+try { preset = localStorage.getItem("rs-stream-preset") || preset; } catch (_) {}
+if (!PRESETS[preset]) preset = "healthy";
+
+// 可复现的随机数：三栏共用同一组排队时间
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+let plan, start, raf;
+const full = PARAS.map(p => p.dst).join("\n\n");
+const chars = s => [...s];
+
+function makePlan() {
+  const p = PRESETS[preset];
+  const r = rng(Math.floor(Math.random() * 1e9));
+  const q = () => p.queue[0] + r() * (p.queue[1] - p.queue[0]);
+  const single = q();
+  const total = chars(full).length;
+  const workers = Array(WORKERS).fill(0);
+  const paras = PARAS.map(para => {
+    const w = workers.indexOf(Math.min(...workers));
+    const first = workers[w] + q();
+    const end = first + chars(para.dst).length / p.cps;
+    workers[w] = end;
+    return { first, end, len: chars(para.dst).length };
+  });
+  return { cps: p.cps, single, singleEnd: single + total / p.cps, total, paras };
+}
+
+function fmt(s) { return s.toFixed(1) + "s"; }
+function metrics(el, first, end, shown, t) {
+  const cell = (label, v, done) => `<div><span>${label}</span><strong class="${done ? "" : "wait"}">${v}</strong></div>`;
+  el.innerHTML =
+    cell("首字", t >= first ? fmt(first) : "…", t >= first) +
+    cell("全部完成", t >= end ? fmt(end) : fmt(t), t >= end) +
+    cell("已出段落", `${shown}/${PARAS.length}`, shown === PARAS.length);
+}
+const esc = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const skel = n => `<div class="skel">${Array.from({ length: n }, (_, i) => `<i style="width:${[92, 78, 85, 60][i % 4]}%"></i>`).join("")}</div>`;
+const card = (src, dst, live) => `<div class="card"><div class="src">${esc(src)}</div>${dst === null ? skel(2) : `<div class="dst${live ? " caret" : ""}">${esc(dst)}</div>`}</div>`;
+
+function render(t) {
+  const { single, singleEnd, paras, cps } = plan;
+  // A：整段等待
+  const a = document.querySelector("#pA");
+  metrics(a.querySelector(".metrics"), singleEnd, singleEnd, t >= singleEnd ? PARAS.length : 0, t);
+  a.querySelector(".body").innerHTML = t < singleEnd
+    ? `<div class="status">正在翻译…</div>${skel(4)}${skel(3)}`
+    : PARAS.map(p => card(p.src, p.dst, false)).join("");
+
+  // B：单请求流式，按空行切段逐段对照（与 capture_ocr_panel.rs 的渲染一致）
+  const b = document.querySelector("#pB");
+  const n = Math.max(0, Math.min(chars(full).length, Math.floor((t - single) * cps)));
+  const text = chars(full).slice(0, n).join("");
+  const parts = text.split("\n\n").map(s => s.trim()).filter(Boolean);
+  const bDone = t >= singleEnd;
+  metrics(b.querySelector(".metrics"), single, singleEnd, bDone ? PARAS.length : Math.max(0, parts.length - 1), t);
+  b.querySelector(".body").innerHTML = n === 0
+    ? `<div class="status">正在翻译…</div>${skel(4)}${skel(3)}`
+    : parts.map((d, i) => card(PARAS[i].src, d, !bDone && i === parts.length - 1)).join("") +
+      (bDone ? "" : `<div class="status">正在翻译…</div>`);
+
+  // C：分段并发，每段独立流式；未开始的段先显示原文和占位
+  const c = document.querySelector("#pC");
+  const firstC = Math.min(...paras.map(p => p.first));
+  const endC = Math.max(...paras.map(p => p.end));
+  metrics(c.querySelector(".metrics"), firstC, endC, paras.filter(p => t >= p.end).length, t);
+  c.querySelector(".body").innerHTML = PARAS.map((p, i) => {
+    const k = Math.floor((t - paras[i].first) * cps);
+    if (k <= 0) return card(p.src, null, false);
+    const live = t < paras[i].end;
+    return card(p.src, chars(p.dst).slice(0, k).join(""), live);
+  }).join("");
+
+  return t < Math.max(singleEnd, endC) + 0.2;
+}
+
+function play() {
+  cancelAnimationFrame(raf);
+  plan = makePlan();
+  start = performance.now();
+  const tick = now => { if (render((now - start) / 1000)) raf = requestAnimationFrame(tick); };
+  raf = requestAnimationFrame(tick);
+  render(0);
+}
+
+const seg = document.querySelector("#presets");
+for (const [key, p] of Object.entries(PRESETS)) {
+  const b = document.createElement("button");
+  b.type = "button"; b.id = "preset-" + key; b.textContent = p.label;
+  b.addEventListener("click", () => { preset = key; try { localStorage.setItem("rs-stream-preset", key); } catch (_) {} sync(); play(); });
+  seg.append(b);
+}
+function sync() {
+  for (const b of seg.children) b.setAttribute("aria-pressed", String(b.id === "preset-" + preset));
+  document.querySelector("#presetNote").innerHTML = PRESETS[preset].note;
+}
+document.querySelector("#replay").addEventListener("click", play);
+sync();
+play();
+</script>

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <meta name="color-scheme" content="light">
+  <title>RustShot Browser QA</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #152238; color: #f3f5f8; }
+    body { font: 14px/20px Arial, sans-serif; }
+    header { box-sizing: border-box; height: 64px; padding: 10px 24px; overflow: hidden; background: #152238; }
+    h1 { font-size: 16px; line-height: 24px; margin: 0; }
+    p { margin: 0; }
+    #scroller { width: 320px; height: 240px; margin: 24px; overflow-x: hidden; overflow-y: scroll; scrollbar-width: none; scroll-behavior: auto; overscroll-behavior: contain; background: #203040; }
+    #scroller::-webkit-scrollbar { display: none; width: 0; height: 0; }
+    #world { display: block; width: 320px; height: 720px; image-rendering: pixelated; background: #203040; }
+    footer { margin: 0 24px; max-width: 800px; background: #152238; }
+  </style>
+</head>
+<body>
+  <header><h1 id="title"></h1><p>隔离浏览器长截图夹具：真实 DOM 滚动；文字在像素 oracle 区域外。</p></header>
+  <div id="scroller" tabindex="-1"><canvas id="world" aria-label="三屏高、按设备像素世界坐标绘制的噪声图"></canvas></div>
+  <footer><p id="scope">本轮只校准与手动滚动；不声明自动滚动、三万像素或网页文字渲染已验收。</p><p id="status"></p></footer>
+  <script>
+    'use strict';
+    (() => {
+      const nonce = new URL(location.href).searchParams.get('nonce');
+      if (!nonce || !/^[A-Za-z0-9_-]{20,128}$/.test(nonce)) throw new Error('缺少独立文档 nonce');
+      const documentEpoch = crypto.randomUUID();
+      document.title = `RustShot Browser QA ${nonce}`;
+      document.getElementById('title').textContent = document.title;
+      const scroller = document.getElementById('scroller');
+      const canvas = document.getElementById('world');
+      const dpr = devicePixelRatio;
+      const integer = value => Math.abs(value - Math.round(value)) < 1e-6;
+      if (!(dpr > 0) || ![320,240,720].every(n => integer(n*dpr))) throw new Error('CSS 范围未映射到整设备像素');
+      canvas.width = Math.round(320*dpr);
+      canvas.height = Math.round(720*dpr);
+      if (canvas.width > 2048 || canvas.height > 2048) throw new Error('本轮 canvas backing 超过 2048');
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) throw new Error('无法建立不透明 canvas');
+      const markerRects = [];
+      const phaseRects = [];
+      let documentHeightCss=720;
+      const paintWorld=height=>{
+        canvas.height = Math.round(height*dpr);
+        canvas.style.height = `${height}px`;
+        if (canvas.width > 2048 || canvas.height > 2048) throw new Error('本轮 canvas backing 超过 2048');
+        markerRects.length=0;
+        phaseRects.length=0;
+        const data = context.createImageData(canvas.width, canvas.height);
+        for (let y=0; y<canvas.height; y++) {
+          for (let x=0; x<canvas.width; x++) {
+            const n = ((Math.imul(y,157)+Math.imul(x,71)) ^ (Math.imul(y,17)+Math.imul(x,113))) >>> 0;
+            const i = (y*canvas.width+x)*4;
+            data.data[i] = (Math.imul(y,y)+Math.imul(x,41)) % 251;
+            data.data[i+1] = (Math.imul(y,13)+Math.imul(x,19)) % 251;
+            data.data[i+2] = n % 251;
+            data.data[i+3] = 255;
+          }
+        }
+        const rectangle = (x,y,width,height,rgba,kind,band) => {
+          const left=Math.round(x*dpr),top=Math.round(y*dpr);
+          const right=Math.round((x+width)*dpr),bottom=Math.round((y+height)*dpr);
+          const result={x:left,y:top,width:right-left,height:bottom-top,rgba,kind,band};
+          for (let row=top;row<bottom;row++) {
+            for (let col=left;col<right;col++) data.data.set(rgba,(row*canvas.width+col)*4);
+          }
+          return result;
+        };
+        for (let band=0;band<height/240;band++) {
+          const start=band*240;
+          markerRects.push(rectangle(0,start,12,12,[251,19,73,255],'top-left',band));
+          markerRects.push(rectangle(308,start,12,12,[17,239,101,255],'top-right',band));
+          markerRects.push(rectangle(0,start+228,12,12,[37,89,247,255],'bottom-left',band));
+          markerRects.push(rectangle(308,start+228,12,12,[233,181,29,255],'bottom-right',band));
+          // UI 六屏扩展保留前三屏色值，后续按三屏周期；字节无clamp/as-u8差异。
+          const phaseBand=band%3;
+          phaseRects.push(rectangle(12,start,296,2,[90+phaseBand*31,40+phaseBand*47,170-phaseBand*29,255],'phase',band));
+        }
+        context.putImageData(data,0,0);
+        documentHeightCss=height;
+      };
+      paintWorld(720);
+      let layoutEpoch=1;
+      let scrollEpoch=0;
+      let observerMode='manual';
+      let scenario='backend', scenarioConfigured=false;
+      let wheelEvents=0, scrollEvents=0, eventSequence=0;
+      let lastScrollTop=scroller.scrollTop, lastScrollLeft=scroller.scrollLeft;
+      const eventLimit=256, eventLog=[];
+      let signature='';
+      const plainRect = rect => ({left:rect.left,top:rect.top,width:rect.width,height:rect.height});
+      const measure = () => {
+        const rect=plainRect(scroller.getBoundingClientRect());
+        const viewport=visualViewport;
+        if (!viewport) throw new Error('缺少 visualViewport');
+        const visual={width:viewport.width,height:viewport.height,offset_left:viewport.offsetLeft,offset_top:viewport.offsetTop,scale:viewport.scale};
+        const next=JSON.stringify({dpr:devicePixelRatio,visual,rect,inner_width:innerWidth,inner_height:innerHeight});
+        if (signature && signature !== next) layoutEpoch++;
+        signature=next;
+        return {document_nonce:nonce,document_epoch:documentEpoch,layout_epoch:layoutEpoch,scroll_epoch:scrollEpoch,
+          title:document.title,url:location.href,dpr:devicePixelRatio,visual_viewport:visual,scrollport:rect,
+          viewport:{width:innerWidth,height:innerHeight},scroll_top:scroller.scrollTop,scroll_left:scroller.scrollLeft,
+          scroll_height:scroller.scrollHeight,client_width:scroller.clientWidth,client_height:scroller.clientHeight,
+          pattern_id:'bgra-world-v1',noise_width:canvas.width,noise_height:canvas.height,
+          marker_rects:markerRects,phase_rects:phaseRects,text_rects:[],text_outside_oracle:true,ready:true,
+          observer_mode:observerMode,
+          scenario,document_height_css:documentHeightCss,
+          input_observer:{wheel_events:wheelEvents,scroll_events:scrollEvents,last_event_sequence:eventSequence,
+            log_limit:eventLimit,log_dropped:Math.max(0,eventSequence-eventLog.length),events:eventLog.slice()},
+          observed_unix_ms:Date.now()};
+      };
+      const recordEvent=(event,delta)=>{
+        eventLog.push({sequence:++eventSequence,type:event.type,is_trusted:event.isTrusted,
+          observed_unix_ms:Date.now(),event_timestamp_ms:event.timeStamp,document_epoch:documentEpoch,
+          layout_epoch:layoutEpoch,scroll_epoch:scrollEpoch,dpr:devicePixelRatio,
+          scroll_top:scroller.scrollTop,scroll_left:scroller.scrollLeft,...delta});
+        if (eventLog.length>eventLimit) eventLog.shift();
+      };
+      // 仅记录浏览器实际事件；不取消默认行为，不赋 scrollTop，也不派发合成事件。
+      scroller.addEventListener('wheel',event=>{
+        wheelEvents++;
+        recordEvent(event,{delta_x:event.deltaX,delta_y:event.deltaY,delta_z:event.deltaZ,delta_mode:event.deltaMode});
+      },{passive:true});
+      scroller.addEventListener('scroll',event=>{
+        scrollEpoch++;
+        scrollEvents++;
+        recordEvent(event,{actual_delta_top_css:scroller.scrollTop-lastScrollTop,actual_delta_left_css:scroller.scrollLeft-lastScrollLeft});
+        lastScrollTop=scroller.scrollTop;
+        lastScrollLeft=scroller.scrollLeft;
+        document.getElementById('status').textContent=`实际 scrollTop=${scroller.scrollTop} CSS，设备相位=${scroller.scrollTop*dpr}，epoch=${scrollEpoch}`;
+      },{passive:true});
+      const settled = (previousScrollTop, requireMovement) => new Promise((resolve,reject)=>{
+        let last=null, stableFrames=0, finished=false;
+        const timeout=setTimeout(()=>{finished=true;reject(new Error('滚动/两帧稳定验证超时'));},5000);
+        const sample=()=>{
+          if (finished) return;
+          const state=measure();
+          const position=JSON.stringify({top:state.scroll_top,left:state.scroll_left,layout:state.layout_epoch});
+          if ((!requireMovement || state.scroll_top !== previousScrollTop) && position === last) stableFrames++;
+          else stableFrames=0;
+          last=position;
+          if (stableFrames>=2) { finished=true;clearTimeout(timeout);resolve(state); }
+          else requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      });
+      const configureMode=mode=>{
+        if (mode!=='manual' && mode!=='native-auto') throw new Error('未知 observer mode');
+        if (wheelEvents || scrollEvents || observerMode!=='manual') throw new Error('observer mode 仅能在任何输入前配置一次');
+        observerMode=mode;
+        if (mode==='native-auto') document.getElementById('scope').textContent='本轮观察生产原生 Auto 消息与实际 DOM 位移；不通过 CDP 输入或 DOM 修改帮助滚动。';
+        return measure();
+      };
+      const configureScenario=options=>{
+        if (scenarioConfigured || wheelEvents || scrollEvents || scroller.scrollTop!==0 || scroller.scrollLeft!==0) throw new Error('scenario仅能在无输入、起点、租约前配置一次');
+        if (!options || (options.scenario!=='backend' && options.scenario!=='ui')) throw new Error('未知scene');
+        const height=options.scenario==='ui'?1440:720;
+        if (options.document_height_css!==height || !integer(height*dpr)) throw new Error('scene高度不符合固定合同');
+        if (options.scenario==='ui' && observerMode!=='native-auto') throw new Error('UI组必须observe-only native-auto');
+        scenario=options.scenario;
+        if (height!==documentHeightCss) paintWorld(height);
+        scenarioConfigured=true;
+        if (scenario==='ui') document.getElementById('scope').textContent='本轮通过真实 GPUI 工具栏控制原生 Auto；页面只观察实际 DOM 位移，不通过 CDP 或 DOM 改写帮助滚动。';
+        return measure();
+      };
+      const api=Object.freeze({measure,settled,configureMode,configureScenario});
+      Object.defineProperty(window,'__rustshotLongBrowserQa',{value:api,writable:false,configurable:false});
+      measure();
+    })();
+  </script>
+</body>
+</html>

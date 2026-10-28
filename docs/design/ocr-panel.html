@@ -1,0 +1,1010 @@
+<title>RaiShot OCR 面板</title>
+<style>
+/* 布局：1280×720 逻辑舞台复刻冻结截图；结果面板停靠在选区右侧，上沿对齐选区、下沿对齐工具栏，与选区+工具栏组成一个整体。 */
+:root {
+  /* 与 src/capture_toolbar.rs Palette 一致；深色为默认，只有系统明确偏好浅色时才变浅 */
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --selected: #28473d; --accent: #40ce9d; --accent-fg: #0e1d17;
+  --page: #0f1317; --field: #161a20; --skeleton: #2b333d; --gold: #f2b632; --danger: #ff6b7a;
+  --shadow: 0 16px 40px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .3);
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  /* 截图像素与标注颜色不随主题变化 */
+  --shot-desk: #0d1014; --shot-win: #161a1f; --shot-side: #12151a; --shot-line: #262c34;
+  --shot-h: #e6ebf0; --shot-t: #bec7d0; --shot-m: #7c8895;
+  --frame: #2f8cff; --scan: #6ab7ff; --ocr-box: rgba(96, 157, 255, .78); --ocr-sel: rgba(96, 157, 255, .34);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+    --hover: #eaf0f3; --selected: #dcefe7; --accent: #126d4e; --accent-fg: #ffffff;
+    --page: #e8edf1; --field: #ffffff; --skeleton: #e2e8ed; --gold: #b07800; --danger: #c23a4a;
+    --shadow: 0 14px 36px rgba(24, 36, 48, .18), 0 2px 6px rgba(24, 36, 48, .08);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+  --hover: #eaf0f3; --selected: #dcefe7; --accent: #126d4e; --accent-fg: #ffffff;
+  --page: #e8edf1; --field: #ffffff; --skeleton: #e2e8ed; --gold: #b07800; --danger: #c23a4a;
+  --shadow: 0 14px 36px rgba(24, 36, 48, .18), 0 2px 6px rgba(24, 36, 48, .08);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); padding-inline: 16px; padding-block: 18px 48px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.i.s { width: 16px; height: 16px; }
+
+.wrapper { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.top h1 { font-size: 17px; font-weight: 600; margin: 0; text-wrap: balance; }
+.top h1 span { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.top .ctrls { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.btn:hover { background: var(--hover); }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+kbd { font: 11px var(--mono); padding: 1px 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--bg); }
+
+/* ---------- 舞台 ---------- */
+.stage-wrap { position: relative; width: 100%; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px var(--border); }
+.stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; overflow: hidden; user-select: none; background: var(--shot-desk); }
+.shot { position: absolute; inset: 0; font-family: var(--ui); }
+.win { position: absolute; left: 40px; top: 24px; width: 1200px; height: 676px; background: var(--shot-win); border-radius: 8px; border: 1px solid var(--shot-line); }
+.side { position: absolute; left: 40px; top: 24px; width: 64px; height: 676px; background: var(--shot-side); border-right: 1px solid var(--shot-line); border-radius: 8px 0 0 8px; }
+.side i { position: absolute; left: 20px; width: 24px; height: 24px; border-radius: 6px; background: #232931; }
+.ph { position: absolute; height: 10px; border-radius: 5px; background: #222830; }
+.sl { position: absolute; white-space: nowrap; line-height: 1.25; }
+.sl .c { position: absolute; top: 0; }
+.tline { position: absolute; height: 1px; background: var(--shot-line); }
+.card { position: absolute; border: 1px solid var(--shot-line); background: #1b2026; border-radius: 8px; }
+
+.mask { position: absolute; box-shadow: 0 0 0 4000px rgba(0, 0, 0, .46); pointer-events: none; }
+.frame { position: absolute; border: 1.5px solid var(--frame); pointer-events: none; }
+.frame i { position: absolute; width: 9px; height: 9px; background: #fff; border: 1.5px solid var(--frame); border-radius: 50%; }
+.sizetag { position: absolute; font: 12px var(--mono); color: #fff; background: rgba(20, 24, 30, .78); border-radius: 4px; padding: 2px 7px; pointer-events: none; white-space: nowrap; }
+
+/* 扫描光带：只覆盖实际识别范围，不进入导出 */
+.scan { position: absolute; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity .25s; }
+.scan.on { opacity: 1; }
+.scan::before { content: ""; position: absolute; inset: 0; background: rgba(106, 183, 255, .045); }
+.band { position: absolute; left: 0; right: 0; height: 140px; top: -140px;
+  background: linear-gradient(180deg, rgba(106,183,255,0) 0%, rgba(106,183,255,.10) 60%, rgba(106,183,255,.30) 96%, rgba(190,226,255,.85) 100%); }
+.scan.on .band { animation: sweep 1.15s cubic-bezier(.45, .05, .55, .95) infinite; }
+@keyframes sweep { from { transform: translateY(0); } to { transform: translateY(var(--sweep)); } }
+
+/* 识别层 */
+.layer { position: absolute; overflow: hidden; }
+.box { position: absolute; border-radius: 2px; border: 1px solid transparent; opacity: 0; transform: scale(.96); transition: opacity .18s, transform .18s, background-color .12s, border-color .12s; cursor: text; }
+.box.rv { opacity: 1; transform: none; border-color: var(--ocr-box); background: rgba(96, 157, 255, .05); }
+.box.pop { animation: pop .5s ease-out; }
+@keyframes pop { from { box-shadow: 0 0 0 4px rgba(106, 183, 255, .45); } to { box-shadow: 0 0 0 0 rgba(106, 183, 255, 0); } }
+.layer.quiet .box.rv { border-color: transparent; background: transparent; }
+.box.rv.hov { border-color: #9cc4ff; background: rgba(96, 157, 255, .16); }
+.box.rv.sel { background: var(--ocr-sel); border-color: transparent; }
+.box.rv.match { border-color: #e2a92a; background: rgba(242, 182, 50, .14); }
+.box.rv.cur { border-color: #f2b632; background: rgba(242, 182, 50, .38); }
+.layer.off .box { opacity: 0; pointer-events: none; }
+.box[data-mark]::before { content: ""; position: absolute; pointer-events: none; }
+.box[data-mark="hl"]::before { inset: 0; background: var(--mk); opacity: .38; }
+.box[data-mark="ul"]::before { left: 2px; right: 2px; bottom: 1px; height: 2px; background: var(--mk); }
+.box[data-mark="st"]::before { left: 2px; right: 2px; top: 50%; height: 2px; margin-top: -1px; background: var(--mk); }
+.box[data-mark="wv"]::before { left: 2px; right: 2px; bottom: -2px; height: 6px; background: var(--mk);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6'%3E%3Cpath d='M0 3 Q2 0 4 3 T8 3' fill='none' stroke='black' stroke-width='1.6'/%3E%3C/svg%3E") repeat-x;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6'%3E%3Cpath d='M0 3 Q2 0 4 3 T8 3' fill='none' stroke='black' stroke-width='1.6'/%3E%3C/svg%3E") repeat-x; }
+.sbox { position: absolute; border: 1.5px dashed #ff6b7a; border-radius: 2px; pointer-events: none; transition: background-color .12s; }
+.sbox.pick { border-style: solid; background: rgba(255, 107, 122, .22); }
+.sbox.hov { box-shadow: 0 0 0 3px rgba(255, 107, 122, .3); }
+.fx { position: absolute; pointer-events: none; border-radius: 1px; }
+.fx.mosaic { backdrop-filter: blur(5px) saturate(.6); -webkit-backdrop-filter: blur(5px) saturate(.6);
+  background-image: linear-gradient(90deg, rgba(255,255,255,.06) 50%, rgba(0,0,0,.08) 50%), linear-gradient(rgba(255,255,255,.05) 50%, rgba(0,0,0,.08) 50%);
+  background-size: 8px 8px; }
+.fx.blur { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+
+/* 选区旁迷你标记条 */
+.mini { position: absolute; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--fg); z-index: 5; }
+.mini button { width: 30px; height: 28px; border-radius: 5px; display: grid; place-items: center; font: 600 13px var(--ui); }
+.mini button:hover { background: var(--hover); }
+.mini button.on { background: var(--selected); color: var(--accent); }
+.mini .dv { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
+.mini .g-hl span { padding: 0 3px; border-radius: 2px; background: color-mix(in srgb, var(--mkc) 55%, transparent); }
+.mini .g-ul span { text-decoration: underline 2px var(--mkc); text-underline-offset: 3px; }
+.mini .g-wv span { text-decoration: underline wavy 1.5px var(--mkc); text-underline-offset: 3px; }
+.mini .g-st span { text-decoration: line-through 2px var(--mkc); }
+.mini .dot { width: 22px; height: 28px; }
+.mini .dot i { width: 14px; height: 14px; border-radius: 50%; display: block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.mini .dot.on i { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--fg); }
+
+/* 截图工具栏（现有样式的简化复刻） */
+.toolbar { position: absolute; display: flex; align-items: center; gap: 2px; padding: 5px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--fg); }
+.toolbar .tb { width: 34px; height: 34px; border-radius: 6px; display: grid; place-items: center; color: var(--fg); }
+.toolbar .tb:hover { background: var(--hover); }
+.toolbar .tb.dim { color: var(--muted); }
+.toolbar .tb.on { background: var(--selected); color: var(--accent); }
+.toolbar .tb.ok { background: var(--accent); color: var(--accent-fg); }
+.toolbar .tb.wide { width: 46px; grid-auto-flow: column; gap: 1px; }
+.toolbar .dv { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+.toolbar .grip { width: 10px; color: var(--muted); display: grid; place-items: center; }
+
+/* ---------- 结果面板 ---------- */
+.panel { position: absolute; display: flex; flex-direction: column; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--fg); overflow: hidden; z-index: 4;
+  opacity: 0; transform: translateX(14px); pointer-events: none; transition: opacity .16s ease-out, transform .2s cubic-bezier(.2, .8, .2, 1); }
+.panel.open { opacity: 1; transform: none; pointer-events: auto; }
+.grip-bar { height: 12px; display: grid; place-items: center; cursor: grab; flex: none; }
+.grip-bar::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: var(--border); }
+.p-head { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; height: 36px; flex: none; }
+.p-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; }
+.p-title b { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.p-meta { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.ib { width: 30px; height: 30px; border-radius: 6px; display: grid; place-items: center; color: var(--fg); }
+.ib:hover { background: var(--hover); }
+.ib.on { background: var(--selected); color: var(--accent); }
+.ib[disabled] { color: var(--muted); opacity: .5; pointer-events: none; }
+.progress { height: 2px; background: transparent; flex: none; position: relative; }
+.progress i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); transition: width .12s linear, opacity .3s; }
+.seg { margin: 6px 12px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px; border-radius: 8px; background: var(--hover); flex: none; }
+.seg button { height: 26px; border-radius: 6px; font-size: 13px; color: var(--muted); }
+.seg button.on { background: var(--bg); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.seg button[disabled] { opacity: .45; pointer-events: none; }
+.find { margin: 8px 12px 0; display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 4px 0 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--field); flex: none; }
+.find input { flex: 1; min-width: 0; border: 0; background: none; color: var(--fg); font: 13px var(--ui); outline: none; }
+.find .cnt { font: 12px var(--mono); color: var(--muted); min-width: 34px; text-align: right; }
+.find .ib { width: 24px; height: 24px; }
+.find .txtb { height: 24px; padding: 0 8px; border-radius: 5px; font-size: 12px; background: var(--hover); }
+.find .txtb:hover { background: var(--selected); color: var(--accent); }
+
+.body { flex: 1; min-height: 0; overflow: auto; padding: 8px 6px 10px; user-select: text; scrollbar-width: thin; }
+.row { display: grid; grid-template-columns: 24px 1fr 28px; align-items: start; gap: 4px; padding: 3px 4px 3px 0; border-radius: 6px; font-size: 13.5px; line-height: 1.55; cursor: text; position: relative; }
+.row .ln { font: 11px/21px var(--mono); color: var(--muted); text-align: right; opacity: .6; user-select: none; }
+.row .tx { min-width: 0; overflow-wrap: anywhere; }
+.row .ra { visibility: hidden; }
+.row:hover .ra, .row.hl .ra { visibility: visible; }
+.row .ra button { width: 24px; height: 22px; border-radius: 5px; display: grid; place-items: center; color: var(--muted); }
+.row .ra button:hover { background: var(--bg); color: var(--accent); }
+.row:hover, .row.hl { background: var(--hover); }
+.row.sel { background: var(--selected); }
+.row.sel .ln { color: var(--accent); opacity: 1; }
+.row .cell { display: inline-block; min-width: 4.6em; padding-right: .6em; }
+.row.th .tx { color: var(--muted); }
+mark { background: rgba(242, 182, 50, .3); color: inherit; border-radius: 2px; padding: 0 1px; }
+mark.cur { background: rgba(242, 182, 50, .75); color: #1d1500; }
+.body.enter .row, .body.enter .para, .body.enter table { animation: rise .26s ease-out both; }
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+.spin { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.cand { margin: 2px 4px 6px 28px; border: 1px solid var(--border); border-left: 2px solid var(--accent); border-radius: 6px; padding: 7px 9px; background: var(--field); font-size: 13px; }
+.cand .ch { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11.5px; }
+.cand .ct { margin: 3px 0 6px; overflow-wrap: anywhere; }
+.cand .ca { display: flex; gap: 6px; }
+.mini-btn { height: 24px; padding: 0 9px; border-radius: 5px; font-size: 12px; border: 1px solid var(--border); background: var(--bg); }
+.mini-btn:hover { background: var(--hover); }
+.mini-btn.pri { border-color: transparent; background: var(--accent); color: var(--accent-fg); }
+.para { padding: 6px 8px; border-radius: 6px; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
+.para + .para { margin-top: 2px; }
+.para:hover, .para.hl { background: var(--hover); }
+.para.sel { background: var(--selected); }
+.tbl-wrap { padding: 4px 6px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; white-space: nowrap; }
+th { background: var(--hover); font-weight: 600; }
+td.num { text-align: right; }
+tr.hl td { background: var(--hover); }
+.note { margin: 8px 8px 0; font-size: 12px; color: var(--muted); }
+.skel { padding: 6px 10px; display: flex; flex-direction: column; gap: 11px; }
+.skel i { display: block; height: 11px; border-radius: 6px; background: linear-gradient(90deg, var(--skeleton) 0%, var(--hover) 50%, var(--skeleton) 100%); background-size: 200% 100%; animation: shimmer 1.1s linear infinite; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.sens-h { display: flex; align-items: center; gap: 6px; padding: 2px 4px 8px; font-size: 13px; font-weight: 600; }
+.sens-item { display: grid; grid-template-columns: 22px auto 1fr; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.sens-item:hover { background: var(--hover); }
+.sens-item input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+.tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.sens-item code { font: 12.5px var(--mono); overflow-wrap: anywhere; }
+.edit-area { width: 100%; height: 100%; min-height: 200px; resize: none; border: 1px solid var(--border); border-radius: 8px; background: var(--field); color: var(--fg); font: 13.5px/1.6 var(--ui); padding: 8px 10px; }
+.banner { margin: 8px 12px 0; padding: 7px 10px; border-radius: 7px; background: var(--hover); font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; flex: none; }
+.banner button { color: var(--accent); font-size: 12px; margin-left: auto; white-space: nowrap; }
+
+.p-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px 10px 12px; border-top: 1px solid var(--border); }
+.p-foot .sp { flex: 1; }
+.tog { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.tog input { position: absolute; opacity: 0; width: 0; height: 0; }
+.tog .sw { width: 28px; height: 16px; border-radius: 8px; background: var(--border); position: relative; transition: background .15s; }
+.tog .sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg); transition: transform .15s; }
+.tog input:checked + .sw { background: var(--accent); }
+.tog input:checked + .sw::after { transform: translateX(12px); }
+.tog input:focus-visible + .sw { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip { height: 28px; padding: 0 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--fg); border: 1px solid var(--border); white-space: nowrap; }
+.chip:hover { background: var(--hover); }
+.chip b { font-weight: 600; color: var(--danger); font-variant-numeric: tabular-nums; }
+.primary { height: 32px; padding: 0 14px; border-radius: 7px; background: var(--accent); color: var(--accent-fg); font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.primary:hover { filter: brightness(1.08); }
+.primary[disabled], .chip[disabled] { opacity: .45; pointer-events: none; }
+.secondary { height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--border); font-size: 13px; white-space: nowrap; }
+.secondary:hover { background: var(--hover); }
+.menu { position: absolute; right: 8px; top: 48px; min-width: 196px; padding: 4px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); z-index: 3; }
+.menu button { width: 100%; text-align: left; height: 30px; padding: 0 10px; border-radius: 5px; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.menu button:hover { background: var(--hover); }
+.menu kbd { font-size: 10.5px; }
+.toast { position: absolute; left: 50%; bottom: 62px; transform: translateX(-50%); padding: 6px 12px; border-radius: 7px; background: var(--fg); color: var(--bg); font-size: 12.5px; white-space: nowrap; box-shadow: var(--shadow); z-index: 6; pointer-events: none; animation: rise .18s ease-out; }
+
+/* ---------- 设计说明 ---------- */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 6px; }
+.note-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.note-card.full { grid-column: 1 / -1; }
+.note-card h2 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+.note-card p, .note-card li { font-size: 13px; color: var(--fg); max-width: 72ch; }
+.note-card ul, .note-card ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.note-card code { font: 12px var(--mono); background: var(--hover); padding: 1px 4px; border-radius: 4px; }
+.map-wrap { overflow-x: auto; }
+.map { font-size: 13px; min-width: 560px; }
+.map td, .map th { white-space: normal; vertical-align: top; }
+.map td:first-child { white-space: nowrap; }
+.timeline { font-variant-numeric: tabular-nums; }
+.timeline b { font-family: var(--mono); font-weight: 500; color: var(--accent); margin-right: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  .band { display: none; }
+  .body.enter .row, .body.enter .para, .body.enter table, .toast { animation: none; }
+  .box, .panel { transition-duration: .01s; }
+  .box.pop { animation: none; }
+}
+</style>
+
+<div class="wrapper">
+  <header class="top">
+    <h1>RaiShot OCR 结果面板<span>可交互原型</span></h1>
+    <div class="ctrls">
+      <button class="btn" id="replay" type="button">
+        <svg class="i s" viewBox="0 0 24 24"><path d="M20 8a8 8 0 0 0-14-2L3 9m0-5v5h5M4 16a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/></svg>重放识别</button>
+      <button class="btn" id="themeBtn" type="button">主题：跟随系统</button>
+    </div>
+  </header>
+  <p class="hint">点工具栏的 OCR 按钮开始识别。悬停面板中的行会在图上定位，在图上拖过文字框可以选择多行，选中后可在图上加标记。<kbd>Ctrl</kbd>+<kbd>F</kbd> 查找，<kbd>Esc</kbd> 逐级退出。</p>
+
+  <div class="stage-wrap" id="wrap">
+    <div class="stage" id="stage">
+      <div class="shot" id="shot"></div>
+      <div class="mask" id="mask"></div>
+      <div class="layer" id="fxLayer" style="pointer-events:none"></div>
+      <div class="scan" id="scan"><div class="band"></div></div>
+      <div class="layer" id="layer"></div>
+      <div class="frame" id="frame"><i style="left:-5px;top:-5px"></i><i style="left:calc(50% - 5px);top:-5px"></i><i style="right:-5px;top:-5px"></i><i style="left:-5px;top:calc(50% - 5px)"></i><i style="right:-5px;top:calc(50% - 5px)"></i><i style="left:-5px;bottom:-5px"></i><i style="left:calc(50% - 5px);bottom:-5px"></i><i style="right:-5px;bottom:-5px"></i></div>
+      <div class="sizetag" id="sizetag"></div>
+      <div class="mini" id="mini" hidden></div>
+      <div class="toolbar" id="toolbar"></div>
+
+      <aside class="panel" id="panel" aria-label="文字识别结果">
+        <div class="grip-bar" id="grip" title="拖动面板"></div>
+        <div class="p-head">
+          <div class="p-title"><b>文字识别</b><span class="p-meta" id="meta"></span></div>
+          <button class="ib" id="btnFind" type="button" title="查找  Ctrl+F"><svg class="i s" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg></button>
+          <button class="ib" id="btnEdit" type="button" title="编辑全文"><svg class="i s" viewBox="0 0 24 24"><path d="m4 20 1.2-5L15.7 4.5a2.1 2.1 0 0 1 3 0l.8.8a2.1 2.1 0 0 1 0 3L9 18.8 4 20Zm10-13 3 3"/></svg></button>
+          <button class="ib" id="btnMore" type="button" title="更多"><svg class="i s" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></g></svg></button>
+          <button class="ib" id="btnClose" type="button" title="关闭  Esc"><svg class="i s" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </div>
+        <div class="progress"><i id="prog"></i></div>
+        <div class="seg" id="seg" role="tablist">
+          <button type="button" data-v="lines" class="on" role="tab">原文</button>
+          <button type="button" data-v="paras" role="tab">段落</button>
+          <button type="button" data-v="table" role="tab">表格</button>
+        </div>
+        <div id="bannerSlot"></div>
+        <div class="find" id="find" hidden>
+          <svg class="i s" viewBox="0 0 24 24" style="color:var(--muted)"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+          <input id="q" type="text" placeholder="在识别结果中查找" autocomplete="off" spellcheck="false">
+          <span class="cnt" id="qcount">0/0</span>
+          <button class="ib" id="qprev" type="button" title="上一处  Shift+Enter"><svg class="i s" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
+          <button class="ib" id="qnext" type="button" title="下一处  Enter"><svg class="i s" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button class="txtb" id="qsel" type="button" title="把全部命中设为选择">选中</button>
+        </div>
+        <div class="body" id="body"></div>
+        <div class="p-foot" id="foot"></div>
+        <div class="menu" id="menu" hidden>
+          <button type="button" data-act="translate">翻译所选或全文</button>
+          <button type="button" data-act="small">用标准模型重新识别 <kbd>O</kbd></button>
+          <button type="button" data-act="image">复制图片 <kbd>Enter</kbd></button>
+        </div>
+        <div id="toastSlot"></div>
+      </aside>
+    </div>
+  </div>
+
+  <section class="notes">
+    <div class="note-card">
+      <h2>停靠与尺寸</h2>
+      <ul>
+        <li>面板宽 340 DIP，放在选区右侧 12 DIP；上沿对齐选区，下沿对齐工具栏下沿，和选区、工具栏读作一个整体。</li>
+        <li>右侧放不下时翻到选区左侧；两侧都放不下时贴所在显示器右缘、覆盖选区右部，并允许拖动顶部把手移开。</li>
+        <li>高度不足 360 DIP 时向下延伸，上限为显示器高度减 24。位置只取工具栏的显示器锚点，不跟随鼠标悬停换屏。</li>
+        <li>面板、迷你标记条、扫描光带都不进入复制、保存和贴图像素；只有用户确认的标记和打码进入导出。</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h2>识别动效</h2>
+      <ul class="timeline">
+        <li><b>0 ms</b>点击 OCR：按钮进入选中态，面板以 160 ms 从右侧淡入并显示骨架行，顶部 2 px 进度条开始。</li>
+        <li><b>0–1.2 s</b>选区内淡色光带循环扫过；检测到的文字框按阅读顺序逐个淡入，带一次轻微外发光。</li>
+        <li><b>完成</b>光带淡出；面板行以 18 ms 间隔依次出现，标题栏改为“行数 · 用时 · 模型”。</li>
+        <li><b>取消</b>识别中按 Esc 或面板 ✕，立即停止并退回截图编辑，不留下任何框。</li>
+        <li>系统开启“减少动画”时只保留淡入，不扫光、不错峰。</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h2>图文联动</h2>
+      <ul>
+        <li>悬停面板行：图上对应框加亮；悬停图上框：面板滚到并加亮该行。段落视图按整段联动。</li>
+        <li>选择只有一份：图上拖选、面板点选（Shift 连选、Ctrl 加选）或面板内拖选文字，都会同步到另一侧。</li>
+        <li>标记属于图片，所以标记条贴在图上选区旁，而不是放进面板。</li>
+        <li>查找结果在面板里标黄，图上用金色框，与现有查找预览的颜色一致。</li>
+      </ul>
+    </div>
+    <div class="note-card full">
+      <h2>现有操作的新位置</h2>
+      <div class="map-wrap">
+        <table class="map">
+          <thead><tr><th>现有入口（13 个按钮的操作条等）</th><th>新位置</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>复制选字 / 段落复制 / 复制表格</td><td>面板底部主按钮</td><td>按当前视图（原文、段落、表格）决定格式；有选择时变为“复制所选 · N 字”。三个按钮合成一个。</td></tr>
+            <tr><td>高亮 / 下划线 / 波浪线 / 删除线、标记色</td><td>图上选区旁的迷你标记条</td><td>只在有可标记的选择时出现；同类同色再按一次即取消，沿用一次撤销。</td></tr>
+            <tr><td>重识别此行</td><td>行尾 ↻（悬停显示）</td><td>候选内联在该行下方，只读，可复制或丢弃，不替换原文。</td></tr>
+            <tr><td>查找栏</td><td>面板搜索行</td><td>Ctrl+F 打开，Enter / Shift+Enter 导航，“选中”把命中设为选择；整批标记沿用迷你标记条。</td></tr>
+            <tr><td>敏感文字</td><td>底部“敏感 N”</td><td>面板内列出候选，默认不勾选；图上红色虚线预览；确认马赛克或模糊后整批一次撤销。</td></tr>
+            <tr><td>全文</td><td>标题栏 ✎</td><td>编辑后图上定位、段落与表格视图停用，横幅提供“恢复识别结果”。</td></tr>
+            <tr><td>翻译、换模型重识别</td><td>标题栏 ⋯ 菜单</td><td>低频操作收进菜单。</td></tr>
+            <tr><td>清选 / 返回截图</td><td>Esc 逐级退出、面板 ✕</td><td>Esc 顺序：菜单 → 查找栏 → 选择 → 面板。再次点 OCR 按钮也关闭面板。</td></tr>
+            <tr><td>✓ 复制图片</td><td>工具栏 ✓（不变）</td><td>Enter 仍复制图片。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="note-card full">
+      <h2>落地到 GPUI 的拆分建议</h2>
+      <ol>
+        <li>新建纯布局模块（如 <code>ocr_panel_layout.rs</code>）：输入显示器、选区、工具栏矩形，输出面板矩形与翻转方向，配单元测试，替换 <code>action_bar_layout</code>。</li>
+        <li>面板渲染接到 <code>capture_ocr_overlay.rs</code> 的 <code>render_ocr_overlay</code>：原 13 按钮操作条换成迷你标记条，其余操作移入面板；复用现有 <code>OcrOverlay</code> 选择、查找、局部重识别、敏感文字和表格复制模型，不新增数据通路。</li>
+        <li>面板行与图上框共用同一份识别行索引；悬停状态只存行号，不复制几何。</li>
+        <li>扫描光带沿用 <code>capture_ocr_progress.rs</code>，再加“逐框淡入”所需的检测完成时间点；没有中间结果时退化为识别完成后一次性淡入。</li>
+        <li>英文界面检查固定宽度：面板 340 DIP 下 “Copy selection · 58 chars”、“Sensitive 2” 不能溢出。</li>
+      </ol>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const W = 1280, H = 720;
+  const SEL = { x: 120, y: 84, w: 700, h: 470 };
+  const PANEL_W = 340, GAP = 12;
+  const COLORS = [0xffd54f, 0xff4b5c, 0x378de5, 0x30b884];
+  const hex = c => '#' + c.toString(16).padStart(6, '0');
+
+  // 截图里的文字；ocr 字段是识别出的文本（故意含一处错字，演示“重识别此行”）
+  const LINES = [
+    { x: 150, y: 108, size: 20, weight: 600, color: 'var(--shot-h)', segs: ['构建报告 · raishot 0.9.3'], ocr: '构建报告 · raish0t 0.9.3', fix: '构建报告 · raishot 0.9.3', para: 0 },
+    { x: 150, y: 152, size: 15, color: 'var(--shot-t)', segs: ['本次构建合入了贴图矢量化渲染与 OCR 词框收紧，'], para: 1 },
+    { x: 150, y: 178, size: 15, color: 'var(--shot-t)', segs: ['同时修复了录屏首帧黑屏和多屏工具栏跳动问题，'], para: 1 },
+    { x: 150, y: 204, size: 15, color: 'var(--shot-t)', segs: ['相关模型均已在后台编译并通过。'], para: 1 },
+    { x: 150, y: 246, size: 15, color: 'var(--shot-t)', segs: ['• 截图启动：托盘到可框选约 196 ms'], para: 2 },
+    { x: 150, y: 272, size: 15, color: 'var(--shot-t)', segs: ['• 文字识别：ppocr Tiny，15 行用时 0.42 s'], para: 3 },
+    { x: 150, y: 298, size: 15, color: 'var(--shot-t)', segs: ['• 值班联系：', { t: 'qa-team@example.com', sens: '邮箱' }, '，', { t: '138-0013-8000', sens: '电话' }], para: 4 },
+    { x: 150, y: 346, size: 14, weight: 600, color: 'var(--shot-m)', cells: ['模块', '通过', '失败', '耗时'], cols: [0, 170, 260, 350], para: 5, th: true },
+    { x: 150, y: 378, size: 14, color: 'var(--shot-t)', cells: ['capture', '214', '0', '38.2 s'], cols: [0, 170, 260, 350], para: 5 },
+    { x: 150, y: 410, size: 14, color: 'var(--shot-t)', cells: ['ocr', '188', '2', '51.7 s'], cols: [0, 170, 260, 350], para: 5 },
+    { x: 150, y: 442, size: 14, color: 'var(--shot-t)', cells: ['pin', '162', '0', '27.9 s'], cols: [0, 170, 260, 350], para: 5 },
+    { x: 658, y: 356, size: 13, color: 'var(--shot-m)', segs: ['通过率'], para: 6 },
+    { x: 658, y: 378, size: 30, weight: 600, color: 'var(--shot-h)', segs: ['99.6%'], para: 7 },
+    { x: 658, y: 422, size: 12, color: 'var(--shot-m)', segs: ['564 / 566 项'], para: 8 },
+    { x: 150, y: 500, size: 12, color: 'var(--shot-m)', segs: ['最后更新 2026-10-11 14:32 · 由 CI 自动生成'], para: 9 },
+  ];
+  const segText = s => typeof s === 'string' ? s : s.t;
+  const lineText = i => { const l = LINES[i]; return l.cells ? l.cells.join('\t') : (l.ocr ?? l.segs.map(segText).join('')); };
+  const PARAS = [...new Set(LINES.map(l => l.para))].map(p => LINES.map((l, i) => l.para === p ? i : -1).filter(i => i >= 0));
+  const paraText = idx => LINES[idx[0]].cells ? idx.map(lineText).join('\n') : idx.map(lineText).join('');
+
+  const $ = id => document.getElementById(id);
+  const stage = $('stage'), wrap = $('wrap'), shot = $('shot'), layer = $('layer'), fxLayer = $('fxLayer');
+  const panel = $('panel'), body = $('body'), foot = $('foot'), meta = $('meta'), prog = $('prog');
+  const mini = $('mini'), toolbar = $('toolbar'), scan = $('scan');
+
+  const st = {
+    phase: 'done', view: 'lines', mode: 'normal', model: 'Tiny',
+    sel: new Set(), anchor: null, hover: new Set(), dragging: false,
+    layer: true, find: { open: false, q: '', hits: [], cur: 0 },
+    marks: new Map(), markKind: null, color: COLORS[0], cand: new Map(),
+    sensPick: new Set(), sensHover: null, applied: new Set(), edited: null, timers: [],
+    revealed: LINES.length, panelPos: null,
+  };
+
+  /* ---------- 截图内容 ---------- */
+  function buildShot() {
+    let h = '<div class="win"></div><div class="side">';
+    for (let k = 0; k < 7; k++) h += `<i style="top:${24 + k * 44}px"></i>`;
+    h += '</div>';
+    [[860, 70, 180], [860, 96, 300], [860, 150, 330], [860, 176, 260], [860, 230, 340], [860, 256, 220], [860, 310, 300], [860, 520, 280], [860, 546, 340], [130, 620, 420], [130, 646, 300], [600, 620, 200]]
+      .forEach(([x, y, w]) => h += `<div class="ph" style="left:${x}px;top:${y}px;width:${w}px"></div>`);
+    h += '<div class="card" style="left:642px;top:340px;width:160px;height:112px"></div>';
+    [334, 368, 400, 432, 464].forEach(y => h += `<div class="tline" style="left:140px;top:${y}px;width:470px"></div>`);
+    LINES.forEach((l, i) => {
+      const font = `font-size:${l.size}px;font-weight:${l.weight || 400};color:${l.color}`;
+      if (l.cells) {
+        h += `<div class="sl" data-i="${i}" style="left:${l.x}px;top:${l.y}px;${font}">` +
+          l.cells.map((c, k) => `<span class="c" style="left:${l.cols[k]}px">${esc(c)}</span>`).join('') + '</div>';
+      } else {
+        h += `<div class="sl" data-i="${i}" style="left:${l.x}px;top:${l.y}px;${font}">` +
+          l.segs.map(s => `<span>${esc(segText(s))}</span>`).join('') + '</div>';
+      }
+    });
+    shot.innerHTML = h;
+  }
+
+  // 用实际排版测量文字框（舞台逻辑坐标）
+  let BOXES = [], SENS = [];
+  function measure() {
+    BOXES = []; SENS = [];
+    shot.querySelectorAll('.sl').forEach(el => {
+      const i = +el.dataset.i, l = LINES[i];
+      const pad = (x, y, w, h) => ({ x: x - 3, y: y - 1, w: w + 6, h: h + 2 });
+      if (l.cells) {
+        el.querySelectorAll('.c').forEach((c, k) => BOXES.push({ i, k, ...pad(l.x + c.offsetLeft, l.y, c.offsetWidth, c.offsetHeight) }));
+      } else {
+        BOXES.push({ i, k: 0, ...pad(l.x, l.y, el.offsetWidth, el.offsetHeight) });
+        el.querySelectorAll('span').forEach((s, k) => {
+          const seg = l.segs[k];
+          if (seg && seg.sens) SENS.push({ i, type: seg.sens, text: seg.t, ...pad(l.x + s.offsetLeft, l.y, s.offsetWidth, s.offsetHeight) });
+        });
+      }
+    });
+  }
+
+  /* ---------- 静态几何 ---------- */
+  const TB_H = 46;
+  function placeChrome() {
+    for (const el of [$('mask'), $('frame'), scan, layer, fxLayer]) Object.assign(el.style, { left: SEL.x + 'px', top: SEL.y + 'px', width: SEL.w + 'px', height: SEL.h + 'px' });
+    scan.style.setProperty('--sweep', (SEL.h + 140) + 'px');
+    const tag = $('sizetag'); tag.textContent = `${SEL.w} × ${SEL.h} · (${SEL.x}, ${SEL.y})`;
+    tag.style.left = SEL.x + 'px'; tag.style.top = (SEL.y - 26) + 'px';
+    const tw = toolbar.offsetWidth;
+    toolbar.style.left = (SEL.x + SEL.w - tw) + 'px';
+    toolbar.style.top = (SEL.y + SEL.h + GAP) + 'px';
+    placePanel();
+  }
+  // 面板停靠：右 → 左 → 贴显示器右缘覆盖
+  function placePanel() {
+    if (st.panelPos) { Object.assign(panel.style, { left: st.panelPos.x + 'px', top: st.panelPos.y + 'px' }); }
+    else {
+      let x = SEL.x + SEL.w + GAP;
+      if (x + PANEL_W > W - GAP) x = SEL.x - GAP - PANEL_W;
+      if (x < GAP) x = W - GAP - PANEL_W;
+      panel.style.left = x + 'px'; panel.style.top = SEL.y + 'px';
+    }
+    const bottom = SEL.y + SEL.h + GAP + TB_H;
+    const h = Math.min(Math.max(bottom - SEL.y, 360), H - 24);
+    panel.style.width = PANEL_W + 'px'; panel.style.height = h + 'px';
+  }
+  function fit() {
+    const s = Math.min(1, wrap.clientWidth / W);
+    stage.style.transform = `scale(${s})`;
+    wrap.style.height = (H * s) + 'px';
+    st.scale = s;
+  }
+
+  /* ---------- 工具栏 ---------- */
+  const IC = {
+    edit: '<path d="m5 3 14 9-6 1.4 3.2 6-3.1 1.6-3.2-6L5 19Z"/>',
+    rect: '<rect x="4" y="5" width="16" height="14" rx="2"/>',
+    arrow: '<path d="m5 19 14-14M10 5h9v9"/>',
+    pen: '<path d="m4 20 1.2-5L15.7 4.5a2.1 2.1 0 0 1 3 0l.8.8a2.1 2.1 0 0 1 0 3L9 18.8 4 20Zm10-13 3 3M5.2 15 9 18.8"/>',
+    text: '<path d="M5 7V4.5h14V7M12 4.5v15M8.5 19.5h7"/>',
+    mosaic: '<g fill="currentColor" stroke="none"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5" opacity=".4"/><rect x="4" y="13" width="7" height="7" rx="1.5" opacity=".4"/></g>',
+    undo: '<path d="m8 5-4 4 4 4M4 9h9a6 6 0 0 1 0 12h-2"/>',
+    redo: '<path d="m16 5 4 4-4 4M20 9h-9a6 6 0 0 0 0 12h2"/>',
+    more: '<g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></g>',
+    ocr: '<path d="M8 3.5H5A1.5 1.5 0 0 0 3.5 5v3m12-4.5H19A1.5 1.5 0 0 1 20.5 5v3M3.5 16v3A1.5 1.5 0 0 0 5 20.5h3m8 0h3a1.5 1.5 0 0 0 1.5-1.5v-3M8 16l4-8 4 8m-6.5-3h5"/>',
+    pin: '<g transform="rotate(35 12 12)"><path d="M8 3.5h8M9 3.5v6l-3 4v1h12v-1l-3-4v-6M12 14.5v6"/></g>',
+    save: '<path d="M5 3.5h11L20.5 8v11a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5A1.5 1.5 0 0 1 5 3.5Z"/><path d="M8 3.5v6h7v-6M7.5 20.5v-7h9v7"/>',
+    ok: '<path d="m4.5 12.5 5 5 10-11" stroke-width="2.2"/>',
+    close: '<path d="m6 6 12 12M18 6 6 18"/>',
+    copy: '<rect x="8" y="8" width="12.5" height="12.5" rx="2"/><path d="M15.5 8V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2H8"/>',
+    retry: '<path d="M20 8a8 8 0 0 0-14-2L3 9m0-5v5h5M4 16a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',
+    eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
+    shield: '<path d="M12 3.5 5 6v5.5c0 4.3 3 7.6 7 9 4-1.4 7-4.7 7-9V6l-7-2.5Z"/><path d="M12 9v4m0 3v.01"/>',
+    back: '<path d="M15 6l-6 6 6 6"/>',
+    chev: '<path d="m7 10 5 5 5-5"/>',
+  };
+  const svg = (k, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24">${IC[k]}</svg>`;
+  function buildToolbar() {
+    const t = (k, title, cls = '') => `<button class="tb ${cls}" type="button" data-k="${k}" title="${title}">${svg(k)}</button>`;
+    toolbar.innerHTML =
+      `<span class="grip"><svg class="i s" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></g></svg></span>` +
+      t('edit', '选择') + t('rect', '矩形') + t('arrow', '箭头') + t('pen', '画笔') + t('text', '文字') + t('mosaic', '马赛克') +
+      '<span class="dv"></span>' + t('undo', '撤销', 'dim') + t('redo', '重做', 'dim') + t('more', '更多') + '<span class="dv"></span>' +
+      `<button class="tb wide" type="button" data-k="ocr" id="ocrBtn" title="文字识别  R">${svg('ocr')}${svg('chev', 'i s')}</button>` +
+      t('pin', '贴图  T') + t('save', '保存  Ctrl+S') + '<span class="dv"></span>' + t('ok', '复制图片  Enter', 'ok') + t('close', '退出  Esc');
+    toolbar.addEventListener('click', e => {
+      const b = e.target.closest('.tb'); if (!b) return;
+      if (b.dataset.k === 'ocr') { st.phase === 'idle' ? startOcr() : closePanel(); }
+      else if (b.dataset.k === 'ok') toast('已复制图片（原型）');
+      else if (b.dataset.k === 'undo') undo();
+    });
+  }
+
+  /* ---------- 识别流程 ---------- */
+  function clearTimers() { st.timers.forEach(clearTimeout); st.timers = []; }
+  function later(ms, fn) { st.timers.push(setTimeout(fn, ms)); }
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  function startOcr(model) {
+    clearTimers();
+    if (model) st.model = model;
+    Object.assign(st, { phase: 'scan', mode: 'normal', revealed: 0, sel: new Set(), hover: new Set(), anchor: null, edited: null });
+    st.cand.clear(); st.find.hits = [];
+    panel.classList.add('open'); scan.classList.add('on');
+    render();
+    const step = reduce.matches ? 0 : 70, t0 = reduce.matches ? 300 : 420;
+    LINES.forEach((_, i) => later(t0 + i * step, () => {
+      st.revealed = i + 1;
+      paintBoxes(i);
+      meta.textContent = `识别中 · ${st.revealed}/${LINES.length} 行`;
+      prog.style.width = Math.round(st.revealed / LINES.length * 100) + '%';
+    }));
+    later(t0 + LINES.length * step + 260, () => {
+      st.phase = 'done'; scan.classList.remove('on');
+      prog.style.opacity = '0';
+      render(true);
+    });
+  }
+  function closePanel() {
+    clearTimers();
+    Object.assign(st, { phase: 'idle', mode: 'normal', revealed: 0, sel: new Set(), hover: new Set() });
+    st.find.open = false; $('find').hidden = true; $('menu').hidden = true;
+    panel.classList.remove('open'); scan.classList.remove('on');
+    render();
+  }
+
+  /* ---------- 渲染 ---------- */
+  function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
+  function hi(text, i) {
+    const q = st.find.q;
+    if (!st.find.open || !q) return esc(text);
+    const cur = st.find.hits[st.find.cur] === i;
+    return text.split(q).map(esc).join(`<mark${cur ? ' class="cur"' : ''}>${esc(q)}</mark>`);
+  }
+  function render(enter = false) {
+    $('ocrBtn').classList.toggle('on', st.phase !== 'idle');
+    const busy = st.phase === 'scan';
+    $('seg').querySelectorAll('button').forEach(b => {
+      b.classList.toggle('on', b.dataset.v === st.view);
+      b.disabled = busy || (st.edited !== null && b.dataset.v !== 'lines');
+    });
+    ['btnFind', 'btnEdit', 'btnMore'].forEach(id => $(id).disabled = busy || st.mode === 'sens');
+    $('btnFind').classList.toggle('on', st.find.open);
+    $('btnEdit').classList.toggle('on', st.mode === 'edit');
+    $('btnClose').title = busy ? '取消识别  Esc' : '关闭  Esc';
+    if (!busy && st.phase === 'done') {
+      meta.textContent = st.edited !== null ? '已编辑 · 图上定位已停用' : `${LINES.length} 行 · 0.42 s · ${st.model}`;
+    }
+    if (busy) { prog.style.opacity = '1'; prog.style.width = '4%'; meta.textContent = '识别中 · 检测文字区域'; }
+    $('bannerSlot').innerHTML = st.edited !== null && st.mode !== 'edit'
+      ? `<div class="banner">正文已编辑，图上框、段落和表格视图暂停使用。<button type="button" id="restore">恢复识别结果</button></div>` : '';
+    if ($('restore')) $('restore').onclick = () => { st.edited = null; render(true); };
+    renderBody(enter);
+    renderFoot();
+    paintBoxes();
+    paintSens();
+    placeMini();
+  }
+
+  function renderBody(enter) {
+    body.classList.toggle('enter', enter && !reduce.matches);
+    if (st.phase === 'scan') {
+      body.innerHTML = '<div class="skel">' + [92, 78, 84, 60, 70, 88, 52, 66, 74, 40].map(w => `<i style="width:${w}%"></i>`).join('') + '</div>';
+      return;
+    }
+    if (st.phase === 'idle') { body.innerHTML = ''; return; }
+    if (st.mode === 'sens') return renderSens();
+    if (st.mode === 'edit') {
+      body.innerHTML = `<textarea class="edit-area" id="editor" spellcheck="false" aria-label="编辑识别全文">${esc(st.edited ?? LINES.map((_, i) => lineText(i)).join('\n'))}</textarea>`;
+      return;
+    }
+    let h = '';
+    if (st.edited !== null) {
+      h = st.edited.split('\n').map((t, n) => `<div class="row"><span class="ln">${n + 1}</span><span class="tx">${esc(t) || '&nbsp;'}</span><span></span></div>`).join('');
+    } else if (st.view === 'lines') {
+      LINES.forEach((l, i) => {
+        const tx = l.cells ? l.cells.map(c => `<span class="cell">${hi(c, i)}</span>`).join('') : hi(lineText(i), i);
+        h += `<div class="row${l.th ? ' th' : ''}" data-i="${i}" style="animation-delay:${i * 18}ms"><span class="ln">${i + 1}</span><span class="tx">${tx}</span>` +
+          `<span class="ra"><button type="button" data-retry="${i}" title="重识别此行">${svg('retry', 'i s')}</button></span></div>`;
+        const c = st.cand.get(i);
+        if (c) h += c.loading
+          ? `<div class="cand"><div class="ch">${svg('retry', 'i s spin')}正在重识别此行…</div></div>`
+          : `<div class="cand"><div class="ch">重识别候选 · 只读，不替换原文</div><div class="ct">${esc(c.text)}</div>` +
+            `<div class="ca"><button class="mini-btn pri" type="button" data-ccopy="${i}">复制</button><button class="mini-btn" type="button" data-cdrop="${i}">丢弃</button></div></div>`;
+      });
+    } else if (st.view === 'paras') {
+      PARAS.forEach((idx, p) => {
+        h += `<div class="para" data-p="${p}" style="animation-delay:${p * 24}ms">${idx.map(i => hi(lineText(i), i)).join(LINES[idx[0]].cells ? '\n' : '')}</div>`;
+      });
+    } else {
+      const rows = LINES.map((l, i) => [l, i]).filter(([l]) => l.cells);
+      h = '<div class="tbl-wrap"><table><thead><tr>' + rows[0][0].cells.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>' +
+        rows.slice(1).map(([l, i]) => `<tr data-i="${i}">` + l.cells.map((c, k) => `<td class="${k ? 'num' : ''}">${hi(c, i)}</td>`).join('') + '</tr>').join('') +
+        '</tbody></table></div><p class="note">检测到 1 个表格（4 列 × 4 行）。复制为制表符分隔，可直接粘贴到表格软件。</p>';
+    }
+    body.innerHTML = h;
+    paintRows();
+  }
+
+  function renderSens() {
+    const left = SENS.filter((_, n) => !st.applied.has(n));
+    let h = `<div class="sens-h"><button class="ib" type="button" id="sensBack" title="返回结果">${svg('back', 'i s')}</button>敏感文字 · ${left.length} 项</div>`;
+    SENS.forEach((s, n) => {
+      if (st.applied.has(n)) return;
+      h += `<label class="sens-item" data-s="${n}"><input type="checkbox" ${st.sensPick.has(n) ? 'checked' : ''}><span class="tag">${s.type}</span><code>${esc(s.text)}</code></label>`;
+    });
+    if (!left.length) h += '<p class="note">没有待处理的敏感文字。</p>';
+    else h += '<p class="note">默认不勾选。勾选后在图上预览，确认马赛克或模糊后可一次撤销。</p>';
+    body.innerHTML = h;
+    $('sensBack').onclick = () => { st.mode = 'normal'; st.sensPick.clear(); render(); };
+  }
+
+  function sensLeft() { return SENS.filter((_, n) => !st.applied.has(n)).length; }
+  function copyLabel() {
+    const n = selectionText().length;
+    if (st.sel.size || nativeSelText()) return `复制所选 · ${n} 字`;
+    return st.edited !== null ? '复制全文' : { lines: '复制全文', paras: '复制全文', table: '复制表格' }[st.view];
+  }
+  function renderFoot() {
+    if (st.mode === 'sens') {
+      const n = st.sensPick.size;
+      foot.innerHTML = `<button class="secondary" type="button" id="sCancel">取消</button><span class="sp"></span>` +
+        `<button class="secondary" type="button" id="sBlur" ${n ? '' : 'disabled'}>模糊</button><button class="primary" type="button" id="sMosaic" ${n ? '' : 'disabled'}>马赛克${n ? ' ' + n + ' 处' : ''}</button>`;
+      $('sCancel').onclick = () => { st.mode = 'normal'; st.sensPick.clear(); render(); };
+      $('sBlur').onclick = () => applySens('blur');
+      $('sMosaic').onclick = () => applySens('mosaic');
+      return;
+    }
+    if (st.mode === 'edit') {
+      foot.innerHTML = `<span class="tog" style="cursor:default">编辑后图上定位会停用</span><span class="sp"></span><button class="secondary" type="button" id="eCancel">取消</button><button class="primary" type="button" id="eDone">完成</button>`;
+      $('eCancel').onclick = () => { st.mode = 'normal'; render(); };
+      $('eDone').onclick = () => {
+        const v = $('editor').value, orig = LINES.map((_, i) => lineText(i)).join('\n');
+        st.edited = v === orig ? st.edited : v; st.mode = 'normal'; st.sel.clear(); render(true);
+      };
+      return;
+    }
+    const busy = st.phase !== 'done';
+    const n = sensLeft();
+    foot.innerHTML =
+      `<label class="tog" title="在图上显示文字框"><input type="checkbox" id="layerTog" ${st.layer ? 'checked' : ''} ${busy || st.edited !== null ? 'disabled' : ''}><span class="sw"></span>识别层</label>` +
+      (n && st.edited === null ? `<button class="chip" type="button" id="btnSens" ${busy ? 'disabled' : ''} title="检查邮箱、电话和证件号">${svg('shield', 'i s')}敏感 <b>${n}</b></button>` : '') +
+      `<span class="sp"></span><button class="primary" type="button" id="btnCopy" ${busy ? 'disabled' : ''}>${svg('copy', 'i s')}<span id="copyLbl">${busy ? '复制全文' : copyLabel()}</span></button>`;
+    $('layerTog').onchange = e => { st.layer = e.target.checked; paintBoxes(); };
+    if ($('btnSens')) $('btnSens').onclick = () => { st.mode = 'sens'; st.sel.clear(); st.find.open = false; $('find').hidden = true; render(); };
+    $('btnCopy').onclick = doCopy;
+  }
+  function refreshCopyLabel() { const l = $('copyLbl'); if (l && st.phase === 'done') l.textContent = copyLabel(); }
+
+  /* ---------- 图上框 ---------- */
+  function buildBoxes() {
+    layer.innerHTML = BOXES.map((b, n) =>
+      `<div class="box" data-n="${n}" data-i="${b.i}" style="left:${b.x - SEL.x}px;top:${b.y - SEL.y}px;width:${b.w}px;height:${b.h}px"></div>`).join('');
+  }
+  function paintBoxes(pop) {
+    layer.classList.toggle('quiet', !st.layer);
+    layer.classList.toggle('off', st.phase === 'idle' || st.edited !== null || st.mode === 'sens');
+    const hits = new Set(st.find.open ? st.find.hits : []), cur = st.find.open ? st.find.hits[st.find.cur] : -1;
+    layer.querySelectorAll('.box').forEach(el => {
+      const i = +el.dataset.i;
+      const rv = i < st.revealed;
+      el.classList.toggle('rv', rv);
+      if (pop === i && !reduce.matches) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+      el.classList.toggle('hov', st.hover.has(i));
+      el.classList.toggle('sel', st.sel.has(i));
+      el.classList.toggle('match', hits.has(i) && i !== cur);
+      el.classList.toggle('cur', i === cur);
+      const m = st.marks.get(i);
+      if (m) { el.dataset.mark = m.kind; el.style.setProperty('--mk', hex(m.color)); } else delete el.dataset.mark;
+    });
+  }
+  function paintSens() {
+    fxLayer.querySelectorAll('.sbox').forEach(e => e.remove());
+    if (st.mode !== 'sens') return;
+    SENS.forEach((s, n) => {
+      if (st.applied.has(n)) return;
+      const d = document.createElement('div');
+      d.className = 'sbox' + (st.sensPick.has(n) ? ' pick' : '') + (st.sensHover === n ? ' hov' : '');
+      Object.assign(d.style, { left: s.x - SEL.x + 'px', top: s.y - SEL.y + 'px', width: s.w + 'px', height: s.h + 'px' });
+      fxLayer.appendChild(d);
+    });
+  }
+  function paintRows() {
+    body.querySelectorAll('.row[data-i]').forEach(r => {
+      const i = +r.dataset.i;
+      r.classList.toggle('hl', st.hover.has(i));
+      r.classList.toggle('sel', st.sel.has(i));
+    });
+    body.querySelectorAll('.para').forEach(p => {
+      const idx = PARAS[+p.dataset.p];
+      p.classList.toggle('hl', idx.some(i => st.hover.has(i)));
+      p.classList.toggle('sel', idx.every(i => st.sel.has(i)));
+    });
+    body.querySelectorAll('tr[data-i]').forEach(r => {
+      const i = +r.dataset.i;
+      r.classList.toggle('hl', st.hover.has(i) || st.sel.has(i));
+    });
+  }
+  function setHover(set, scroll) {
+    st.hover = set; paintBoxes(); paintRows();
+    if (scroll && set.size) {
+      const i = [...set][0];
+      const el = body.querySelector(`.row[data-i="${i}"]`) || [...body.querySelectorAll('.para')].find(p => PARAS[+p.dataset.p].includes(i));
+      el?.scrollIntoView({ block: 'nearest' });
+    }
+  }
+  function selChanged() { paintBoxes(); paintRows(); placeMini(); refreshCopyLabel(); }
+
+  // 图上拖选
+  layer.addEventListener('pointerdown', e => {
+    if (st.phase !== 'done' || e.button !== 0) return;
+    const b = e.target.closest('.box');
+    window.getSelection().removeAllRanges();
+    if (!b) { st.sel.clear(); st.anchor = null; selChanged(); return; }
+    const i = +b.dataset.i;
+    if (e.shiftKey && st.anchor !== null) rangeSel(st.anchor, i);
+    else { st.anchor = i; st.sel = new Set([i]); }
+    st.dragging = true; selChanged(); e.preventDefault();
+  });
+  layer.addEventListener('pointerover', e => {
+    const b = e.target.closest('.box'); if (!b || st.phase !== 'done') return;
+    const i = +b.dataset.i;
+    if (st.dragging && st.anchor !== null) { rangeSel(st.anchor, i); selChanged(); }
+    setHover(new Set([i]), !st.dragging);
+  });
+  layer.addEventListener('pointerleave', () => setHover(new Set()));
+  addEventListener('pointerup', () => { st.dragging = false; });
+  function rangeSel(a, b) { const [lo, hi2] = a < b ? [a, b] : [b, a]; st.sel = new Set(); for (let k = lo; k <= hi2; k++) st.sel.add(k); }
+
+  // 面板联动
+  body.addEventListener('pointerover', e => {
+    if (st.phase !== 'done' || st.edited !== null) return;
+    const s = e.target.closest('.sens-item');
+    if (s) { st.sensHover = +s.dataset.s; paintSens(); return; }
+    const r = e.target.closest('[data-i]'), p = e.target.closest('.para');
+    if (r) setHover(new Set([+r.dataset.i]));
+    else if (p) setHover(new Set(PARAS[+p.dataset.p]));
+  });
+  body.addEventListener('pointerleave', () => { st.sensHover = null; paintSens(); setHover(new Set()); });
+  body.addEventListener('change', e => {
+    const s = e.target.closest('.sens-item'); if (!s) return;
+    const n = +s.dataset.s; e.target.checked ? st.sensPick.add(n) : st.sensPick.delete(n);
+    paintSens(); renderFoot();
+  });
+  body.addEventListener('click', e => {
+    if (st.phase !== 'done' || st.mode !== 'normal' || st.edited !== null) return;
+    const retry = e.target.closest('[data-retry]');
+    if (retry) return retryLine(+retry.dataset.retry);
+    const cc = e.target.closest('[data-ccopy]');
+    if (cc) return copyText(st.cand.get(+cc.dataset.ccopy).text, '候选');
+    const cd = e.target.closest('[data-cdrop]');
+    if (cd) { st.cand.delete(+cd.dataset.cdrop); return renderBody(); }
+    const ns = window.getSelection();
+    if (ns && !ns.isCollapsed && body.contains(ns.anchorNode)) {
+      // 面板内拖选文字：按行同步到图上
+      st.sel = new Set();
+      body.querySelectorAll('[data-i]').forEach(r => { if (ns.containsNode(r, true)) st.sel.add(+r.dataset.i); });
+      body.querySelectorAll('.para').forEach(p => { if (ns.containsNode(p, true)) PARAS[+p.dataset.p].forEach(i => st.sel.add(i)); });
+      return selChanged();
+    }
+    const r = e.target.closest('[data-i]'), p = e.target.closest('.para');
+    const ids = r ? [+r.dataset.i] : p ? PARAS[+p.dataset.p] : null;
+    if (!ids) { st.sel.clear(); return selChanged(); }
+    const i = ids[0];
+    if (e.shiftKey && st.anchor !== null) rangeSel(st.anchor, ids[ids.length - 1]);
+    else if (e.ctrlKey || e.metaKey) { const all = ids.every(k => st.sel.has(k)); ids.forEach(k => all ? st.sel.delete(k) : st.sel.add(k)); st.anchor = i; }
+    else if (ids.every(k => st.sel.has(k)) && st.sel.size === ids.length) { st.sel.clear(); st.anchor = null; }
+    else { st.sel = new Set(ids); st.anchor = i; }
+    selChanged();
+  });
+  document.addEventListener('selectionchange', () => { if (st.phase === 'done') refreshCopyLabel(); });
+
+  function retryLine(i) {
+    st.cand.set(i, { loading: true }); renderBody();
+    later(700, () => { st.cand.set(i, { text: LINES[i].fix ?? lineText(i) }); renderBody(); });
+  }
+
+  /* ---------- 迷你标记条 ---------- */
+  const KINDS = [['hl', '高亮  H', 'g-hl', 'A'], ['ul', '下划线  U', 'g-ul', 'U'], ['wv', '波浪线  W', 'g-wv', 'W'], ['st', '删除线  D', 'g-st', 'S']];
+  function placeMini() {
+    if (st.phase !== 'done' || st.mode !== 'normal' || st.edited !== null || !st.sel.size) { mini.hidden = true; return; }
+    const bs = BOXES.filter(b => st.sel.has(b.i));
+    const x0 = Math.min(...bs.map(b => b.x)), y0 = Math.min(...bs.map(b => b.y)), y1 = Math.max(...bs.map(b => b.y + b.h));
+    const sameMark = [...st.sel].map(i => st.marks.get(i)).reduce((a, m) => a === undefined ? (m ? m.kind + m.color : null) : (a === (m ? m.kind + m.color : null) ? a : null), undefined);
+    mini.innerHTML = `<button type="button" data-mcopy title="复制所选  Ctrl+C">${svg('copy', 'i s')}</button><span class="dv"></span>` +
+      KINDS.map(([k, t, g, ch]) => `<button type="button" class="${g}${sameMark === k + st.color ? ' on' : ''}" data-mk="${k}" title="${t}" style="--mkc:${hex(st.color)}"><span>${ch}</span></button>`).join('') +
+      '<span class="dv"></span>' + COLORS.map(c => `<button type="button" class="dot${c === st.color ? ' on' : ''}" data-mc="${c}" title="标记色"><i style="background:${hex(c)}"></i></button>`).join('');
+    mini.hidden = false;
+    const mw = mini.offsetWidth, mh = mini.offsetHeight;
+    let top = y0 - mh - 8;
+    if (top < SEL.y + 4) top = y1 + 8;
+    const left = Math.max(SEL.x, Math.min(x0, SEL.x + SEL.w - mw));
+    mini.style.left = left + 'px'; mini.style.top = top + 'px';
+  }
+  mini.addEventListener('pointerdown', e => e.stopPropagation());
+  mini.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if ('mcopy' in b.dataset) return doCopy();
+    if (b.dataset.mc) { st.color = +b.dataset.mc; return placeMini(); }
+    const k = b.dataset.mk;
+    const ids = [...st.sel];
+    const all = ids.every(i => { const m = st.marks.get(i); return m && m.kind === k && m.color === st.color; });
+    pushUndo();
+    ids.forEach(i => all ? st.marks.delete(i) : st.marks.set(i, { kind: k, color: st.color }));
+    paintBoxes(); placeMini();
+  });
+
+  /* ---------- 撤销（标记与打码） ---------- */
+  const undoStack = [];
+  function pushUndo() { undoStack.push({ marks: new Map(st.marks), applied: new Set(st.applied) }); }
+  function undo() {
+    const s = undoStack.pop(); if (!s) return toast('没有可撤销的操作');
+    st.marks = s.marks; st.applied = s.applied; drawFx(); render(); toast('已撤销');
+  }
+  function applySens(kind) {
+    pushUndo();
+    const n = st.sensPick.size;
+    st.sensPick.forEach(k => st.applied.add(k));
+    st.sensPick.clear(); st.mode = 'normal';
+    drawFx(kind); render();
+    toast(`已对 ${n} 处${kind === 'blur' ? '模糊' : '马赛克'} · Ctrl+Z 撤销`);
+  }
+  const fxKind = new Map();
+  function drawFx(kind) {
+    fxLayer.querySelectorAll('.fx').forEach(e => e.remove());
+    st.applied.forEach(n => {
+      if (kind && !fxKind.has(n)) fxKind.set(n, kind);
+      const s = SENS[n], d = document.createElement('div');
+      d.className = 'fx ' + (fxKind.get(n) || 'mosaic');
+      Object.assign(d.style, { left: s.x - SEL.x - 2 + 'px', top: s.y - SEL.y - 1 + 'px', width: s.w + 4 + 'px', height: s.h + 2 + 'px' });
+      fxLayer.appendChild(d);
+    });
+    [...fxKind.keys()].forEach(n => { if (!st.applied.has(n)) fxKind.delete(n); });
+  }
+
+  /* ---------- 复制 ---------- */
+  function nativeSelText() {
+    const s = window.getSelection();
+    return s && !s.isCollapsed && body.contains(s.anchorNode) ? s.toString() : '';
+  }
+  function selectionText() {
+    const n = nativeSelText(); if (n) return n;
+    if (st.sel.size) return [...st.sel].sort((a, b) => a - b).map(lineText).join('\n');
+    return '';
+  }
+  function viewText() {
+    if (st.edited !== null) return st.edited;
+    if (st.view === 'paras') return PARAS.map(paraText).join('\n');
+    if (st.view === 'table') return LINES.filter(l => l.cells).map(l => l.cells.join('\t')).join('\n');
+    return LINES.map((_, i) => lineText(i)).join('\n');
+  }
+  function doCopy() {
+    const s = selectionText();
+    copyText(s || viewText(), s ? '所选' : { lines: '全文', paras: '段落', table: '表格' }[st.view]);
+  }
+  function copyText(text, what) {
+    const done = () => toast(`已复制${what} · ${[...text.replace(/\s/g, '')].length} 字`);
+    try { navigator.clipboard.writeText(text).then(done, () => toast('剪贴板不可用，原型中仅演示提示')); }
+    catch { toast('剪贴板不可用，原型中仅演示提示'); }
+  }
+  let toastTimer;
+  function toast(msg) {
+    const slot = $('toastSlot');
+    const host = panel.classList.contains('open') ? slot : stage;
+    clearTimeout(toastTimer);
+    document.querySelectorAll('.toast').forEach(t => t.remove());
+    const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+    if (host === stage) Object.assign(t.style, { left: SEL.x + SEL.w / 2 + 'px', top: SEL.y + SEL.h - 50 + 'px', bottom: 'auto' });
+    host.appendChild(t);
+    toastTimer = setTimeout(() => t.remove(), 1800);
+  }
+
+  /* ---------- 查找 ---------- */
+  function openFind() {
+    if (st.phase !== 'done' || st.mode !== 'normal' || st.edited !== null) return;
+    st.find.open = true; $('find').hidden = false; $('q').focus(); $('q').select(); runFind();
+  }
+  function closeFind() { st.find.open = false; $('find').hidden = true; render(); }
+  function runFind() {
+    const q = st.find.q = $('q').value;
+    st.find.hits = q ? LINES.map((_, i) => i).filter(i => lineText(i).includes(q)) : [];
+    st.find.cur = 0; updateFind();
+  }
+  function updateFind() {
+    const n = st.find.hits.length;
+    $('qcount').textContent = n ? `${st.find.cur + 1}/${n}` : (st.find.q ? '0/0' : '');
+    renderBody(); paintBoxes(); $('btnFind').classList.add('on');
+    if (n) { const el = body.querySelector('mark.cur'); el?.scrollIntoView({ block: 'nearest' }); }
+  }
+  $('q').addEventListener('input', runFind);
+  $('q').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFind(); }
+  });
+  function step(d) { const n = st.find.hits.length; if (!n) return; st.find.cur = (st.find.cur + d + n) % n; updateFind(); }
+  $('qprev').onclick = () => step(-1);
+  $('qnext').onclick = () => step(1);
+  $('qsel').onclick = () => { if (!st.find.hits.length) return; st.sel = new Set(st.find.hits); st.anchor = st.find.hits[0]; selChanged(); };
+
+  /* ---------- 面板头部 ---------- */
+  $('btnFind').onclick = () => st.find.open ? closeFind() : openFind();
+  $('btnEdit').onclick = () => {
+    if (st.mode === 'edit') { st.mode = 'normal'; return render(); }
+    st.mode = 'edit'; st.find.open = false; $('find').hidden = true; st.sel.clear(); render();
+    $('editor')?.focus();
+  };
+  $('btnClose').onclick = closePanel;
+  $('btnMore').onclick = e => { e.stopPropagation(); $('menu').hidden = !$('menu').hidden; };
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('#menu, #btnMore')) $('menu').hidden = true; });
+  $('menu').onclick = e => {
+    const a = e.target.closest('button')?.dataset.act; $('menu').hidden = true;
+    if (a === 'translate') toast('翻译沿用现有翻译入口（原型未接入）');
+    if (a === 'small') startOcr('Small');
+    if (a === 'image') toast('已复制图片（原型）');
+  };
+  $('seg').onclick = e => {
+    const b = e.target.closest('button'); if (!b || b.disabled) return;
+    st.view = b.dataset.v; render(true);
+  };
+
+  // 拖动面板
+  $('grip').addEventListener('pointerdown', e => {
+    const sx = e.clientX, sy = e.clientY, ox = panel.offsetLeft, oy = panel.offsetTop;
+    $('grip').setPointerCapture(e.pointerId);
+    const mv = ev => {
+      const x = Math.max(0, Math.min(W - PANEL_W, ox + (ev.clientX - sx) / st.scale));
+      const y = Math.max(0, Math.min(H - panel.offsetHeight, oy + (ev.clientY - sy) / st.scale));
+      st.panelPos = { x, y }; panel.style.left = x + 'px'; panel.style.top = y + 'px';
+    };
+    const up = () => { $('grip').removeEventListener('pointermove', mv); $('grip').removeEventListener('pointerup', up); };
+    $('grip').addEventListener('pointermove', mv); $('grip').addEventListener('pointerup', up);
+  });
+  $('grip').addEventListener('dblclick', () => { st.panelPos = null; placePanel(); });
+
+  /* ---------- 键盘 ---------- */
+  document.addEventListener('keydown', e => {
+    if (st.phase === 'idle') return;
+    const inField = e.target.matches('input[type=text], textarea');
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); openFind(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inField) { e.preventDefault(); undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !inField && st.sel.size && !nativeSelText()) { e.preventDefault(); doCopy(); return; }
+    if (e.key === 'Escape') {
+      if (!$('menu').hidden) { $('menu').hidden = true; return; }
+      if (st.mode !== 'normal') { st.mode = 'normal'; st.sensPick.clear(); return render(); }
+      if (st.find.open) return closeFind();
+      if (st.sel.size) { st.sel.clear(); return selChanged(); }
+      closePanel();
+    }
+  });
+
+  /* ---------- 主题与重放 ---------- */
+  const THEMES = [[null, '跟随系统'], ['light', '浅色'], ['dark', '深色']];
+  let ti = 0;
+  $('themeBtn').onclick = () => {
+    ti = (ti + 1) % THEMES.length;
+    const [v, label] = THEMES[ti];
+    v ? document.documentElement.setAttribute('data-theme', v) : document.documentElement.removeAttribute('data-theme');
+    $('themeBtn').textContent = '主题：' + label;
+  };
+  $('replay').onclick = () => startOcr();
+
+  /* ---------- 启动：直接呈现识别完成的状态 ---------- */
+  buildShot(); buildToolbar();
+  fit(); addEventListener('resize', () => { fit(); });
+  const boot = () => {
+    measure(); buildBoxes(); placeChrome();
+    st.marks.set(4, { kind: 'hl', color: COLORS[0] });
+    panel.classList.add('open'); prog.style.opacity = '0';
+    render();
+  };
+  (document.fonts?.ready ?? Promise.resolve()).then(boot);
+})();
+</script>

@@ -1,0 +1,325 @@
+<title>选区外观条 v2</title>
+<style>
+/* 布局：顶部方案切换 → 1000×560 冻结桌面舞台（按宽度缩放）→ 方案要点。深色优先，配色沿用 GPUI Palette。 */
+:root {
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --selected: #28473d; --accent: #40ce9d; --on-accent: #10231c;
+  --page: #0f1317; --sel: #1498ff; --desk: #0c0e11; --desk-2: #15191e; --desk-line: #2a3038;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --on-accent: #fff; --page: #e8edf1; color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --on-accent: #fff; --page: #e8edf1; color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); padding-block: 18px 40px; padding-inline: 16px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+h1 { font-size: 17px; font-weight: 600; margin: 0; text-wrap: balance; }
+h1 small { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 13px; }
+.tog { margin-left: auto; display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); flex-wrap: wrap; }
+.tog button { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.tog button.on { background: var(--bg); color: var(--fg); font-weight: 600; }
+.stage-box { width: 100%; overflow: hidden; border-radius: 10px; border: 1px solid var(--border); }
+.stage { position: relative; width: 1000px; height: 560px; transform-origin: 0 0; overflow: hidden; background: var(--desk); user-select: none; }
+.desk { position: absolute; inset: 0; width: 1000px; height: 560px; color: #aab4bf; font: 13px/1.5 var(--ui); }
+.desk .win { position: absolute; left: 30px; top: 24px; width: 940px; height: 512px; background: var(--desk-2); border: 1px solid var(--desk-line); border-radius: 8px; overflow: hidden; }
+.desk .side { position: absolute; left: 0; top: 0; bottom: 0; width: 180px; border-right: 1px solid var(--desk-line); padding: 16px 14px; display: flex; flex-direction: column; gap: 14px; font-size: 12.5px; color: #8e99a5; }
+.desk .main { position: absolute; left: 210px; right: 28px; top: 28px; display: flex; flex-direction: column; gap: 12px; }
+.desk .main .h { font-size: 19px; color: #e6edf3; font-weight: 600; }
+.desk .card { border: 1px solid var(--desk-line); border-radius: 6px; padding: 10px 12px; background: #1a1f25; }
+.desk .chart { height: 130px; border-radius: 6px; background: linear-gradient(180deg,#1c2b38,#17202a); position: relative; }
+.desk .chart span { position: absolute; bottom: 0; width: 28px; border-radius: 3px 3px 0 0; background: #2f7fb8; }
+.mask { position: absolute; inset: 0; background: rgba(0,0,0,.5); pointer-events: none; }
+.sel { position: absolute; }
+.shot { position: absolute; inset: 0; overflow: hidden; }
+.edge { position: absolute; inset: 0; border: 1.5px solid var(--sel); pointer-events: none; }
+.h8 { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 1.5px solid var(--sel); transform: translate(-50%,-50%); }
+.outbox { position: absolute; border: 1px dashed rgba(20,152,255,.5); pointer-events: none; }
+
+/* ---------- 条 ---------- */
+.bar { position: absolute; z-index: 5; display: flex; align-items: center; gap: 2px; height: 34px; padding: 0 3px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0,0,0,.35); font: 12px/1 var(--ui); white-space: nowrap; color: var(--fg); }
+.bb { height: 28px; min-width: 28px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.bb:hover { background: var(--hover); }
+.bb.on { background: var(--selected); color: var(--accent); font-weight: 600; }
+.bb.open { background: var(--hover); }
+.num { font-variant-numeric: tabular-nums; }
+.dim { color: var(--muted); font-weight: 400; }
+.sep { width: 1px; height: 16px; background: var(--border); margin: 0 3px; flex: none; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.s { width: 11px; height: 11px; }
+.thumb { width: 22px; height: 16px; flex: none; display: grid; place-items: center; }
+.thumb i { display: block; width: 14px; height: 10px; background: #7d8a97; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+/* ---------- 弹层 ---------- */
+.pop { position: absolute; z-index: 6; width: 290px; padding: 10px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 16px 40px rgba(0,0,0,.5); font: 12px/1.4 var(--ui); display: flex; flex-direction: column; gap: 8px; }
+.presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pre { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 7px 0 6px; border-radius: 7px; color: var(--muted); border: 1px solid transparent; }
+.pre:hover { background: var(--hover); color: var(--fg); }
+.pre.on { border-color: var(--accent); color: var(--fg); background: var(--selected); }
+.pre i { display: block; width: 30px; height: 21px; background: #8a97a4; }
+.row { display: grid; grid-template-columns: 34px 62px 1fr 30px; align-items: center; gap: 8px; min-height: 28px; }
+.row.off .val, .row.off input[type=range] { opacity: .35; }
+.row label { color: var(--fg); }
+.sw { width: 30px; height: 17px; border-radius: 9px; background: var(--border); position: relative; transition: background .12s; }
+.sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: transform .12s; }
+.sw.on { background: var(--accent); }
+.sw.on::after { transform: translateX(13px); }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+.val { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sub { display: flex; gap: 6px; align-items: center; padding-left: 42px; }
+.cs { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); }
+.cs.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+.seg { display: inline-flex; margin-left: auto; background: var(--hover); border-radius: 6px; padding: 2px; }
+.seg button { padding: 1px 8px; border-radius: 4px; color: var(--muted); }
+.seg button.on { background: var(--bg); color: var(--fg); }
+.foot { display: flex; justify-content: space-between; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; }
+.foot b { color: var(--fg); font-weight: 600; }
+.mini { position: absolute; z-index: 6; padding: 8px 10px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 12px 30px rgba(0,0,0,.45); width: 200px; display: flex; flex-direction: column; gap: 6px; font: 12px/1.4 var(--ui); }
+.mini .r { display: flex; gap: 8px; align-items: center; }
+
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.note { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.note h3 { margin: 0 0 6px; font-size: 13.5px; }
+.note ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+.note li + li { margin-top: 3px; }
+.note.cur { border-color: var(--accent); }
+.lock { height: 18px; padding: 0 6px; border-radius: 9px; background: var(--selected); color: var(--accent); font-size: 11px; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; justify-self: start; }
+.link { color: var(--accent); font-size: 11.5px; text-align: left; white-space: nowrap; }
+.link:hover { text-decoration: underline; }
+.sw.mem { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.sw.mem::after { transform: translateX(13px); background: var(--muted); }
+.sw.ghost { opacity: .45; }
+.hint { color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 10px; color: var(--muted); font-size: 12.5px; align-items: center; }
+.legend b { color: var(--fg); font-weight: 600; }
+table.m { border-collapse: collapse; font-size: 12.5px; width: 100%; }
+table.m th, table.m td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; white-space: nowrap; }
+table.m th { color: var(--muted); font-weight: 400; }
+.tw { overflow-x: auto; }
+.pop { width: 296px; padding: 0; gap: 0; max-height: 404px; overflow: hidden; }
+.ph { display: flex; align-items: center; justify-content: space-between; height: 36px; padding: 0 4px 0 12px; }
+.ph b { font-size: 13px; }
+.x { width: 28px; height: 28px; border-radius: 6px; color: var(--muted); }
+.x:hover { background: var(--hover); }
+.pop .presets { padding: 0 12px 10px; border-bottom: 1px solid var(--border); }
+.pbody { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-height: 0; flex: 1; }
+.pbody hr { border: 0; border-top: 1px solid var(--border); margin: 0; }
+.sec { display: flex; flex-direction: column; gap: 6px; }
+.sec.dim { opacity: .55; }
+.sh { display: flex; align-items: center; justify-content: space-between; height: 28px; }
+.sh b { font-weight: 500; }
+.pr { display: grid; grid-template-columns: 44px 1fr 62px; align-items: center; gap: 8px; min-height: 28px; }
+.pr > span:first-child { color: var(--muted); font-size: 11.5px; }
+.pr .cl { grid-column: 2 / 4; display: flex; gap: 6px; align-items: center; }
+.nb { height: 26px; border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: flex-end; gap: 2px; padding: 0 7px; }
+.nb i { font-style: normal; color: var(--muted); font-size: 10.5px; }
+.nb.dis { opacity: .4; }
+.cs { width: 20px; height: 20px; }
+.cu { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 7px; border: 1px solid var(--border); border-radius: 6px; font-size: 10px; }
+.cu i { width: 10px; height: 10px; border-radius: 2px; }
+.cu:hover { background: var(--hover); }
+.seg.wide { margin: 0; display: flex; }
+.seg.wide button { flex: 1; height: 26px; }
+.foot { padding: 8px 12px; align-items: center; }
+.rs { height: 28px; padding: 0 8px; border-radius: 6px; color: var(--muted); font-size: 11px; }
+.rs:hover { background: var(--hover); color: var(--fg); }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>选区外观条 · 样式模型<small>点「样式」按钮打开面板；选区实时变化</small></h1>
+    <div class="tog" id="variants">
+      <button data-v="A" class="on">A · 样式胶囊</button>
+      <button data-v="C">C · 样式缩略图</button>
+    </div>
+  </div>
+  <div class="legend">
+    <b>原样下点开关：</b>
+    <div class="tog" id="rawmode" style="margin:0">
+      <button data-m="keep" class="on">保持原样（开关置灰）</button>
+      <button data-m="auto">自动切到上次的样式</button>
+    </div>
+  </div>
+  <div class="stage-box" id="box"><div class="stage" id="stage"></div></div>
+  <div class="notes" id="notes"></div>
+</div>
+
+<script>
+// 模型：样式互斥；每个样式“自带”的效果锁定开启，其余效果是可开可关的开关。
+// 圆角、阴影的开关状态全局记忆、跨样式共享；边框只由“描边”样式自带。
+const S = { v: "A", open: "style", mode: "keep", style: "stroke", last: "stroke",
+  mem: { corner: true, shadow: true }, radius: 12, blur: 10, op: 36, sc: "#000000", bw: 2, bc: "#ffffff", inside: false, flash: "" };
+const DEF = { mem: { corner: false, shadow: false }, radius: 12, blur: 10, op: 36, sc: "#000000", bw: 2, bc: "#ffffff", inside: false };
+const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`;
+const STYLES = {
+  raw:    { n: "原样", fixed: [] },
+  card:   { n: "卡片", fixed: ["shadow"] },
+  stroke: { n: "描边", fixed: ["border"] },
+};
+const EFFECT = { corner: ["圆角", "radius", 2, 32], shadow: ["阴影", "blur", 4, 28], border: ["边框", "bw", 1, 8] };
+const SEL = { x: 360, y: 150, w: 520, h: 320 };
+const DPI = 1.62;
+const COLORS = ["#ffffff", "#000000", "#1498ff", "#40ce9d"];
+const ic = {
+  chev: '<svg class="i s" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>',
+  more: '<svg class="i" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".9" fill="currentColor"/><circle cx="8" cy="8" r=".9" fill="currentColor"/><circle cx="12.5" cy="8" r=".9" fill="currentColor"/></svg>',
+  gear: '<svg class="i" viewBox="0 0 16 16"><path d="M3 4.5h6M12 4.5h1M3 11.5h1M7 11.5h6"/><circle cx="10.5" cy="4.5" r="1.5"/><circle cx="5.5" cy="11.5" r="1.5"/></svg>',
+  lock: '<svg class="i" style="width:10px;height:10px" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>',
+};
+const deskHTML = `<div class="desk"><div class="win">
+  <div class="side"><span>概览</span><span>截图记录</span><span>快捷键</span><span>OCR 引擎</span><span>贴图</span><span>导出</span></div>
+  <div class="main"><div class="h">本周截图统计</div>
+    <div class="card">完成 128 次截图 · 贴图 34 · OCR 52 次，平均冻结 196ms</div>
+    <div class="chart">${[40,70,55,95,80,110,65,100].map((h,i)=>`<span style="left:${24+i*48}px;height:${h}px"></span>`).join("")}</div>
+    <div class="card">长截图 6 · 录屏 3 · 二维码识别 9</div>
+    <div class="card">上次导出：D:\\截图\\2026-10-14 15.42.png</div>
+  </div></div></div>`;
+
+const fixed = (k, st = S.style) => STYLES[st].fixed.includes(k);
+function on(k, st = S.style) {
+  if (st === "raw") return false;
+  if (fixed(k, st)) return true;
+  return k === "border" ? false : S.mem[k];
+}
+const px = v => Math.round(v * DPI);
+const pad = () => Math.max(on("shadow") ? S.blur : 0, on("border") && !S.inside ? S.bw : 0);
+const outSize = () => [px(SEL.w) + px(pad() * 2), px(SEL.h) + px(pad() * 2)];
+function thumb(st, scale = 1) {
+  const c = on("corner", st), sh = on("shadow", st), b = on("border", st);
+  return `border-radius:${c ? 3*scale : 0}px;${sh ? `box-shadow:0 ${1.5*scale}px ${3*scale}px rgba(0,0,0,.65);` : ""}${b ? `border:${1.5*scale}px solid #fff;` : ""}`;
+}
+function setStyle(st) { S.style = st; if (st !== "raw") S.last = st; }
+function toggle(k) {
+  if (S.style === "raw") {
+    if (S.mode === "keep") { S.flash = "原样不加任何效果。灰色开关是记住的状态，切回卡片或描边时生效。"; return; }
+    setStyle(S.last); S.mem[k] = true;
+    S.flash = `已切到「${STYLES[S.last].n}」并打开${EFFECT[k][0]}`; return;
+  }
+  if (!fixed(k)) S.mem[k] = !S.mem[k];
+}
+
+function sizeChip() { return `<button class="bb num" title="(${px(SEL.x)}, ${px(SEL.y)}) · 点击输入精确位置和尺寸">${px(SEL.w)} × ${px(SEL.h)}${ic.chev}</button>`; }
+// 面板与 GPUI 实现一一对应：每段 = 标题行（开关／自带／换成描边）+ 参数行（滑杆 + 数值框）。
+function head(k) {
+  const label = EFFECT[k][0], raw = S.style === "raw";
+  let ctl;
+  if (fixed(k)) ctl = `<span class="lock">${ic.lock}样式自带</span>`;
+  else if (k === "border") ctl = `<button class="link" data-st="stroke">换成描边</button>`;
+  else if (raw) ctl = `<button class="sw ghost ${S.mem[k] ? "mem" : ""}" data-t="${k}" aria-label="${label}" title="原样不加效果；切到卡片或描边时按这里记住的状态生效"></button>`;
+  else ctl = `<button class="sw ${S.mem[k] ? "on" : ""}" data-t="${k}" aria-label="${label}开关" title="开关会被记住，切换样式后保持"></button>`;
+  return `<div class="sh"><b>${label}</b>${ctl}</div>`;
+}
+function param(label, key, min, max, enabled, unit = "px") {
+  return `<div class="pr"><span>${label}</span>
+    <input type="range" id="r-${key}" data-k="${key}" min="${min}" max="${max}" value="${S[key]}" ${enabled ? "" : "disabled"}>
+    <span class="nb num ${enabled ? "" : "dis"}">${S[key]}<i>${unit}</i></span></div>`;
+}
+function colors(which) {
+  const list = which === "bc" ? ["#ffffff", "#000000", "#4291ff", "#ff5368"] : ["#000000", "#ffffff", "#4291ff", "#ff5368"];
+  return `<div class="pr"><span>颜色</span><div class="cl">${list.map(c => `<button class="cs ${S[which]===c?"on":""}" data-c="${c}" data-w="${which}" style="background:${c}" aria-label="颜色 ${c}"></button>`).join("")}
+    <button class="cu" data-cu="${which}"><i style="background:${S[which]}"></i>${S[which].toUpperCase()}</button></div></div>`;
+}
+function panel() {
+  const [ow, oh] = outSize();
+  const raw = S.style === "raw";
+  const styles = `<div class="presets">${Object.entries(STYLES).map(([id, st]) => `<button class="pre ${S.style===id?"on":""}" data-st="${id}"><i style="${thumb(id, 2)}"></i>${st.n}</button>`).join("")}</div>`;
+  const corner = `<div class="sec ${on("corner") ? "" : "dim"}">${head("corner")}${param("半径", "radius", 0, 60, !raw)}</div>`;
+  const shadow = `<div class="sec ${on("shadow") ? "" : "dim"}">${head("shadow")}${param("扩散", "blur", 0, 48, !raw)}
+    ${on("shadow") ? param("浓度", "op", 0, 100, true, "%") + colors("sc") : ""}</div>`;
+  const border = `<div class="sec">${head("border")}${S.style === "stroke" ? param("粗细", "bw", 1, 8, true)
+    + `<div class="seg wide"><button data-in="0" class="${S.inside?"":"on"}">外侧</button><button data-in="1" class="${S.inside?"on":""}">内侧</button></div>` + colors("bc") : ""}</div>`;
+  const tip = S.flash ? `<div class="hint">${S.flash}</div>`
+    : raw ? `<div class="hint">原样导出选区像素。灰色开关是记住的状态，切到卡片或描边时生效。</div>` : "";
+  return `<div class="ph"><b>选区样式</b><button class="x" data-open="style" aria-label="关闭">✕</button></div>${styles}
+    <div class="pbody">${corner}<hr>${shadow}<hr>${border}${tip}</div>
+    <div class="foot"><span>导出尺寸 <b class="num">${ow} × ${oh}</b></span><button class="rs" data-reset="1">重置</button></div>`;
+}
+function barA() {
+  return `${sizeChip()}<span class="sep"></span>
+    <button class="bb ${S.open?"open":""} ${S.style!=="raw"?"on":""}" data-open="style" title="样式：原样 / 卡片 / 描边 · 滚轮切换">
+      <span class="thumb"><i style="${thumb(S.style)}"></i></span>${STYLES[S.style].n}${ic.chev}</button>
+    <span class="sep"></span><button class="bb" title="更多截图操作">${ic.more}</button>`;
+}
+function barC() {
+  return `${sizeChip()}<span class="sep"></span>${Object.entries(STYLES).map(([id, st]) => `<button class="bb ${S.style===id?"on":""}" data-st="${id}" title="${st.n}"><span class="thumb"><i style="${thumb(id)}"></i></span></button>`).join("")}
+    <button class="bb ${S.open?"open":""}" data-open="style" title="圆角、阴影开关与参数">${ic.gear}</button>
+    <span class="sep"></span><button class="bb" title="更多截图操作">${ic.more}</button>`;
+}
+
+function render() {
+  const p = pad(), r = on("corner") ? S.radius : 0, o = on("border") && !S.inside ? S.bw : 0;
+  // 外边框包住原图：外沿圆角 = 半径 + 粗细；内边框压在图内。阴影投在最外沿。
+  const frame = `<div style="position:absolute;inset:${-o}px;border-radius:${r ? r + o : 0}px;pointer-events:none;${on("shadow") ? `box-shadow:0 ${S.blur/3}px ${S.blur}px ${rgba(S.sc, S.op/100)};` : ""}${on("border") ? `border:${S.bw}px solid ${S.bc};` : ""}"></div>`;
+  const hs = [[0,0],[.5,0],[1,0],[0,.5],[1,.5],[0,1],[.5,1],[1,1]].map(([a,b])=>`<span class="h8" style="left:${a*100}%;top:${b*100}%"></span>`).join("");
+  const top = SEL.y - 42, left = SEL.x;
+  document.getElementById("stage").innerHTML = deskHTML + `<div class="mask"></div>
+    ${p ? `<div class="outbox" style="left:${SEL.x-p}px;top:${SEL.y-p}px;width:${SEL.w+2*p}px;height:${SEL.h+2*p}px"></div>` : ""}
+    <div class="sel" style="left:${SEL.x}px;top:${SEL.y}px;width:${SEL.w}px;height:${SEL.h}px">
+      <div class="shot" style="overflow:visible"><div style="position:absolute;inset:0;overflow:hidden;border-radius:${r}px"><div style="position:absolute;left:${-SEL.x}px;top:${-SEL.y}px">${deskHTML}</div></div>${frame}</div>
+      <div class="edge"></div>${hs}</div>
+    <div class="bar" style="left:${left}px;top:${top}px">${S.v === "A" ? barA() : barC()}</div>
+    ${S.open ? `<div class="pop" style="left:${left}px;top:${top+40}px">${panel()}</div>` : ""}`;
+  renderNotes(); fit();
+}
+
+function renderNotes() {
+  const cell = (id, k) => id === "raw" ? "—" : fixed(k, id) ? "自带" : k === "border" ? "—" : "记忆开关";
+  const tbl = `<div class="tw"><table class="m"><tr><th>样式</th><th>圆角</th><th>阴影</th><th>边框</th></tr>
+    ${Object.entries(STYLES).map(([id, st]) => `<tr><td>${st.n}</td>${["corner","shadow","border"].map(k => `<td>${cell(id, k)}</td>`).join("")}</tr>`).join("")}</table></div>`;
+  const keep = S.mode === "keep";
+  document.getElementById("notes").innerHTML = `
+    <div class="note"><h3>模型</h3>${tbl}<ul style="margin-top:8px"><li>“自带”锁定开启，只能调参数</li><li>“记忆开关”各样式共用：描边里开了圆角，切到卡片也带圆角；下次截图仍记得</li><li>描边 = 边框 + 记住的圆角 + 记住的阴影，三者可以同时出现</li></ul></div>
+    <div class="note ${keep?"cur":""}"><h3>原样：保持原样（推荐）</h3><ul><li>原样就是原始像素，开关置灰，只显示记住的状态</li><li>点开关只给提示，不偷偷换样式，结果可预期</li><li>代价：想要“原图 + 只加圆角”时，没有对应样式</li></ul></div>
+    <div class="note ${keep?"":"cur"}"><h3>原样：自动切换</h3><ul><li>原样下点圆角/阴影，自动切到上次用的样式并打开该开关</li><li>少一步，但会顺带加上那个样式自带的效果（比如描边的边框），不一定是想要的</li></ul></div>`;
+}
+function fit() {
+  const box = document.getElementById("box"), st = document.getElementById("stage");
+  const k = Math.min(1, box.clientWidth / 1000);
+  st.style.transform = `scale(${k})`; box.style.height = 560 * k + "px";
+}
+function seg(id, attr, fn) {
+  document.getElementById(id).addEventListener("click", e => {
+    const b = e.target.closest(`button[${attr}]`); if (!b) return;
+    document.querySelectorAll(`#${id} button`).forEach(x => x.classList.toggle("on", x === b));
+    fn(b.getAttribute(attr)); S.flash = ""; render();
+  });
+}
+seg("variants", "data-v", v => { S.v = v; S.open = v === "A" ? "style" : null; });
+seg("rawmode", "data-m", m => { S.mode = m; setStyle("raw"); S.open = "style"; });
+
+const stage = document.getElementById("stage");
+stage.addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) { if (!e.target.closest(".pop")) { S.open = null; S.flash = ""; render(); } return; }
+  const d = b.dataset; S.flash = "";
+  if (d.open) S.open = S.open ? null : d.open;
+  else if (d.st) setStyle(d.st);
+  else if (d.t) toggle(d.t);
+  else if (d.c) S[d.w] = d.c;
+  else if (d.cu) { const i = document.createElement("input"); i.type = "color"; i.value = S[d.cu];
+    i.addEventListener("input", () => { S[d.cu] = i.value; render(); }); i.click(); return; }
+  else if (d.reset) { Object.assign(S, JSON.parse(JSON.stringify(DEF))); setStyle("raw"); }
+  else if (d.in) S.inside = d.in === "1";
+  render();
+});
+stage.addEventListener("input", e => {
+  const k = e.target.dataset.k; if (!k) return;
+  S[k] = +e.target.value; const id = e.target.id; render();
+  document.getElementById(id)?.focus();
+});
+stage.addEventListener("wheel", e => {
+  if (!e.target.closest("[data-open]")) return;
+  e.preventDefault();
+  const order = ["raw", "card", "stroke"], i = order.indexOf(S.style);
+  setStyle(order[(i + (e.deltaY > 0 ? 1 : 2)) % 3]); render();
+}, { passive: false });
+addEventListener("resize", fit);
+render();
+</script>

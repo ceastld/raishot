@@ -1,0 +1,585 @@
+<title>圆角控制点</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 布局：方案／场景／显示时机切换 → 1000×560 冻结桌面舞台（按宽度缩放，可直接拖动）→ 3× 状态细节（浅／深内容底）→ 规格对照 → 要点。
+   深色优先；界面色沿用 GPUI Palette，画布上的选区／标注色不随主题变化（与程序一致）。 */
+:root {
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --selected: #28473d; --accent: #40ce9d; --page: #0f1317;
+  --shadow: rgba(0,0,0,.35);
+  /* 截图内容与画布色：固定值，不跟主题 */
+  --desk: #0c0e11; --desk-2: #15191e; --desk-line: #2a3038; --doc: #f6f7f9; --doc-fg: #2b3138; --doc-line: #d9dee4;
+  --sel: #1498ff; --ann: #6c9ffc;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --page: #e8edf1; --shadow: rgba(30,45,60,.16); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --page: #e8edf1; --shadow: rgba(30,45,60,.16); color-scheme: light; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.55 var(--ui);
+  padding-block: 18px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+h1 { font-size: 18px; font-weight: 600; margin: 0; text-wrap: balance; }
+h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 13px; }
+h2 { font-size: 14.5px; font-weight: 600; margin: 0; text-wrap: balance; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.ctl { display: flex; align-items: center; gap: 8px; }
+.lab { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+.tog { display: inline-flex; flex-wrap: wrap; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); }
+.tog button { height: 28px; padding: 0 11px; border-radius: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.tog button.on { background: var(--bg); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px var(--shadow); }
+.tog button.rec::after { content: "推荐"; margin-left: 5px; font-size: 10.5px; font-weight: 500; color: var(--accent); }
+.tog.off { opacity: .45; pointer-events: none; }
+.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.chk input { accent-color: var(--sel); margin: 0; }
+
+.stage-box { width: 100%; overflow: hidden; border-radius: 10px; border: 1px solid var(--border); background: var(--desk); }
+.stage { position: relative; width: 1000px; height: 560px; transform-origin: 0 0; overflow: hidden; user-select: none; touch-action: none; }
+.hint { margin: 0; font-size: 12.5px; color: var(--muted); }
+.hint b { color: var(--fg); font-weight: 600; }
+
+/* ---------- 冻结桌面（截图内容，固定色） ---------- */
+.desk { position: absolute; inset: 0; font: 13px/1.5 var(--ui); color: #aab4bf;
+  background: radial-gradient(120% 90% at 85% 10%, #1b2633 0%, #0c0e11 60%); }
+.app { position: absolute; left: 30px; top: 24px; width: 600px; height: 512px; background: var(--desk-2); border: 1px solid var(--desk-line); border-radius: 8px; overflow: hidden; }
+.app .side { position: absolute; left: 0; top: 0; bottom: 0; width: 170px; border-right: 1px solid var(--desk-line); padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; font-size: 12.5px; color: #8e99a5; }
+.app .side b { color: #e6edf3; font-weight: 600; }
+.app .main { position: absolute; left: 196px; right: 24px; top: 26px; display: flex; flex-direction: column; gap: 14px; }
+.app .h { font-size: 19px; color: #e6edf3; font-weight: 600; }
+.app .row { display: flex; gap: 12px; }
+.app .card { flex: 1; border: 1px solid var(--desk-line); border-radius: 6px; padding: 10px 12px; background: #1a1f25; display: flex; flex-direction: column; }
+.app .card small { color: #7d8894; font-size: 11.5px; }
+.app .card b { color: #e6edf3; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.app .chart { height: 150px; border-radius: 6px; background: linear-gradient(180deg,#1c2b38,#17202a); position: relative; }
+.app .chart span { position: absolute; bottom: 0; width: 26px; border-radius: 3px 3px 0 0; background: #2f7fb8; }
+.app .list { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.app .list div { display: flex; justify-content: space-between; border-bottom: 1px solid var(--desk-line); padding-bottom: 6px; }
+.doc { position: absolute; left: 560px; top: 196px; width: 410px; height: 340px; background: var(--doc); color: var(--doc-fg); border-radius: 8px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.doc .bar { height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: #e9ecf0; font-size: 12px; color: #5b6570; }
+.doc .bar i { width: 9px; height: 9px; border-radius: 50%; background: #c6ccd3; }
+.doc .bar span { margin-left: 6px; }
+.doc .body { padding: 16px 22px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 1.7; }
+.doc h4 { margin: 0; font-size: 16px; }
+.doc p { margin: 0; color: #46505b; }
+.doc .tbl { display: grid; grid-template-columns: 1.4fr 1fr 1fr; border-top: 1px solid var(--doc-line); font-size: 12px; }
+.doc .tbl span { padding: 4px 0; border-bottom: 1px solid var(--doc-line); }
+
+/* ---------- 覆盖层 ---------- */
+#ov { position: absolute; inset: 0; width: 1000px; height: 560px; overflow: visible; }
+.fade { transition: opacity .12s ease; }
+@media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+.pill { position: absolute; z-index: 6; height: 22px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  font: 12px/1 var(--ui); white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none; }
+.pill .m { color: var(--muted); }
+.pill .k { color: var(--accent); }
+.tip { position: absolute; z-index: 6; padding: 4px 8px; border-radius: 6px; background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  font: 12px/1.3 var(--ui); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .1s ease; }
+.tip.show { opacity: 1; transition-delay: .45s; }
+
+/* 选区外观条与主工具栏（跟随主题） */
+.bar { position: absolute; z-index: 5; display: flex; align-items: center; gap: 2px; padding: 0 5px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0,0,0,.35); font: 12.5px/1 var(--ui); color: var(--fg); white-space: nowrap; }
+.bb { height: 28px; min-width: 28px; padding: 0 7px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: var(--fg); }
+.bb.on { background: var(--selected); color: var(--accent); }
+.bb.dim { color: var(--muted); }
+.sep { width: 1px; height: 16px; background: var(--border); margin: 0 3px; flex: none; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ---------- 状态细节 ---------- */
+.panel { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.panel .sub { margin: 0; font-size: 12.5px; color: var(--muted); }
+.sheet { display: grid; grid-template-columns: 72px repeat(4, minmax(0, 1fr)); gap: 8px 10px; align-items: center; }
+.sheet .rh { font-size: 12px; color: var(--muted); }
+.sheet .ch { font-size: 12px; color: var(--muted); text-align: center; }
+.sheet figure { margin: 0; }
+.sheet svg { display: block; width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--border); }
+@media (max-width: 620px) {
+  .sheet { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sheet .rh, .sheet .ch { display: none; }
+  .sheet figure figcaption { display: block; }
+}
+.sheet figcaption { display: none; font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+
+.spec-wrap { overflow-x: auto; }
+table.spec { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 560px; }
+table.spec th, table.spec td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+table.spec th { color: var(--muted); font-weight: 500; white-space: nowrap; width: 88px; }
+table.spec td.cur { color: var(--fg); }
+table.spec thead th { color: var(--fg); font-weight: 600; }
+table.spec td.same { color: var(--muted); }
+
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.notes .panel ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; max-width: 62ch; }
+.notes .panel p { margin: 0; font-size: 13px; max-width: 62ch; }
+code { font-family: var(--mono); font-size: 12px; color: var(--fg); background: var(--hover); padding: 1px 5px; border-radius: 4px; }
+</style>
+
+<div class="wrap">
+  <h1>圆角控制点 <small>样式设计稿 · 舞台里可以直接拖</small></h1>
+
+  <div class="controls">
+    <div class="ctl"><span class="lab">形状</span>
+      <div class="tog" id="scheme">
+        <button data-v="now">现状</button>
+        <button data-v="dot">A 实心点</button>
+        <button data-v="diamond" class="on rec">B 菱形</button>
+        <button data-v="arc">C 弧柄</button>
+      </div>
+    </div>
+    <div class="ctl"><span class="lab">场景</span>
+      <div class="tog" id="scene">
+        <button data-v="sel" class="on">截图选区</button>
+        <button data-v="ann">矩形标注</button>
+      </div>
+    </div>
+    <div class="ctl"><span class="lab">选区上何时显示</span>
+      <div class="tog" id="vis">
+        <button data-v="near">靠近角</button>
+        <button data-v="hover" class="on">进入选区</button>
+        <button data-v="always">常显</button>
+      </div>
+    </div>
+    <label class="chk"><input type="checkbox" id="snap"> 角上缩放点贴到圆弧</label>
+  </div>
+
+  <div class="stage-box" id="box">
+    <div class="stage" id="stage">
+      <div class="desk">
+        <div class="app">
+          <div class="side"><b>概览</b><span>项目</span><span>报表</span><span>成员</span><span>账单</span><span>设置</span></div>
+          <div class="main">
+            <div class="h">季度活跃用户</div>
+            <div class="row">
+              <div class="card"><small>本周</small><b>12,480</b></div>
+              <div class="card"><small>环比</small><b>+6.2%</b></div>
+              <div class="card"><small>留存</small><b>71%</b></div>
+            </div>
+            <div class="chart" id="chart"></div>
+            <div class="list">
+              <div><span>华东区</span><span>4,912</span></div>
+              <div><span>华南区</span><span>3,276</span></div>
+              <div><span>华北区</span><span>2,841</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="doc">
+          <div class="bar"><i></i><i></i><i></i><span>周报.docx</span></div>
+          <div class="body">
+            <h4>本周进展</h4>
+            <p>截图选区支持圆角、阴影和边框三个独立效果，导出与贴图保持一致。</p>
+            <p>下周计划：圆角控制点换新样式，补齐拖动时的数值提示。</p>
+            <div class="tbl">
+              <span>事项</span><span>负责人</span><span>状态</span>
+              <span>选区外观条</span><span>界面组</span><span>已完成</span>
+              <span>圆角控制点</span><span>界面组</span><span>设计中</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <svg id="ov" viewBox="0 0 1000 560" aria-hidden="true">
+        <path id="mask" fill="rgba(0,0,0,.5)" fill-rule="evenodd"/>
+        <path id="frame" fill="none" stroke="#1498ff" stroke-width="2"/>
+        <g id="ann"></g>
+        <g id="hl"></g>
+        <g id="handles" class="fade"></g>
+        <g id="k0" class="fade"></g><g id="k1" class="fade"></g><g id="k2" class="fade"></g><g id="k3" class="fade"></g>
+      </svg>
+
+      <div class="bar" id="stylebar" style="left:250px; top:68px; height:36px">
+        <span class="bb num" id="size">480 × 320</span>
+        <span class="sep"></span>
+        <span class="bb on" title="圆角"><svg class="i" viewBox="0 0 16 16"><path d="M3 13V8a5 5 0 015-5h5"/></svg></span>
+        <span class="bb dim" title="阴影"><svg class="i" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="9" height="9" rx="1.5"/><path d="M13.5 5.5v8h-8"/></svg></span>
+        <span class="bb dim" title="边框"><svg class="i" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="1"/><rect x="5.5" y="5.5" width="5" height="5" rx=".5"/></svg></span>
+      </div>
+      <div class="bar" id="toolbar" style="left:418px; top:442px; height:40px">
+        <span class="bb" id="t-rect" title="矩形"><svg class="i" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="9" rx="1"/></svg></span>
+        <span class="bb" title="椭圆"><svg class="i" viewBox="0 0 16 16"><ellipse cx="8" cy="8" rx="5.5" ry="4.5"/></svg></span>
+        <span class="bb" title="箭头"><svg class="i" viewBox="0 0 16 16"><path d="M3 13L13 3M7.5 3H13v5.5"/></svg></span>
+        <span class="bb" title="画笔"><svg class="i" viewBox="0 0 16 16"><path d="M3 13l.6-2.6L11 3l2 2-7.4 7.4z"/></svg></span>
+        <span class="bb" title="马赛克"><svg class="i" viewBox="0 0 16 16"><path d="M3 3h4v4H3zM9 9h4v4H9zM9 3h4v4M3 9h4v4"/></svg></span>
+        <span class="bb" title="文字"><svg class="i" viewBox="0 0 16 16"><path d="M3.5 3.5h9M8 3.5v9"/></svg></span>
+        <span class="sep"></span>
+        <span class="bb" id="t-crop" title="裁剪"><svg class="i" viewBox="0 0 16 16"><path d="M5 2v9h9M2 5h9v9"/></svg></span>
+        <span class="sep"></span>
+        <span class="bb" title="取消"><svg class="i" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></span>
+        <span class="bb" title="完成" style="color:var(--accent)"><svg class="i" viewBox="0 0 16 16"><path d="M3 8.5l3.3 3.3L13 5"/></svg></span>
+      </div>
+
+      <div class="pill" id="pill" hidden></div>
+      <div class="tip" id="tip">拖动调整圆角</div>
+    </div>
+  </div>
+  <p class="hint" id="hint"></p>
+
+  <section class="panel">
+    <h2>状态细节 <span class="lab">3 倍放大，左上角</span></h2>
+    <p class="sub">截图内容可能是白底文档，也可能是深色界面，控制点在两种底上都要分得清。</p>
+    <div class="sheet" id="sheet"></div>
+  </section>
+
+  <section class="panel">
+    <h2>规格对照</h2>
+    <div class="spec-wrap"><table class="spec" id="spec"></table></div>
+  </section>
+
+  <div class="notes">
+    <section class="panel">
+      <h2>现状的问题</h2>
+      <ul>
+        <li>选区的圆角点和 8 个缩放点一样是白底蓝边圆，尺寸还更大（12 逻辑像素，125% 下缩放点约 9.6），看起来像第 9 个缩放点。</li>
+        <li>悬停时变成界面绿，和选区蓝不搭；手形光标不提示往哪个方向拖。</li>
+        <li>只有指针靠近某个角才出现那一个，很难发现；拖动时看不到数值，只能目测。</li>
+        <li>矩形标注用的是另一套橙色菱形；橙色在箭头和折线里表示“当前节点”，含义冲突。</li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>新方案共同的改动</h2>
+      <ul>
+        <li>比缩放点小一号，四角同时出现，按“何时显示”淡入淡出。</li>
+        <li>光标换成与该角同向的对角箭头（GPUI 暂无自定义光标）。</li>
+        <li>悬停时旁边出现“圆角 16”标签；拖动时四角弧线加亮、8 个缩放点暂隐，标签实时显示数值，0 写“直角”，到上限标“最大”。</li>
+        <li>位置规则不变：选区在圆弧圆心、离角至少 14；标注矩形离角 18＋半径。</li>
+        <li>选区与标注用同一形状，选区用选区蓝，标注用标注蓝。</li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>推荐 B 菱形</h2>
+      <p>菱形和缩放圆点、旋转圆环形状都不同，不用靠颜色区分；标注里本来就用菱形表示圆角，两处统一只需改色。A 更低调，但仍是圆点，靠“实心／空心”区分，在小尺寸下容易混；C 最能说明“这是圆角”，但线细，在花哨的截图上容易看丢，绘制和命中也更复杂。</p>
+      <p style="margin-top:8px; color:var(--muted)">确认后改 <code>selection_finish_view.rs</code> 的选区圆角点和 <code>capture_canvas.rs</code> 的标注菱形与缩放点显隐。</p>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const C = { sel: '#1498ff', ann: '#6c9ffc', red: '#f04a4a', orange: '#ffc56b', halo: 'rgba(0,0,0,.38)', nowHover: '#28473d' };
+  const SIGN = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
+  const SEL = { x: 250, y: 112, w: 480, h: 318 };
+  const ANN = { x: 318, y: 176, w: 250, h: 150 };
+  const SEL_MAX = Math.min(60, Math.min(SEL.w, SEL.h) / 2);
+  const ANN_MAX = Math.min(50, Math.min(ANN.w, ANN.h) / 2);
+  const S = { scheme: 'diamond', scene: 'sel', vis: 'hover', snap: false, r: 16, ra: 12, hover: -1, drag: null, pointer: null };
+
+  const $ = id => document.getElementById(id);
+  const stage = $('stage'), box = $('box');
+  const kg = [0, 1, 2, 3].map(i => $('k' + i));
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const f = n => +n.toFixed(2);
+
+  // 图表柱子
+  const chart = $('chart');
+  [44, 62, 51, 80, 72, 96, 88, 118, 104, 126, 112].forEach((h, i) => {
+    const s = document.createElement('span'); s.style.left = (14 + i * 34) + 'px'; s.style.height = h + 'px'; chart.appendChild(s);
+  });
+
+  function corners(b) { return [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]; }
+  function rr(b, r) {
+    r = Math.min(r, b.w / 2, b.h / 2);
+    const { x, y, w, h } = b;
+    if (r <= 0) return `M${x} ${y}H${x + w}V${y + h}H${x}Z`;
+    return `M${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h - r}A${r} ${r} 0 0 1 ${x + w - r} ${y + h}H${x + r}A${r} ${r} 0 0 1 ${x} ${y + h - r}V${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}Z`;
+  }
+  function arcs(b, r) {
+    r = Math.min(r, b.w / 2, b.h / 2);
+    if (r <= 0) return '';
+    const { x, y, w, h } = b;
+    return `M${x} ${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}M${x + w - r} ${y}A${r} ${r} 0 0 1 ${x + w} ${y + r}` +
+      `M${x + w} ${y + h - r}A${r} ${r} 0 0 1 ${x + w - r} ${y + h}M${x + r} ${y + h}A${r} ${r} 0 0 1 ${x} ${y + h - r}`;
+  }
+  function selInset(b, r) { return Math.min(Math.max(r, 14), Math.min(b.w, b.h) / 2); }
+  function annInset(b, r) {
+    const maxDiag = (Math.min(b.w, b.h) / 2 - 7) * Math.SQRT2;
+    return Math.min(18 + r, maxDiag) / Math.SQRT2;
+  }
+  function knobPos(scene, i) {
+    const b = scene === 'sel' ? SEL : ANN;
+    const inset = scene === 'sel' ? selInset(b, S.r) : annInset(b, S.ra);
+    const c = corners(b)[i], s = SIGN[i];
+    return [c[0] + s[0] * inset, c[1] + s[1] * inset];
+  }
+  const dia = (x, y, d) => `M${f(x)} ${f(y - d)}L${f(x + d)} ${f(y)}L${f(x)} ${f(y + d)}L${f(x - d)} ${f(y)}Z`;
+
+  // 单个控制点；state: idle | hover | drag
+  function knob(scheme, x, y, i, state, color, scene) {
+    const [sx, sy] = SIGN[i];
+    const hot = state !== 'idle';
+    if (scheme === 'now') {
+      if (scene === 'ann') return `<path d="${dia(x, y, 4.25)}" fill="${C.orange}" stroke="#fff" stroke-width="1"/>`;
+      return `<circle cx="${x}" cy="${y}" r="5" fill="${hot ? C.nowHover : '#fff'}" stroke="${color}" stroke-width="2"/>`;
+    }
+    let g = '';
+    if (scheme === 'dot') {
+      const r = hot ? 4.5 : 3.5;
+      if (state === 'drag') g += `<circle cx="${x}" cy="${y}" r="${r + 4.5}" fill="${color}" opacity=".24"/>`;
+      g += `<circle cx="${x}" cy="${y}" r="${r + 1.25}" fill="none" stroke="${C.halo}" stroke-width="1"/>`;
+      g += `<circle cx="${x}" cy="${y}" r="${r}" fill="${color}" stroke="#fff" stroke-width="1.5"/>`;
+    } else if (scheme === 'diamond') {
+      const d = hot ? 5.5 : 4.5;
+      if (state === 'drag') g += `<path d="${dia(x, y, d + 5)}" fill="${color}" opacity=".24"/>`;
+      g += `<path d="${dia(x, y, d + 1.8)}" fill="none" stroke="${C.halo}" stroke-width="1"/>`;
+      g += `<path d="${dia(x, y, d)}" fill="${hot ? color : '#fff'}" stroke="${hot ? '#fff' : color}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    } else {
+      const R = hot ? 7 : 6, w = hot ? 3 : 2.5;
+      const cx = x + sx * R / Math.SQRT2, cy = y + sy * R / Math.SQRT2;
+      const p = `M${f(cx - sx * R)} ${f(cy)}A${R} ${R} 0 0 ${sx * sy > 0 ? 1 : 0} ${f(cx)} ${f(cy - sy * R)}`;
+      const st = (c, wd, op = 1) => `<path d="${p}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-linecap="round" opacity="${op}"/>`;
+      if (state === 'drag') g += st(color, w + 8, .24);
+      g += st(C.halo, w + 4.5) + st('#fff', w + 3) + st(color, w);
+    }
+    return g;
+  }
+  const hitR = () => ({ now: 6.5, dot: 8, diamond: 8, arc: 9 })[S.scheme];
+
+  function selHandles(b, r, snap) {
+    const { x, y, w, h } = b;
+    const off = snap ? Math.min(r, w / 2, h / 2) * (1 - Math.SQRT1_2) : 0;
+    const pts = [[x + off, y + off], [x + w / 2, y], [x + w - off, y + off], [x + w, y + h / 2], [x + w - off, y + h - off], [x + w / 2, y + h], [x + off, y + h - off], [x, y + h / 2]];
+    return pts.map(([px, py]) => `<circle cx="${f(px)}" cy="${f(py)}" r="4.1" fill="#fff" stroke="${C.sel}" stroke-width="1.5"/>`).join('');
+  }
+  function annHandles(b) {
+    const { x, y, w, h } = b;
+    const pts = [[x, y], [x + w / 2, y], [x + w, y], [x + w, y + h / 2], [x + w, y + h], [x + w / 2, y + h], [x, y + h], [x, y + h / 2]];
+    return pts.map(([px, py]) => `<circle cx="${px}" cy="${py}" r="3" fill="${C.ann}"/>`).join('');
+  }
+  function arcHL(b, r, color) {
+    const d = arcs(b, r);
+    if (!d) return '';
+    return `<path d="${d}" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="6" stroke-linecap="round"/>` +
+      `<path d="${d}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`;
+  }
+
+  function inZone(p, i, zone, outside) {
+    const c = corners(SEL)[i], [sx, sy] = SIGN[i];
+    const dx = (p.x - c[0]) * sx, dy = (p.y - c[1]) * sy;
+    return dx >= -outside && dy >= -outside && dx <= zone && dy <= zone;
+  }
+  function knobVisible(i) {
+    if (S.scene === 'ann') return true;
+    if (S.drag) return S.scheme === 'now' ? S.drag.corner === i : true;
+    const p = S.pointer;
+    if (S.scheme !== 'now' && S.vis === 'always') return true;
+    if (!p) return false;
+    const inset = selInset(SEL, S.r);
+    if (S.scheme === 'now') return inZone(p, i, inset + 18, 0);
+    if (S.vis === 'near') return [0, 1, 2, 3].some(j => inZone(p, j, inset + 24, 12));
+    return p.x >= SEL.x - 10 && p.x <= SEL.x + SEL.w + 10 && p.y >= SEL.y - 10 && p.y <= SEL.y + SEL.h + 10;
+  }
+
+  const pill = $('pill'), tip = $('tip');
+  function render() {
+    const sel = S.scene === 'sel', fresh = S.scheme !== 'now';
+    $('mask').setAttribute('d', `M0 0H1000V560H0Z` + rr(SEL, S.r));
+    $('frame').setAttribute('d', rr(SEL, S.r));
+    $('handles').innerHTML = selHandles(SEL, S.r, S.snap);
+    $('handles').style.opacity = sel && S.drag && fresh ? 0 : 1;
+    $('hl').innerHTML = S.drag && fresh ? arcHL(sel ? SEL : ANN, sel ? S.r : S.ra, sel ? C.sel : C.ann) : '';
+
+    if (sel) {
+      $('ann').innerHTML = '';
+    } else {
+      const cx = ANN.x + ANN.w / 2;
+      const hideDots = S.drag && fresh;
+      $('ann').innerHTML =
+        `<path d="${rr(ANN, S.ra)}" fill="none" stroke="${C.red}" stroke-width="3"/>` +
+        `<rect x="${ANN.x}" y="${ANN.y}" width="${ANN.w}" height="${ANN.h}" fill="none" stroke="${C.ann}" stroke-width="1"/>` +
+        `<g opacity="${hideDots ? 0 : 1}"><line x1="${cx}" y1="${ANN.y}" x2="${cx}" y2="${ANN.y - 22}" stroke="${C.ann}" stroke-width="1"/>` +
+        `<circle cx="${cx}" cy="${ANN.y - 26}" r="4" fill="none" stroke="${C.ann}" stroke-width="1.5"/>` + annHandles(ANN) + `</g>`;
+    }
+
+    const scene = S.scene, color = sel ? C.sel : C.ann;
+    kg.forEach((g, i) => {
+      const [x, y] = knobPos(scene, i);
+      const state = S.drag && S.drag.corner === i ? 'drag' : (S.drag && fresh ? 'idle' : (S.hover === i ? 'hover' : 'idle'));
+      g.innerHTML = knob(S.scheme, f(x), f(y), i, state, color, scene);
+      g.style.opacity = knobVisible(i) ? 1 : 0;
+    });
+
+    // 数值标签（新方案）与旧提示（现状）
+    const active = S.drag ? S.drag.corner : S.hover;
+    if (fresh && active >= 0) {
+      const v = sel ? S.r : S.ra, max = sel ? SEL_MAX : ANN_MAX;
+      const zero = sel ? '直角 <span class="m">关闭圆角</span>' : '直角';
+      let html = v === 0 ? zero : `圆角 <b class="num">${v}</b>` + (v >= max ? ' <span class="k">最大</span>' : '');
+      if (!S.drag) html += ' <span class="m">拖动调整</span>';
+      pill.innerHTML = html;
+      const [x, y] = knobPos(scene, active), [sx, sy] = SIGN[active];
+      pill.style.left = (x + sx * 14) + 'px';
+      pill.style.top = (y + sy * 14) + 'px';
+      pill.style.transform = `translate(${sx < 0 ? '-100%' : '0'}, ${sy < 0 ? '-100%' : '0'})`;
+      pill.hidden = false;
+    } else pill.hidden = true;
+    const showTip = !fresh && S.hover >= 0 && !S.drag && S.pointer;
+    if (showTip) { tip.style.left = (S.pointer.x + 10) + 'px'; tip.style.top = (S.pointer.y + 20) + 'px'; }
+    tip.classList.toggle('show', !!showTip);
+
+    // 光标
+    let cur = 'crosshair';
+    if (active >= 0) cur = fresh ? (active % 2 === 0 ? 'nwse-resize' : 'nesw-resize') : 'pointer';
+    else if (S.pointer) {
+      const b = sel ? SEL : ANN, p = S.pointer;
+      if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) cur = 'move';
+    }
+    stage.style.cursor = cur;
+
+    $('t-crop').classList.toggle('on', sel);
+    $('t-rect').classList.toggle('on', !sel);
+    $('vis').classList.toggle('off', !sel || !fresh);
+    $('snap').disabled = !sel;
+    $('hint').innerHTML = hintText();
+  }
+
+  function hintText() {
+    if (S.scene === 'ann') return S.scheme === 'now'
+      ? '现状：矩形标注选中后四角常显橙色菱形，与选区那套不一样。<b>按住菱形沿对角线拖动</b>调圆角（上限 50）。'
+      : '矩形标注选中后常显，形状与选区一致，只换成标注蓝。<b>按住控制点沿对角线拖动</b>调圆角（上限 50）。';
+    if (S.scheme === 'now') return '现状：把指针移到选区某个角附近，那个角才出现圆点；<b>按住沿对角线拖动</b>调圆角（上限 60）。';
+    const v = { near: '把指针移到任一角附近，四个控制点一起出现', hover: '把指针移进选区，四个控制点一起淡入', always: '裁剪状态下四个控制点一直显示' }[S.vis];
+    return `${v}；<b>按住沿对角线拖动</b>调圆角（上限 60，拖到 0 即关闭圆角）。`;
+  }
+
+  // ---------- 交互 ----------
+  let scale = 1;
+  function fit() {
+    scale = box.clientWidth / 1000;
+    stage.style.transform = `scale(${scale})`;
+    box.style.height = (560 * scale) + 'px';
+  }
+  function toStage(e) {
+    const r = box.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
+  }
+  function hitTest(p) {
+    for (let i = 0; i < 4; i++) {
+      if (!knobVisible(i)) continue;
+      const [x, y] = knobPos(S.scene, i);
+      if (Math.hypot(p.x - x, p.y - y) <= hitR()) return i;
+    }
+    return -1;
+  }
+  stage.addEventListener('pointermove', e => {
+    S.pointer = toStage(e);
+    if (S.drag) {
+      const d = S.drag, [sx, sy] = SIGN[d.corner], p = S.pointer;
+      const proj = (p.x - d.x0) * sx + (p.y - d.y0) * sy;
+      if (S.scene === 'sel') S.r = Math.round(clamp(d.v0 + proj / 2, 0, SEL_MAX));
+      else S.ra = Math.round(clamp(d.v0 + proj / Math.SQRT2, 0, ANN_MAX));
+    } else {
+      S.hover = -1;
+      render();               // 先按新指针更新可见性，再判命中
+      S.hover = hitTest(S.pointer);
+    }
+    render();
+  });
+  stage.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    S.pointer = toStage(e);
+    const i = hitTest(S.pointer);
+    if (i < 0) return;
+    e.preventDefault();
+    stage.setPointerCapture(e.pointerId);
+    S.drag = { corner: i, x0: S.pointer.x, y0: S.pointer.y, v0: S.scene === 'sel' ? S.r : S.ra };
+    render();
+  });
+  const end = () => { if (!S.drag) return; S.drag = null; S.hover = S.pointer ? hitTest(S.pointer) : -1; render(); };
+  stage.addEventListener('pointerup', end);
+  stage.addEventListener('pointercancel', end);
+  stage.addEventListener('pointerleave', () => { if (S.drag) return; S.pointer = null; S.hover = -1; render(); });
+
+  function bindTog(id, key) {
+    $(id).addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      $(id).querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      S[key] = b.dataset.v; S.hover = -1; S.drag = null;
+      render(); renderSheet(); renderSpec();
+    });
+  }
+  bindTog('scheme', 'scheme'); bindTog('scene', 'scene'); bindTog('vis', 'vis');
+  $('snap').addEventListener('change', e => { S.snap = e.target.checked; render(); renderSheet(); });
+
+  // ---------- 状态细节（3×） ----------
+  const BG = {
+    light: { fill: '#f6f7f9', bar: '#cfd6de', name: '浅色内容' },
+    dark: { fill: '#171b21', bar: '#2f3945', name: '深色内容' },
+  };
+  const STATES = [
+    { key: 'flat', r: 0, k: 'idle', name: '直角 · 0' },
+    { key: 'idle', r: 12, k: 'idle', name: '默认 · 12' },
+    { key: 'hover', r: 12, k: 'hover', name: '悬停' },
+    { key: 'drag', r: 20, k: 'drag', name: '拖动 · 20' },
+  ];
+  function cell(bgKey, st) {
+    const bg = BG[bgKey], sel = S.scene === 'sel', fresh = S.scheme !== 'now';
+    const b = { x: 14, y: 12, w: 200, h: 200 };
+    let s = `<svg viewBox="0 0 72 52" role="img" aria-label="${bg.name}，${st.name}"><rect width="72" height="52" fill="${bg.fill}"/>`;
+    [[6, 4, 30], [18, 22, 44], [26, 22, 36], [34, 22, 46], [42, 22, 28]].forEach(([y, x, w]) => s += `<rect x="${x}" y="${y}" width="${w}" height="3" rx="1.5" fill="${bg.bar}"/>`);
+    const dragHL = st.k === 'drag' && fresh;
+    if (sel) {
+      s += `<path d="M-10 -10H82V62H-10Z${rr(b, st.r)}" fill="rgba(0,0,0,.5)" fill-rule="evenodd"/>`;
+      s += `<path d="${rr(b, st.r)}" fill="none" stroke="${C.sel}" stroke-width="2"/>`;
+      if (dragHL) s += arcHL(b, st.r, C.sel);
+      else {
+        const off = S.snap ? st.r * (1 - Math.SQRT1_2) : 0;
+        s += `<circle cx="${14 + off}" cy="${12 + off}" r="4.1" fill="#fff" stroke="${C.sel}" stroke-width="1.5"/>`;
+      }
+      const inset = Math.max(st.r, 14);
+      s += knob(S.scheme, 14 + inset, 12 + inset, 0, st.k, C.sel, 'sel');
+    } else {
+      s += `<path d="${rr(b, st.r)}" fill="none" stroke="${C.red}" stroke-width="3"/>`;
+      s += `<rect x="14" y="12" width="200" height="200" fill="none" stroke="${C.ann}" stroke-width="1"/>`;
+      if (dragHL) s += arcHL(b, st.r, C.ann); else s += `<circle cx="14" cy="12" r="3" fill="${C.ann}"/>`;
+      const inset = (18 + st.r) / Math.SQRT2;
+      s += knob(S.scheme, f(14 + inset), f(12 + inset), 0, st.k, C.ann, 'ann');
+    }
+    return s + `</svg>`;
+  }
+  function renderSheet() {
+    let h = '<span class="ch"></span>' + STATES.map(s => `<span class="ch">${s.name}</span>`).join('');
+    for (const k of ['light', 'dark']) {
+      h += `<span class="rh">${BG[k].name}</span>`;
+      h += STATES.map(st => `<figure>${cell(k, st)}<figcaption>${BG[k].name} · ${st.name}</figcaption></figure>`).join('');
+    }
+    $('sheet').innerHTML = h;
+  }
+
+  // ---------- 规格 ----------
+  const COMMON = {
+    show: '四个一起出现，按上方“何时显示”淡入淡出',
+    drag: '四角弧线加亮，8 个缩放点暂隐；旁边标签实时显示数值，0 写“直角”，到上限标“最大”',
+    cursor: '与该角同向的对角箭头',
+    ann: '同一形状，换成标注蓝',
+  };
+  const SPEC = {
+    now: { name: '现状', shape: '白底圆点，选区蓝描边 2', size: '12 逻辑像素（125% 下缩放点约 9.6）', show: '只在指针靠近的那个角出现一个', hover: '填充变成界面绿', drag: '无数值；悬停约半秒后出“拖动调整圆角”提示', cursor: '手形', hit: '12 × 12', ann: '另一套：10 像素橙色菱形，选中即显示' },
+    dot: { name: 'A 实心点', shape: '选区蓝实心圆，白边 1.5，外圈 1 像素半透明黑', size: '直径 7（悬停 9）', hover: '放大', hit: '16 × 16' },
+    diamond: { name: 'B 菱形', shape: '白底菱形，选区蓝描边 1.5，外圈 1 像素半透明黑', size: '对角 9（悬停 11）', hover: '反色为蓝底白边并放大', hit: '16 × 16' },
+    arc: { name: 'C 弧柄', shape: '与圆角同向的四分之一弧，白衬底上压选区蓝', size: '弧半径 6、线宽 2.5（悬停 7、3）', hover: '加粗', hit: '18 × 18' },
+  };
+  const ROWS = [['shape', '形状'], ['size', '尺寸'], ['show', '何时显示'], ['hover', '悬停'], ['drag', '拖动反馈'], ['cursor', '光标'], ['hit', '命中范围'], ['ann', '矩形标注']];
+  function renderSpec() {
+    const cols = ['now', S.scheme === 'now' ? 'diamond' : S.scheme];
+    let h = `<thead><tr><th></th>${cols.map(c => `<th>${SPEC[c].name}</th>`).join('')}</tr></thead><tbody>`;
+    for (const [k, label] of ROWS) {
+      h += `<tr><th>${label}</th>` + cols.map(c => {
+        const own = SPEC[c][k];
+        return `<td class="${own ? (c === S.scheme ? 'cur' : '') : 'same'}">${own || COMMON[k]}</td>`;
+      }).join('') + '</tr>';
+    }
+    $('spec').innerHTML = h + '</tbody>';
+  }
+
+  new ResizeObserver(fit).observe(box);
+  fit(); render(); renderSheet(); renderSpec();
+})();
+</script>

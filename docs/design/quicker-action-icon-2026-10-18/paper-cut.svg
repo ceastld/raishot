@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" role="img" aria-label="Kirie 动作图标：剪纸切角">
+  <rect x="3" y="3" width="58" height="58" rx="16" fill="#119B78"/>
+  <path d="M21 17h13L48 31v13a5 5 0 0 1-5 5H21a5 5 0 0 1-5-5V22a5 5 0 0 1 5-5Z" fill="#FFFFFF"/>
+  <path d="M39 12h14v14Z" fill="#A7F3D0"/>
+</svg>

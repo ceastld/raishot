@@ -1,0 +1,479 @@
+<title>选区外观预设</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 布局：问题 → 方案切换 → 1000×560 冻结桌面舞台（按宽度缩放）→ 方案要点、共同规则、对比。深色优先，配色沿用 GPUI Palette 与此前外观条原型。 */
+:root {
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --hover-2: #3a4653; --selected: #28473d; --accent: #40ce9d;
+  --page: #0f1317; --card: #161b21; --well: #2d3641; --tip-bg: #0a0c0f; --tip-fg: #e9eef2;
+  --sel: #1498ff;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3; --hover-2: #dde5ea;
+  --selected: #dcefe7; --accent: #126d4e; --page: #e8edf1; --card: #f6f8fa; --well: #dfe6ec; --tip-bg: #2b3440; --tip-fg: #ffffff;
+  color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3; --hover-2: #dde5ea;
+  --selected: #dcefe7; --accent: #126d4e; --page: #e8edf1; --card: #f6f8fa; --well: #dfe6ec; --tip-bg: #2b3440; --tip-fg: #ffffff;
+  color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.6 var(--ui);
+  padding-block: 18px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-size: 18px; font-weight: 600; margin: 0; text-wrap: balance; }
+h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 13px; }
+h2 { font-size: 15px; font-weight: 600; margin: 0; text-wrap: balance; }
+.lead { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.issues { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+.issues ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
+.ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.tog { display: inline-flex; flex-wrap: wrap; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); }
+.tog button { height: 30px; padding: 0 12px; border-radius: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.tog button.on { background: var(--bg); color: var(--fg); font-weight: 600; }
+.tog em { font-style: normal; font-size: 11px; color: var(--accent); margin-left: 6px; font-weight: 600; }
+.stage-box { width: 100%; overflow: hidden; border-radius: 10px; border: 1px solid var(--border); }
+.cap { margin: -6px 0 0; color: var(--muted); font-size: 12.5px; }
+
+/* ---------- 舞台：冻结桌面是截图内容，颜色固定，不随主题 ---------- */
+.stage { position: relative; width: 1000px; height: 560px; transform-origin: 0 0; overflow: hidden; user-select: none; background: #3d4a5c; }
+.desk { position: absolute; left: 0; top: 0; width: 1000px; height: 560px; font: 13px/1.5 var(--ui); color: #aab4bf; }
+.desk .wall { position: absolute; inset: 0; background: linear-gradient(140deg, #5d6f86 0%, #3e4b5e 48%, #4c4462 100%); }
+.desk .win { position: absolute; background: #161a20; border: 1px solid #2a3038; border-radius: 8px; overflow: hidden; }
+.desk .w1 { left: 22px; top: 26px; width: 118px; height: 500px; padding: 12px 10px; display: flex; flex-direction: column; gap: 10px; }
+.desk .ln { height: 7px; border-radius: 4px; background: #2c333c; }
+.desk .wc { left: 188px; top: 174px; width: 406px; height: 252px; padding: 16px 18px; background: #1b2129; }
+.desk .wc .h { font-size: 15px; color: #e6edf3; font-weight: 600; }
+.desk .wc .s { font-size: 12px; color: #8592a0; }
+.desk .wc .big { font-size: 30px; color: #e6edf3; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.desk .wc .big small { font-size: 14px; color: #8592a0; font-weight: 400; }
+.desk .chart { position: absolute; left: 18px; right: 18px; bottom: 16px; height: 86px; display: flex; align-items: flex-end; gap: 12px; border-bottom: 1px solid #2c343e; }
+.desk .chart span { flex: 1; border-radius: 3px 3px 0 0; background: #3a86c4; }
+.desk .chart span:last-child { background: #4fd1a5; }
+.desk .w2 { left: 664px; top: 40px; width: 312px; height: 480px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.mask { position: absolute; inset: 0; background: rgba(0,0,0,.46); pointer-events: none; }
+#selwrap { position: absolute; z-index: 3; }
+#clip { position: absolute; inset: 0; overflow: hidden; }
+#clip .desk { pointer-events: none; }
+#inb, #edge { position: absolute; inset: 0; pointer-events: none; }
+#edge { border: 1.5px solid var(--sel); }
+.h8 { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 1.5px solid var(--sel); transform: translate(-50%, -50%); pointer-events: none; }
+.knob { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; transform: rotate(45deg); background: #fff; border: 1.5px solid var(--sel); outline: 1px solid rgba(0,0,0,.35); opacity: 0; transition: opacity .12s; cursor: nwse-resize; touch-action: none; }
+#selwrap:hover .knob, .knob.drag { opacity: 1; }
+.knob:hover, .knob.drag { background: var(--sel); border-color: #fff; transform: rotate(45deg) scale(1.2); }
+.pill { position: absolute; padding: 1px 8px; border-radius: 10px; background: rgba(10,12,15,.88); color: #fff; font: 11.5px/18px var(--ui); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .12s; }
+.knob:hover ~ .pill, .knob.drag ~ .pill { opacity: 1; }
+
+/* ---------- 条 ---------- */
+#bar { position: absolute; z-index: 5; display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 5px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0,0,0,.35); font: 13px/1 var(--ui); white-space: nowrap; color: var(--fg); }
+.bb { height: 30px; min-width: 30px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.bb:hover { background: var(--hover); }
+.bb.open { background: var(--hover); box-shadow: inset 0 0 0 1px var(--border); }
+.num { font-variant-numeric: tabular-nums; }
+.sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex: none; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.s { width: 11px; height: 11px; stroke-width: 2; color: var(--muted); }
+.seg { display: inline-flex; gap: 2px; }
+.th { width: 34px; height: 30px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; }
+.th:hover { background: var(--hover); }
+.th.on { background: var(--selected); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.well { width: 24px; height: 18px; border-radius: 4px; background: var(--well); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.mini { display: block; width: 15px; height: 10px; background: linear-gradient(160deg, #8ab8e0 0%, #4d7aa6 55%, #35506e 100%); }
+.look { padding: 0 6px 0 4px; }
+.fx { color: var(--muted); padding: 0 7px; }
+.fx.on { color: var(--accent); }
+.fx.on .num { color: var(--fg); }
+#tip { position: absolute; z-index: 8; transform: translate(-50%, -100%); padding: 4px 8px; border-radius: 6px; background: var(--tip-bg); color: var(--tip-fg); font: 12px/1.4 var(--ui); white-space: nowrap; pointer-events: none; }
+
+/* ---------- 弹层 ---------- */
+#pop { position: absolute; z-index: 6; width: 300px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.42); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font: 13px/1.4 var(--ui); color: var(--fg); }
+#pop h4 { margin: 0; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; min-height: 24px; }
+#pop h4 small { margin-left: auto; font-weight: 400; color: var(--muted); font-size: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0 5px; border-radius: 8px; font-size: 12px; color: var(--muted); }
+.tile:hover { background: var(--hover); color: var(--fg); }
+.tile.on { background: var(--selected); color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.tile .well { width: 44px; height: 34px; border-radius: 6px; }
+.tile .mini { width: 28px; height: 19px; }
+.div { height: 1px; background: var(--border); }
+.rows { display: flex; flex-direction: column; gap: 2px; }
+.row { display: grid; grid-template-columns: 34px 1fr 38px 20px; align-items: center; gap: 8px; height: 30px; }
+.lab { color: var(--muted); font-size: 12.5px; }
+.row input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); }
+.val { text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.sw { width: 18px; height: 18px; border-radius: 50%; box-shadow: 0 0 0 1px var(--border), inset 0 0 0 1px rgba(255,255,255,.2); }
+.segs { grid-column: 2 / 5; display: inline-flex; gap: 2px; padding: 2px; border-radius: 7px; background: var(--hover); justify-self: start; }
+.segs button { height: 24px; padding: 0 12px; border-radius: 5px; font-size: 12px; color: var(--muted); }
+.segs button.on { background: var(--bg); color: var(--fg); font-weight: 600; }
+.chips { display: flex; gap: 4px; }
+.chip { flex: 1; height: 26px; border-radius: 6px; background: var(--hover); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.chip:hover { background: var(--hover-2); }
+.chip.on { background: var(--selected); color: var(--accent); font-weight: 600; }
+.hint { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; }
+.link { color: var(--accent); font-size: 12px; }
+
+/* ---------- 说明 ---------- */
+.panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.cols h3 { margin: 0 0 4px; font-size: 12px; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+.cols ul, .panel > ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+thead th { color: var(--muted); font-weight: 600; font-size: 12px; }
+tbody th { color: var(--muted); font-weight: 400; white-space: nowrap; }
+td.pick { color: var(--accent); }
+@media (max-width: 720px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .knob, .pill { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>选区外观条<small>三种交互，选一种实现</small></h1>
+    <p class="lead">截图后选区左上的外观条。舞台可直接操作：悬停预览、单击应用、滚轮切换，拖选区左上角的菱形改圆角。</p>
+  </header>
+
+  <section class="issues" aria-labelledby="issues-h">
+    <h2 id="issues-h">现在这一版哪里不顺手</h2>
+    <ol>
+      <li>一个按钮两种行为：主体是开关，右侧 16px 的窄箭头才调参数，常点错。</li>
+      <li>三个效果图标长得像，开着的都是同一片绿，看不出最后导出会是什么样子。</li>
+      <li>“圆角＋阴影”这种最常用的外观要点两三下；参数分散在三个浮层里。</li>
+      <li>圆角已经能在画布上拖菱形，条上再放一个圆角按钮是重复入口。</li>
+    </ol>
+  </section>
+
+  <div class="ctrl">
+    <div class="tog" id="schemes" role="tablist" aria-label="方案">
+      <button data-s="A" class="on" role="tab">A · 预设直选<em>推荐</em></button>
+      <button data-s="B" role="tab">B · 一个按钮＋画廊</button>
+      <button data-s="C" role="tab">C · 数值即开关</button>
+    </div>
+    <div class="tog" id="space" aria-label="条的可用空间">
+      <button data-t="0" class="on">空间充足</button>
+      <button data-t="1">空间紧张</button>
+    </div>
+  </div>
+
+  <div class="stage-box" id="box">
+    <div class="stage" id="stage">
+      <div class="desk" id="desk"></div>
+      <div class="mask"></div>
+      <div id="selwrap">
+        <div id="clip"></div>
+        <div id="inb"></div>
+        <div id="edge"></div>
+        <div id="handles"></div>
+        <div class="knob" id="knob" aria-label="拖动调整圆角"></div>
+        <div class="pill" id="pill"></div>
+      </div>
+      <div id="bar"></div>
+      <div id="pop" hidden></div>
+      <div id="tip" hidden></div>
+    </div>
+  </div>
+  <p class="cap">颜色圆点在原型里单击轮换几种颜色；实际实现打开现有的取色浮层。</p>
+
+  <section class="panel" id="notes" aria-live="polite"></section>
+
+  <section class="panel" aria-labelledby="rules-h">
+    <h2 id="rules-h">三种方案都遵守</h2>
+    <ul>
+      <li>样式是完整快照：缩略图、选区预览、导出三者一致，没有隐藏的记忆开关（不再出现“原样下圆角置灰”）。</li>
+      <li>拖到 0 就是关：阴影扩散、边框粗细为 0 即关闭，不再单独放开关；边框最小值由 1 改为 0。</li>
+      <li>每个样式记住自己的调整值，可“恢复默认”；下次截图沿用上次选的样式。</li>
+      <li>调外观不切工具、不进标注撤销；导出、复制、贴图仍只读当前生效的外观。</li>
+    </ul>
+  </section>
+
+  <section class="panel" aria-labelledby="cmp-h">
+    <h2 id="cmp-h">对比</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th></th><th>A · 预设直选</th><th>B · 一个按钮＋画廊</th><th>C · 数值即开关</th></tr></thead>
+        <tbody>
+          <tr><th>换一种外观</th><td class="pick">单击 1 次</td><td>单击 2 次，或滚轮</td><td>逐项开，1–3 次</td></tr>
+          <tr><th>条宽（相对现在）</th><td>约 +50px，紧张时收成 B</td><td class="pick">约 −60px</td><td>基本持平</td></tr>
+          <tr><th>任意组合</th><td>调整面板里拖</td><td>同一面板里拖</td><td class="pick">直接</td></tr>
+          <tr><th>用户先要懂什么</th><td class="pick">看图选</td><td class="pick">看图选</td><td>三项效果各是什么</td></tr>
+          <tr><th>实现改动</th><td>样式槽位＋条上缩略图，复用调整面板</td><td>同 A，条更简单</td><td class="pick">只改按钮和浮层</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+const PRESETS = [
+  { id: "raw",     n: "原样", d: { r: 0,  sb: 0,  so: 40, sc: "#000000", bw: 0, bc: "#ffffff", bin: false } },
+  { id: "round",   n: "圆角", d: { r: 12, sb: 0,  so: 40, sc: "#000000", bw: 0, bc: "#ffffff", bin: false } },
+  { id: "card",    n: "卡片", d: { r: 12, sb: 18, so: 45, sc: "#000000", bw: 0, bc: "#ffffff", bin: false } },
+  { id: "outline", n: "描边", d: { r: 8,  sb: 0,  so: 40, sc: "#000000", bw: 3, bc: "#ffffff", bin: false } },
+  { id: "window",  n: "窗口", d: { r: 10, sb: 22, so: 50, sc: "#000000", bw: 1, bc: "#a9b6c4", bin: false } },
+];
+const clone = o => JSON.parse(JSON.stringify(o));
+const SEL = { x: 162, y: 152, w: 460, h: 296 };
+const BAR = { x: SEL.x, y: SEL.y - 50 };
+const MAX = { r: 60, sb: 48, so: 100, bw: 8 };
+const OPEN = { A: "tune", B: "gallery", C: "sb" };
+const S = {
+  scheme: "A", tight: false, cur: "card", hover: null, panel: "tune", drag: false, k: 1,
+  vals: Object.fromEntries(PRESETS.map(p => [p.id, clone(p.d)])),
+  c: { r: 12, sb: 18, so: 45, sc: "#000000", bw: 0, bc: "#ffffff", bin: false },
+};
+const I = {
+  chev: '<svg class="i s" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>',
+  tune: '<svg class="i" viewBox="0 0 16 16"><path d="M2.5 4.5h6M11.5 4.5h2M2.5 11.5h2M7.5 11.5h6"/><circle cx="10" cy="4.5" r="1.5"/><circle cx="6" cy="11.5" r="1.5"/></svg>',
+  refresh: '<svg class="i" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.46-3.54"/><path d="M13 2.5V5h-2.5"/></svg>',
+  more: '<svg class="i" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.2" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><circle cx="12.5" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg>',
+  r: '<svg class="i" viewBox="0 0 16 16"><path d="M3 13V8.5A5.5 5.5 0 0 1 8.5 3H13"/></svg>',
+  sb: '<svg class="i" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="8.5" height="8.5" rx="1.5"/><path d="M13.5 5.5v6.5a1.5 1.5 0 0 1-1.5 1.5H5.5"/></svg>',
+  bw: '<svg class="i" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><rect x="5.5" y="5.5" width="5" height="5" rx=".8"/></svg>',
+};
+const FX = [
+  { k: "r",  n: "圆角", chips: [0, 8, 12, 16, 24], step: 2 },
+  { k: "sb", n: "阴影", chips: [0, 8, 16, 24, 32], step: 2 },
+  { k: "bw", n: "边框", chips: [0, 1, 2, 3, 4],    step: 1 },
+];
+const COLORS = { sc: ["#000000", "#1d3b6e", "#7a1f1f"], bc: ["#ffffff", "#a9b6c4", "#1498ff", "#000000"] };
+const NOTES = {
+  A: { t: "A · 预设直选（推荐）",
+    how: ["条上并排 5 个样式缩略图：原样、圆角、卡片、描边、窗口。单击即换；悬停时选区先预览，移开恢复。",
+          "缩略图上滚轮逐个切换；右边的“调整”只打开当前样式的参数。",
+          "圆角直接拖选区角上的菱形；在“原样”上拖出圆角会自动切到“圆角”。"],
+    good: ["最常见的“换个好看的外观”一次点击完成，缩略图就是导出结果。",
+           "每个按钮只做一件事，没有主体／箭头拆分。"],
+    cost: ["条比现在宽约 50px；空间紧张时收成 B 的单按钮（点上方“空间紧张”看）。",
+           "要“只要阴影不要圆角”这类组合，得进调整面板把圆角拖到 0。"] },
+  B: { t: "B · 一个按钮＋画廊",
+    how: ["条上只留一个外观按钮，显示当前样式的缩略图和名字。",
+          "点开是画廊：5 个大缩略图，悬停预览、单击应用，面板不关；下面紧接当前样式的调整项。",
+          "按钮上滚轮直接逐个切换，不用打开面板。"],
+    good: ["条最窄，贴边、小选区、OCR 面板展开时也不挤。",
+           "缩略图大，一眼分清；选样式和调参数在同一个面板。"],
+    cost: ["换样式要单击两次（滚轮除外）。",
+           "面板关着时看不到有哪些样式可选。"] },
+  C: { t: "C · 数值即开关（最小改动）",
+    how: ["保留圆角、阴影、边框三个按钮，但每个只做一件事：点开小浮层，里面是“关＋常用值＋滑杆”。",
+          "开着的效果在按钮上直接显示数值，关着是灰图标；按钮上滚轮直接改数值，到 0 即关。"],
+    good: ["改动最小，三项仍能任意组合。",
+           "状态靠数字读，不靠一片绿色。"],
+    cost: ["“圆角＋阴影”仍要点两个按钮、调两次，没有一键好看。",
+           "三个图标的含义仍要用户自己分辨。"] },
+};
+
+const $ = s => document.querySelector(s);
+const stage = $("#stage"), box = $("#box"), knob = $("#knob"), pill = $("#pill"), tip = $("#tip");
+const hexA = (h, a) => { const n = parseInt(h.slice(1, 7), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
+const name = id => PRESETS.find(p => p.id === id).n;
+const target = () => S.scheme === "C" ? S.c : S.vals[S.cur];
+const eff = () => S.scheme === "C" ? S.c : S.vals[S.hover || S.cur];
+const fmt = (k, x) => k === "r" ? (x ? x : "直角") : k === "so" ? x + "%" : (x ? x : "关");
+
+function deskHTML() {
+  const lines = w => `<div class="ln" style="width:${w}%"></div>`;
+  const bars = [64, 58, 72, 55, 49, 52, 44].map(h => `<span style="height:${h}%"></span>`).join("");
+  return `<div class="wall"></div>
+    <div class="win w1">${[80, 62, 90, 54, 70, 66, 48, 84, 58, 76].map(lines).join("")}</div>
+    <div class="win wc"><div class="h">截图启动耗时</div><div class="s">托盘通知 → 冻结桌面可框选 · 近 7 天</div>
+      <div class="big">196<small> ms 中位</small></div><div class="chart">${bars}</div></div>
+    <div class="win w2">${[92, 70, 84, 60, 88, 74, 52, 80, 66, 90, 58, 72].map(lines).join("")}</div>`;
+}
+function setupStage() {
+  $("#desk").innerHTML = deskHTML();
+  const sw = $("#selwrap");
+  Object.assign(sw.style, { left: SEL.x + "px", top: SEL.y + "px", width: SEL.w + "px", height: SEL.h + "px" });
+  $("#clip").innerHTML = `<div class="desk" style="left:${-SEL.x}px;top:${-SEL.y}px">${deskHTML()}</div>`;
+  const pts = [[0, 0], [.5, 0], [1, 0], [1, .5], [1, 1], [.5, 1], [0, 1], [0, .5]];
+  $("#handles").innerHTML = pts.map(([a, b]) => `<i class="h8" style="left:${a * SEL.w}px;top:${b * SEL.h}px"></i>`).join("");
+  Object.assign($("#bar").style, { left: BAR.x + "px", top: BAR.y + "px" });
+  Object.assign($("#pop").style, { left: SEL.x + SEL.w + 18 + "px", top: BAR.y + "px" });
+}
+function fit() { S.k = box.clientWidth / 1000; stage.style.transform = `scale(${S.k})`; box.style.height = 560 * S.k + "px"; }
+
+function mini(v, k) {
+  const bw = v.bw > 0 ? Math.max(1, Math.min(v.bw * k * 1.2, 3)) : 0;
+  const sh = [];
+  if (bw && v.bin) sh.push(`inset 0 0 0 ${bw}px ${v.bc}`);
+  if (bw && !v.bin) sh.push(`0 0 0 ${bw}px ${v.bc}`);
+  if (v.sb > 0) sh.push(`0 ${Math.max(1, v.sb * k * .3).toFixed(1)}px ${Math.max(2, v.sb * k * .9).toFixed(1)}px ${v.bin ? 0 : bw}px ${hexA(v.sc, Math.min(.95, v.so / 100 + .3))}`);
+  return `border-radius:${Math.min(v.r * k, 8).toFixed(1)}px;box-shadow:${sh.join(",") || "none"}`;
+}
+
+function renderSel() {
+  const v = eff(), r = Math.min(v.r, SEL.h / 2), sh = [];
+  if (v.bw > 0 && !v.bin) sh.push(`0 0 0 ${v.bw}px ${v.bc}`);
+  if (v.sb > 0) sh.push(`0 ${v.sb * .3}px ${v.sb * 1.3}px ${v.bin ? 0 : v.bw}px ${hexA(v.sc, v.so / 100)}`);
+  $("#clip").style.borderRadius = $("#inb").style.borderRadius = $("#edge").style.borderRadius = r + "px";
+  $("#clip").style.boxShadow = sh.join(",") || "none";
+  $("#inb").style.boxShadow = v.bw > 0 && v.bin ? `inset 0 0 0 ${v.bw}px ${v.bc}` : "none";
+  const kp = Math.max(14, r);
+  knob.style.left = knob.style.top = kp + "px";
+  pill.style.left = kp + 12 + "px"; pill.style.top = kp + 8 + "px";
+  pill.textContent = v.r === 0 ? "直角" : v.r >= MAX.r ? `圆角 ${v.r} · 最大` : `圆角 ${v.r}`;
+}
+
+function renderBar() {
+  const id = S.cur, v = S.vals[id];
+  const size = `<button class="bb num" data-tip="选区尺寸 · 单击输入 X／Y／W／H">${SEL.w} × ${SEL.h}${I.chev}</button>`;
+  let mid;
+  if (S.scheme === "C") {
+    mid = FX.map(f => {
+      const x = S.c[f.k], on = x > 0;
+      return `<button class="bb fx ${on ? "on" : ""} ${S.panel === f.k ? "open" : ""}" data-open="${f.k}" data-fx="${f.k}" aria-label="${f.n}"
+        data-tip="${f.n}：${on ? x : "关"} · 单击调整，滚轮改数值">${I[f.k]}${on ? `<span class="num">${x}</span>` : ""}</button>`;
+    }).join("");
+  } else if (S.scheme === "B" || S.tight) {
+    mid = `<button class="bb look ${S.panel === "gallery" ? "open" : ""}" data-open="gallery" data-wheel="1" data-tip="外观：${name(id)} · 单击选择，滚轮切换">
+      <span class="well"><i class="mini" style="${mini(v, .3)}"></i></span><span>${name(id)}</span>${I.chev}</button>`;
+  } else {
+    mid = `<div class="seg" data-wheel="1" role="radiogroup" aria-label="外观样式">${PRESETS.map(p => `<button class="th ${p.id === id ? "on" : ""}"
+        role="radio" aria-checked="${p.id === id}" aria-label="${p.n}" data-pick="${p.id}" data-tip="${p.n}${p.id === id ? " · 当前" : " · 单击应用"}">
+        <span class="well"><i class="mini" style="${mini(S.vals[p.id], .3)}"></i></span></button>`).join("")}</div>
+      <button class="bb ${S.panel === "tune" ? "open" : ""}" data-open="tune" aria-label="调整" data-tip="调整“${name(id)}”">${I.tune}</button>`;
+  }
+  $("#bar").innerHTML = `${size}<span class="sep"></span>${mid}<span class="sep"></span>
+    <button class="bb" aria-label="刷新" data-tip="刷新截图（F5）">${I.refresh}</button><button class="bb" aria-label="更多" data-tip="更多">${I.more}</button>`;
+}
+
+function row(lab, k, v, extra) {
+  return `<div class="row"><label class="lab" for="rg-${k}">${lab}</label>
+    <input type="range" id="rg-${k}" data-k="${k}" min="0" max="${MAX[k]}" value="${v[k]}">
+    <span class="val" id="vl-${k}">${fmt(k, v[k])}</span>${extra || "<span></span>"}</div>`;
+}
+const swatch = (key, c, label) => `<button class="sw" data-sw="${key}" aria-label="${label}颜色" style="background:${c}"></button>`;
+function rows(v, only) {
+  const want = k => !only || only === k;
+  let h = "";
+  if (want("r")) h += row("圆角", "r", v);
+  if (want("sb")) { h += row("阴影", "sb", v, swatch("sc", v.sc, "阴影")); if (v.sb > 0) h += row("浓度", "so", v); }
+  if (want("bw")) {
+    h += row("边框", "bw", v, swatch("bc", v.bc, "边框"));
+    if (v.bw > 0) h += `<div class="row"><span class="lab">位置</span><div class="segs">
+      <button class="${v.bin ? "" : "on"}" data-bin="0">外侧</button><button class="${v.bin ? "on" : ""}" data-bin="1">内侧</button></div></div>`;
+  }
+  return `<div class="rows">${h}</div>`;
+}
+function renderPanel() {
+  const pop = $("#pop");
+  pop.hidden = !S.panel;
+  if (!S.panel) return;
+  let h = "";
+  if (S.scheme === "C") {
+    const f = FX.find(f => f.k === S.panel), x = S.c[f.k];
+    h = `<h4>${f.n}<small>${x ? "已开启" : "已关闭"}</small></h4>
+      <div class="chips">${f.chips.map(c => `<button class="chip ${x === c ? "on" : ""}" data-chip="${c}">${c === 0 ? (f.k === "r" ? "直角" : "关") : c}</button>`).join("")}</div>
+      ${rows(S.c, f.k)}<div class="foot"><span>按钮上滚轮也能改，到 0 即关</span></div>`;
+  } else {
+    const id = S.cur, v = S.vals[id];
+    if (S.panel === "gallery") {
+      h += `<h4>外观<small>悬停预览 · 单击应用</small></h4><div class="tiles">${PRESETS.map(q => `<button class="tile ${q.id === id ? "on" : ""}" data-pick="${q.id}">
+        <span class="well"><i class="mini" style="${mini(S.vals[q.id], .55)}"></i></span>${q.n}</button>`).join("")}</div><div class="div"></div>
+        <h4>调整“${name(id)}”</h4>`;
+    } else {
+      h += `<h4><span class="well"><i class="mini" style="${mini(v, .3)}"></i></span>${name(id)}<small>只改这个样式</small></h4>`;
+    }
+    h += id === "raw" ? `<p class="hint">原样不加任何效果。要圆角、阴影或边框，先选其它样式，或直接拖选区角上的菱形。</p>` : rows(v);
+    h += `<div class="foot"><span>${id === "raw" ? "原样没有可调项" : "拖到 0 即关闭"}</span>${id !== "raw" ? `<button class="link" data-reset="${id}">恢复默认</button>` : ""}</div>`;
+  }
+  pop.innerHTML = h;
+}
+function renderNotes() {
+  const n = NOTES[S.scheme], col = (t, xs) => `<div><h3>${t}</h3><ul>${xs.map(x => `<li>${x}</li>`).join("")}</ul></div>`;
+  $("#notes").innerHTML = `<h2>${n.t}</h2><div class="cols">${col("怎么用", n.how)}${col("好处", n.good)}${col("代价", n.cost)}</div>`;
+}
+function renderAll() { renderSel(); renderBar(); renderPanel(); }
+
+function showTip(el) {
+  if (!el || !$("#bar").contains(el)) { tip.hidden = true; return; }
+  tip.textContent = el.dataset.tip;
+  tip.style.left = BAR.x + el.offsetLeft + el.offsetWidth / 2 + "px";
+  tip.style.top = BAR.y - 6 + "px";
+  tip.hidden = false;
+}
+function pick(id) { S.cur = id; renderAll(); }
+function setRadius(r) {
+  if (S.scheme !== "C" && S.cur === "raw" && r > 0) S.cur = "round";
+  target().r = r;
+  renderSel(); renderBar();
+  const rg = $("#rg-r");
+  if (rg && (S.scheme !== "C" || S.panel === "r")) { rg.value = r; $("#vl-r").textContent = fmt("r", r); }
+}
+
+stage.addEventListener("click", e => {
+  if (e.target.closest("#selwrap")) return;
+  const t = e.target.closest("button");
+  if (!t) { if (!e.target.closest("#pop")) { S.panel = null; renderAll(); } return; }
+  const d = t.dataset;
+  if (d.pick) return pick(d.pick);
+  if (d.open) { S.panel = S.panel === d.open ? null : d.open; tip.hidden = true; renderBar(); renderPanel(); return; }
+  if (d.reset) { S.vals[d.reset] = clone(PRESETS.find(p => p.id === d.reset).d); return renderAll(); }
+  if (d.chip != null) { S.c[S.panel] = +d.chip; return renderAll(); }
+  if (d.bin != null) { target().bin = d.bin === "1"; return renderAll(); }
+  if (d.sw) { const v = target(), list = COLORS[d.sw]; v[d.sw] = list[(list.indexOf(v[d.sw]) + 1) % list.length]; return renderAll(); }
+  if (!t.closest("#pop")) { S.panel = null; renderAll(); }
+});
+stage.addEventListener("mouseover", e => {
+  showTip(e.target.closest("[data-tip]"));
+  const p = e.target.closest("[data-pick]"), id = p ? p.dataset.pick : null;
+  if (id !== S.hover) { S.hover = id; renderSel(); }
+});
+stage.addEventListener("mouseleave", () => { tip.hidden = true; if (S.hover) { S.hover = null; renderSel(); } });
+stage.addEventListener("wheel", e => {
+  const fx = S.scheme === "C" && e.target.closest("[data-fx]");
+  const cyc = S.scheme !== "C" && e.target.closest("[data-wheel]");
+  if (!fx && !cyc) return;
+  e.preventDefault();
+  const up = e.deltaY < 0;
+  if (fx) {
+    const f = FX.find(f => f.k === fx.dataset.fx);
+    S.c[f.k] = Math.max(0, Math.min(MAX[f.k], S.c[f.k] + (up ? f.step : -f.step)));
+  } else {
+    const i = PRESETS.findIndex(p => p.id === S.cur);
+    S.cur = PRESETS[(i + (up ? -1 : 1) + PRESETS.length) % PRESETS.length].id;
+    S.hover = null;
+  }
+  renderAll();
+  showTip(fx ? $(`[data-fx="${fx.dataset.fx}"]`) : $("#bar [data-wheel] .th.on") || $("#bar [data-wheel]"));
+}, { passive: false });
+stage.addEventListener("input", e => {
+  const k = e.target.dataset.k;
+  if (!k) return;
+  target()[k] = +e.target.value;
+  $("#vl-" + k).textContent = fmt(k, +e.target.value);
+  renderSel(); renderBar();
+});
+stage.addEventListener("change", e => { if (e.target.dataset.k) renderPanel(); });
+
+knob.addEventListener("pointerdown", e => { e.preventDefault(); knob.setPointerCapture(e.pointerId); S.drag = true; knob.classList.add("drag"); });
+knob.addEventListener("pointermove", e => {
+  if (!S.drag) return;
+  const rc = stage.getBoundingClientRect();
+  const x = (e.clientX - rc.left) / S.k - SEL.x, y = (e.clientY - rc.top) / S.k - SEL.y;
+  setRadius(Math.max(0, Math.min(MAX.r, Math.round((x + y) / 2))));
+});
+const endDrag = () => { if (!S.drag) return; S.drag = false; knob.classList.remove("drag"); renderPanel(); };
+knob.addEventListener("pointerup", endDrag);
+knob.addEventListener("pointercancel", endDrag);
+
+const mark = (group, attr, val) => group.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset[attr] === val));
+$("#schemes").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  S.scheme = b.dataset.s; S.panel = OPEN[S.scheme]; S.hover = null;
+  mark($("#schemes"), "s", S.scheme);
+  $("#space").hidden = S.scheme !== "A";
+  renderAll(); renderNotes();
+});
+$("#space").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  S.tight = b.dataset.t === "1"; S.panel = S.tight ? "gallery" : "tune";
+  mark($("#space"), "t", b.dataset.t);
+  renderAll();
+});
+addEventListener("resize", fit);
+setupStage(); fit(); renderAll(); renderNotes();
+</script>

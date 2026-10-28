@@ -1,0 +1,273 @@
+<title>OCR 面板停靠规则</title>
+<style>
+/* 布局：左侧为可拖动的显示器舞台（选区、工具栏、面板候选），右侧为规则与当前决策说明；窄屏时上下堆叠。 */
+:root {
+  --page: #0f1317; --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --accent: #40ce9d; --accent-fg: #0e1d17; --warn: #f2b632; --bad: #ff6b7a;
+  --desk: #0b0e12; --shot: #151a20; --sel: #2f8cff;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --page: #e8edf1; --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+    --hover: #eaf0f3; --accent: #126d4e; --accent-fg: #ffffff; --warn: #a86b00; --bad: #c23a4a;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --page: #e8edf1; --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9;
+  --hover: #eaf0f3; --accent: #126d4e; --accent-fg: #ffffff; --warn: #a86b00; --bad: #c23a4a;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); padding-inline: 16px; padding-block: 16px 40px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.wrap { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+h1 { font-size: 17px; margin: 0; font-weight: 600; }
+h1 span { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bar .label { color: var(--muted); font-size: 13px; margin-right: 2px; }
+.btn { height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); font-size: 13px; }
+.btn:hover { background: var(--hover); }
+.btn.on { border-color: var(--accent); color: var(--accent); }
+.tog { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+.stage-wrap { position: relative; width: 100%; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px var(--border); background: var(--desk); }
+.stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; background: var(--desk); overflow: hidden; user-select: none; }
+.stage::before { content: ""; position: absolute; inset: 0; background:
+  repeating-linear-gradient(0deg, transparent 0 39px, rgba(255,255,255,.025) 39px 40px),
+  repeating-linear-gradient(90deg, transparent 0 39px, rgba(255,255,255,.025) 39px 40px); }
+.sel { position: absolute; border: 1.5px solid var(--sel); background: rgba(47,140,255,.06); cursor: move; box-shadow: 0 0 0 4000px rgba(0,0,0,.35); }
+.sel .h { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 2px solid var(--sel); cursor: nwse-resize; }
+.sel .tag { position: absolute; left: 0; top: -24px; font: 11px var(--mono); color: #fff; background: rgba(20,24,30,.85); padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+.tb { position: absolute; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); display: flex; align-items: center; gap: 6px; padding: 0 10px; color: var(--muted); font-size: 12px; pointer-events: none; }
+.tb i { width: 22px; height: 22px; border-radius: 5px; background: var(--hover); flex: none; }
+.cand { position: absolute; border: 1.5px dashed var(--muted); border-radius: 10px; pointer-events: none; opacity: .55; }
+.cand.bad { border-color: var(--bad); opacity: .35; }
+.cand span { position: absolute; left: 6px; top: 4px; font: 11px var(--mono); color: var(--muted); background: var(--desk); padding: 0 4px; border-radius: 3px; }
+.panel { position: absolute; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 16px 40px rgba(0,0,0,.45); transition: left .18s, top .18s, height .18s; pointer-events: none; overflow: hidden; display: flex; flex-direction: column; }
+.panel .ph { height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; flex: none; }
+.panel .ph em { font-style: normal; font-weight: 400; color: var(--muted); font-size: 12px; }
+.panel .pb { flex: 1; padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; }
+.panel .pb i { height: 9px; border-radius: 5px; background: var(--hover); }
+.panel .pf { height: 52px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; flex: none; }
+.panel .pf b { height: 30px; padding: 0 14px; border-radius: 7px; background: var(--accent); color: var(--accent-fg); display: inline-flex; align-items: center; font-size: 13px; }
+.gapline { position: absolute; border-top: 1px dashed var(--warn); pointer-events: none; }
+.side { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.side h2 { font-size: 14px; margin: 0; font-weight: 600; }
+.decision { font-size: 13px; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-variant-numeric: tabular-nums; }
+.decision dt { color: var(--muted); }
+.decision dd { margin: 0; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-size: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; }
+tr.win td { color: var(--accent); font-weight: 600; }
+tr.no td { color: var(--muted); text-decoration: line-through; }
+.tbl { overflow-x: auto; }
+ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+ol b { font-weight: 600; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+</style>
+
+<div class="wrap">
+  <h1>OCR 面板停靠规则<span>拖动选区或右下角圆点改变大小，面板实时按规则重新停靠</span></h1>
+  <div class="bar">
+    <span class="label">场景</span>
+    <button class="btn" data-s="yours">你的截图：窄选区＋宽工具栏</button>
+    <button class="btn" data-s="normal">常规大选区</button>
+    <button class="btn" data-s="right">选区贴右边</button>
+    <button class="btn" data-s="bottom">选区贴底部（工具栏在上）</button>
+    <button class="btn" data-s="tall">高窄选区</button>
+    <button class="btn" data-s="full">接近全屏</button>
+  </div>
+  <div class="bar">
+    <span class="label">工具栏宽</span>
+    <button class="btn" data-w="820">820（默认全部工具）</button>
+    <button class="btn" data-w="520">520（精简）</button>
+    <label class="tog"><input type="checkbox" id="showCand" checked> 显示候选位置</label>
+  </div>
+  <div class="main">
+    <div class="stage-wrap" id="wrap"><div class="stage" id="stage"></div></div>
+    <aside class="side">
+      <h2>当前决策</h2>
+      <dl class="decision" id="decision"></dl>
+      <div class="tbl"><table id="cands"></table></div>
+      <h2>规则</h2>
+      <ol>
+        <li><b>就近：</b>面板默认在选区右侧 12，上沿对齐选区；高度取 max(选区高, 360)，工具栏在旁边且不挡时下沿对齐工具栏。</li>
+        <li><b>不挡工具栏：</b>默认位置与工具栏重叠时，生成几种就近的变体：整体上移到工具栏上方、整体下移到工具栏下方、缩短到工具栏上沿、移到工具栏外侧。</li>
+        <li><b>按距离选：</b>每个候选的代价 = 垂直移动距离 + 缩短量 × 1.5 + 水平额外距离 × 1.2；换到左侧另加 60。取代价最小且不越出屏幕、不压工具栏的候选。</li>
+        <li><b>最后兜底：</b>都放不下时贴屏幕右缘覆盖选区，再让出工具栏。</li>
+      </ol>
+      <p class="hint">例：你的截图中，右侧默认位置被工具栏挡住；上移 29 的代价远小于移到工具栏外侧（水平多出约 520），所以面板留在选区右侧、略微上移。</p>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const M = { x: 0, y: 0, w: 1440, h: 810 };      // 显示器（逻辑 DIP）
+  const W = 340, GAP = 12, EDGE = 8, MIN_H = 360, MIN_SHRINK = 240;
+  const TB_H = 48;
+  const SCEN = {
+    yours: { x: 0, y: 94, w: 313, h: 325 },
+    normal: { x: 160, y: 120, w: 720, h: 460 },
+    right: { x: 900, y: 140, w: 500, h: 380 },
+    bottom: { x: 300, y: 520, w: 560, h: 270 },
+    tall: { x: 420, y: 40, w: 260, h: 640 },
+    full: { x: 10, y: 10, w: 1420, h: 720 },
+  };
+  let sel = { ...SCEN.yours }, tbWidth = 820;
+
+  const $ = id => document.getElementById(id);
+  const stage = $('stage'), wrap = $('wrap');
+  stage.style.width = M.w + 'px'; stage.style.height = M.h + 'px';
+
+  const R = (x, y, w, h) => ({ x, y, w, h, r: x + w, b: y + h });
+  const overlaps = (a, b) => a.x < b.r && b.x < a.r && a.y < b.b && b.y < a.b;
+  const inside = r => r.x >= M.x + EDGE - .01 && r.r <= M.x + M.w - EDGE + .01 && r.y >= M.y + EDGE - .01 && r.b <= M.y + M.h - EDGE + .01;
+
+  // 与 src/toolbar_layout.rs 一致：右对齐选区，放不下下方时翻到上方，并夹在显示器内。
+  function toolbar(s) {
+    const width = Math.min(tbWidth, M.w - 24);
+    const reserve = 110;  // 属性栏预留
+    const belowFits = s.y + s.h + 10 + TB_H + 8 + reserve <= M.y + M.h - 12;
+    const y0 = belowFits ? s.y + s.h + 10 : s.y - TB_H - 10;
+    const x = Math.min(Math.max(s.x + s.w - width, M.x + 12), Math.max(M.x + M.w - width - 12, M.x + 12));
+    const y = Math.min(Math.max(y0, M.y + 12), M.y + M.h - TB_H - 12);
+    return R(x, y, width, TB_H);
+  }
+
+  function candidates(s, t) {
+    const S = R(s.x, s.y, s.w, s.h);
+    const width = Math.min(W, M.w - EDGE * 2);
+    const maxH = M.h - EDGE * 2;
+    const list = [];
+    const add = (name, x, y, h, extra) => {
+      h = Math.min(h, maxH);
+      const rect = R(x, y, width, h);
+      const ok = inside(rect) && !(t && overlaps(rect, t));
+      list.push({ name, rect, cost: extra, ok });
+    };
+    const sides = [
+      { key: '右', x: S.r + GAP, penalty: 0 },
+      { key: '左', x: S.x - GAP - width, penalty: 60 },
+    ];
+    for (const side of sides) {
+      const x = side.x;
+      // 首选高度：选区高与最小高取大；工具栏在下方且与该列不重叠时下沿对齐工具栏。
+      let h = Math.max(S.h, MIN_H);
+      if (t && t.y >= S.y && !(t.x < x + width && x < t.r)) h = Math.max(h, t.b - S.y);
+      h = Math.min(h, maxH);
+      const y0 = Math.min(Math.max(S.y, M.y + EDGE), M.y + M.h - EDGE - h);
+      add(side.key + '·对齐选区', x, y0, h, side.penalty + Math.abs(y0 - S.y));
+      if (t) {
+        const up = t.y - GAP - h;                       // 整体上移到工具栏之上
+        add(side.key + '·上移', x, up, h, side.penalty + Math.abs(up - S.y));
+        const down = t.b + GAP;                         // 整体下移到工具栏之下
+        add(side.key + '·下移', x, down, Math.min(h, M.y + M.h - EDGE - down), side.penalty + Math.abs(down - S.y) + Math.max(0, h - (M.y + M.h - EDGE - down)) * 1.5);
+        const shortH = t.y - GAP - S.y;                 // 缩短到工具栏上沿
+        if (shortH >= MIN_SHRINK && t.y > S.y) add(side.key + '·缩短', x, S.y, shortH, side.penalty + (h - shortH) * 1.5);
+        const ox = side.key === '右' ? Math.max(t.r, S.r) + GAP : Math.min(t.x, S.x) - GAP - width;
+        add(side.key + '·工具栏外侧', ox, y0, h, side.penalty + Math.abs(ox - x) * 1.2 + Math.abs(y0 - S.y));
+      }
+    }
+    // 兜底：贴屏幕右缘覆盖选区，再让出工具栏。
+    const fx = M.x + M.w - EDGE - width;
+    let fh = Math.min(Math.max(S.h, MIN_H), maxH);
+    let fy = Math.min(Math.max(S.y, M.y + EDGE), M.y + M.h - EDGE - fh);
+    let f = R(fx, fy, width, fh);
+    if (t && overlaps(f, t)) {
+      const aboveH = t.y - GAP - (M.y + EDGE), belowH = M.y + M.h - EDGE - (t.b + GAP);
+      if (aboveH >= belowH) { fy = M.y + EDGE; fh = Math.max(aboveH, 1); } else { fy = t.b + GAP; fh = Math.max(belowH, 1); }
+    }
+    list.push({ name: '兜底·覆盖选区', rect: R(fx, fy, width, fh), cost: 10000, ok: true, fallback: true });
+    return list;
+  }
+
+  function choose(list) {
+    const ok = list.filter(c => c.ok && !c.fallback).sort((a, b) => a.cost - b.cost);
+    return ok[0] || list.find(c => c.fallback);
+  }
+
+  function render() {
+    const t = toolbar(sel);
+    const list = candidates(sel, t);
+    const pick = choose(list);
+    let h = '';
+    if ($('showCand').checked) {
+      for (const c of list) {
+        if (c === pick || c.fallback && c !== pick) continue;
+        h += `<div class="cand${c.ok ? '' : ' bad'}" style="left:${c.rect.x}px;top:${c.rect.y}px;width:${c.rect.w}px;height:${c.rect.h}px"><span>${c.name}</span></div>`;
+      }
+    }
+    h += `<div class="sel" id="sel" style="left:${sel.x}px;top:${sel.y}px;width:${sel.w}px;height:${sel.h}px"><span class="tag">${Math.round(sel.w)} × ${Math.round(sel.h)} · (${Math.round(sel.x)}, ${Math.round(sel.y)})</span><span class="h" id="hdl"></span></div>`;
+    h += `<div class="tb" style="left:${t.x}px;top:${t.y}px;width:${t.w}px;height:${t.h}px">${'<i></i>'.repeat(Math.floor((t.w - 20) / 28))}</div>`;
+    const p = pick.rect;
+    h += `<div class="panel" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px"><div class="ph">文字识别 <em>11 行</em></div><div class="pb">${[90, 70, 80, 55, 75, 60, 85, 50].map(w => `<i style="width:${w}%"></i>`).join('')}</div><div class="pf"><b>复制全文</b></div></div>`;
+    if (Math.abs(p.y - sel.y) > .5 && !pick.fallback) {
+      h += `<div class="gapline" style="left:${Math.min(p.x, sel.x + sel.w)}px;top:${sel.y}px;width:${Math.abs(p.x - (sel.x + sel.w)) + 20}px"></div>`;
+    }
+    stage.innerHTML = h;
+
+    $('decision').innerHTML =
+      `<dt>选用</dt><dd><span class="pill">${pick.name}</span></dd>` +
+      `<dt>位置</dt><dd>${Math.round(p.x)}, ${Math.round(p.y)} · ${Math.round(p.w)}×${Math.round(p.h)}</dd>` +
+      `<dt>相对选区</dt><dd>水平间距 ${Math.round(p.x - (sel.x + sel.w))}，上沿偏移 ${Math.round(p.y - sel.y)}</dd>` +
+      `<dt>工具栏</dt><dd>${Math.round(t.x)}, ${Math.round(t.y)} · ${Math.round(t.w)}×${t.h}${t.y < sel.y ? '（在选区上方）' : ''}</dd>`;
+    $('cands').innerHTML = '<tr><th>候选</th><th>代价</th><th>结果</th></tr>' + list.filter(c => !c.fallback).sort((a, b) => a.cost - b.cost)
+      .map(c => `<tr class="${c === pick ? 'win' : c.ok ? '' : 'no'}"><td>${c.name}</td><td>${Math.round(c.cost)}</td><td>${c === pick ? '选用' : c.ok ? '可行' : !inside(c.rect) ? '出屏' : '压工具栏'}</td></tr>`).join('');
+    bindDrag();
+  }
+
+  function fit() {
+    const s = Math.min(1, wrap.clientWidth / M.w);
+    stage.style.transform = `scale(${s})`;
+    wrap.style.height = M.h * s + 'px';
+    return s;
+  }
+  let scale = fit();
+  addEventListener('resize', () => { scale = fit(); });
+
+  function bindDrag() {
+    const el = $('sel'), hdl = $('hdl');
+    const start = (e, mode) => {
+      e.preventDefault(); e.stopPropagation();
+      const sx = e.clientX, sy = e.clientY, o = { ...sel };
+      const mv = ev => {
+        const dx = (ev.clientX - sx) / scale, dy = (ev.clientY - sy) / scale;
+        if (mode === 'move') {
+          sel.x = Math.min(Math.max(o.x + dx, 0), M.w - o.w);
+          sel.y = Math.min(Math.max(o.y + dy, 0), M.h - o.h);
+        } else {
+          sel.w = Math.min(Math.max(o.w + dx, 40), M.w - o.x);
+          sel.h = Math.min(Math.max(o.h + dy, 30), M.h - o.y);
+        }
+        render();
+      };
+      const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
+      addEventListener('pointermove', mv); addEventListener('pointerup', up);
+    };
+    el.addEventListener('pointerdown', e => start(e, 'move'));
+    hdl.addEventListener('pointerdown', e => start(e, 'size'));
+  }
+
+  const mark = () => {
+    document.querySelectorAll('[data-w]').forEach(b => b.classList.toggle('on', +b.dataset.w === tbWidth));
+  };
+  document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
+    sel = { ...SCEN[b.dataset.s] };
+    document.querySelectorAll('[data-s]').forEach(x => x.classList.toggle('on', x === b));
+    render();
+  });
+  document.querySelectorAll('[data-w]').forEach(b => b.onclick = () => { tbWidth = +b.dataset.w; mark(); render(); });
+  $('showCand').onchange = render;
+  document.querySelector('[data-s="yours"]').classList.add('on');
+  mark(); render();
+})();
+</script>
