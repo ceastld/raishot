@@ -8,6 +8,7 @@
 | --- | --- |
 | [术语](glossary.md) | 核心对象、坐标与进程的统一含义 |
 | [开发](development.md) | 源码构建、定向验证与格式化 |
+| [验包与发布](releasing.md) | Windows CI、手动验包、版本与标签发布 |
 | [工作流程](workflow.md) | 本地运行、并行协作与文档更新 |
 | [架构](architecture.md) | 模型边界、渲染、坐标与资源生命周期 |
 | [行为清单](behavior.md) | 当前功能、入口、快捷键与交互边界 |
