@@ -1014,8 +1014,8 @@ mod pin_document_entry_tests {
         assert_eq!(document.size(), (31, 19));
     }
     #[test]
-    fn pin_editor_document_prepare_rejects_mismatched_raw_and_inner_border_before_window_creation()
-    {
+    fn pin_editor_document_prepare_accepts_inner_border_and_rejects_mismatched_raw_before_window_creation(
+    ) {
         let mut image = Image {
             width: 31,
             height: 19,
@@ -1026,12 +1026,13 @@ mod pin_document_entry_tests {
         assert!(prepare_pin_document(
             &image,
             SelectionFinishStyle {
+                border_enabled: true,
                 border_inside: true,
                 ..Default::default()
             },
             &document
         )
-        .is_err());
+        .is_ok());
         assert!(prepare_pin_document(
             &image,
             SelectionFinishStyle::default(),

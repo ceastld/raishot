@@ -459,19 +459,22 @@ fn readonly_methods_refuse_active_composition_without_cancelling_or_committing()
 }
 
 #[test]
-fn existing_editable_scalar_and_utf16_contract_does_not_take_readonly_grapheme_path() {
+fn editable_navigation_keeps_graphemes_and_native_replacement_keeps_utf16_contract() {
     let mut editor = ResultEditor::new("e\u{301}!".into(), 0..0);
     editor.navigate("right", false, false);
-    assert_eq!(editor.caret(), 1);
+    assert_eq!(editor.caret(), 3);
+    editor.navigate("left", false, false);
+    assert_eq!(editor.caret(), 0);
     editor.move_to(2, false);
-    assert_eq!(editor.caret(), 1);
+    assert_eq!(editor.caret(), 0);
+    // 原生 UTF-16 替换范围仍可独立替换组合音标。
     editor.replace(Some(1..2), "X", false, None);
     assert_eq!(editor.text, "eX!");
     editor.undo();
     assert_eq!(editor.text, "e\u{301}!");
     editor.move_to(0, false);
     editor.delete(false);
-    assert_eq!(editor.text, "\u{301}!");
+    assert_eq!(editor.text, "!");
     editor.undo();
     assert_eq!(editor.text, "e\u{301}!");
 }

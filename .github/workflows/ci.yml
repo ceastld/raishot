@@ -67,6 +67,10 @@ jobs:
           RUSTC_WRAPPER: sccache
           SCCACHE_GHA_ENABLED: "true"
         run: |
+          # 文件取消回归要求独立且已存在的目录，只存人工小流，不使用真实 OCR 缓存。
+          $testRoot = Join-Path $env:RUNNER_TEMP 'ppocr-cold-preparation-cancel-20261011/draft/test-temp'
+          New-Item -ItemType Directory -Force -Path $testRoot | Out-Null
+          $env:RUSTSHOT_COLD_QA_ROOT = $testRoot
           cargo test --locked --lib
           if ($LASTEXITCODE -ne 0) { throw '核心测试失败' }
 

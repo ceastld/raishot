@@ -367,7 +367,8 @@ fn capture_pin_output_origin_and_composed_padding_keep_same_content_anchor() {
         border_color: 0x00ff_ffff,
         ..decorated
     };
-    for (style, expected_pad) in [(decorated, 5), (inside_border, 0), (invisible, 0)] {
+    // 外侧边框 2.2px 与阴影 4.1px 相加后向外取整，内容原点需补偿 7px。
+    for (style, expected_pad) in [(decorated, 7), (inside_border, 0), (invisible, 0)] {
         let output = style
             .compose(content_image(&source, &Scene::default(), selected, None, None).unwrap())
             .unwrap();

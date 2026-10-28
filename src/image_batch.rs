@@ -441,15 +441,21 @@ impl BatchPlan {
         }
         let path = self.output_path(index, width, height)?;
         *output = Some(path.clone());
-        // 不为保护其它源而打开/规范化它们；它们可能是等待处理的云端占位文件。
-        // 词法检查同时保护尚不存在的显式输入；现存路径别名仍由 create-only 提交保护。
+        // 只解析已验证的本地输出目录；其它源可能是等待处理的云端占位文件。
+        // 同时比较原写法和规范长路径，短文件名目录下尚不存在的显式输入也不能被占用。
+        ensure_local_output_directory(&self.options.directory)?;
         let absolute_output =
             std::path::absolute(&path).map_err(|error| ToolError::Invalid(error.to_string()))?;
-        if self
-            .inputs
-            .iter()
-            .any(|source| same_absolute_path(&source.path, &absolute_output))
-        {
+        let output_name = path.file_name().ok_or_else(|| {
+            ToolError::Invalid(tr!("批处理输出文件名无效", "Invalid batch output file name").into())
+        })?;
+        let canonical_output = std::fs::canonicalize(&self.options.directory)
+            .map_err(|error| ToolError::Invalid(error.to_string()))?
+            .join(output_name);
+        if self.inputs.iter().any(|source| {
+            same_absolute_path(&source.path, &absolute_output)
+                || same_absolute_path(&source.path, &canonical_output)
+        }) {
             return Err(ToolError::Invalid(
                 tr!(
                     "输出名称与批处理源路径冲突，请更换名称或目录",

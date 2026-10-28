@@ -1347,7 +1347,7 @@ mod tests {
             assert_eq!(changed.radius, value);
             assert_eq!(changed.opacity, style.opacity);
         }
-        for tool in [Tool::Ellipse, Tool::Highlighter, Tool::Mosaic] {
+        for tool in [Tool::Ellipse, Tool::Highlighter, Tool::MosaicBrush] {
             assert!(ParameterSpec::for_style(ToolbarPanel::Radius, tool, style).is_none());
         }
     }

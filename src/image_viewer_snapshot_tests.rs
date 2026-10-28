@@ -342,15 +342,21 @@ fn image_viewer_snapshot_resident_budget_deduplicates_render_arcs_and_keeps_raw_
         .metadata_source
         .as_ref()
         .map_or(0, |source| source.retained_bytes() as u64);
+    assert!(!Arc::ptr_eq(&image.thumbnail, &image.tiles[0].1));
     assert_eq!(
         base,
         THUMBNAIL_CACHE_BYTES as u64
             + image.raw_page.as_ref().unwrap().bgra.capacity() as u64
             + metadata
-            + 8
+            + 16 // 主图和独立缩略图各占 8 字节。
     );
     let rotated = crate::canvas_source::render_image(2, 1, vec![0; 8]);
-    let retained = [image.tiles[0].1.clone(), rotated.clone(), rotated];
+    let retained = [
+        image.thumbnail.clone(),
+        image.tiles[0].1.clone(),
+        rotated.clone(),
+        rotated,
+    ];
     assert_eq!(
         presentation_resident_bytes(&image, retained.iter(), std::iter::empty()),
         base + 8

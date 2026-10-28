@@ -1785,7 +1785,7 @@ mod tests {
     }
 
     #[test]
-    fn dual_4k_preview_preflight_keeps_48m_frame_budget_and_export_32m_and_corner_limits() {
+    fn dual_4k_preview_preflight_keeps_body_48m_and_export_32m_budgets_with_vector_corners() {
         // 仅规划几何，不分配双4K图像或运行GPUI。
         let placement = Placement {
             x: 0,
@@ -1836,7 +1836,7 @@ mod tests {
         assert!(super::super::PresentationOutputPlan::new(visible, style, 2.).is_err());
         assert!(validate_preview_geometry((4000, 4000), style, placement, placement).is_err());
 
-        // 主体35.12M通过并不代表4200px单边圆角可以渲染；接受几何前应拒绝。
+        // 旧CPU角缓存拒绝4200px单边；矢量圆角呈现组只分配35.12M主体。
         let placement = Placement {
             width: 14_000,
             height: 14_000,
@@ -1878,9 +1878,9 @@ mod tests {
             .iter()
             .all(|r| r.width == 4200 && r.height == 4200));
         assert!(corner_tile_regions(plan).is_err());
-        assert!(validate_preview_geometry((200, 200), style, placement, desktop).is_err());
+        validate_preview_geometry((200, 200), style, placement, desktop).unwrap();
 
-        // 每个角块合法且四角31.36M，也须与已分配主体相加核整帧48M上界。
+        // 旧CPU模型仍核主体与四角的总额；矢量呈现组不分配31.36M四角位图。
         let style = SelectionFinishStyle {
             corner_radius: 40.,
             ..style
@@ -1901,7 +1901,7 @@ mod tests {
             31_360_000
         );
         assert!(validate_preview_frame(plan, visible).is_err());
-        assert!(validate_preview_geometry((200, 200), style, placement, desktop).is_err());
+        validate_preview_geometry((200, 200), style, placement, desktop).unwrap();
 
         // Reset原图本身合法32M，但改变旋转后的长边方向会扩大可见目标分配。
         let desktop = Placement {
