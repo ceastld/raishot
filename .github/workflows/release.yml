@@ -1,0 +1,258 @@
+# 发版构建：Release 编译三个 EXE，打包 app-local VC++ 运行库与固定 ONNX Runtime；
+# OCR 模型与字典不进包，由程序运行时从固定官方源按需下载并校验。
+name: Release
+run-name: Release · ${{ github.event_name == 'push' && github.ref_name || inputs.package_version }}
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: "分发包版本（三段，如 0.4.9）；只构建并上传构建产物，不创建 Release"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.ref }}-${{ inputs.package_version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 240
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 确定包版本
+        id: version
+        shell: pwsh
+        env:
+          PACKAGE_VERSION_INPUT: ${{ inputs.package_version }}
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_TYPE -eq 'tag') {
+            $version = $env:GITHUB_REF_NAME.Substring(1)
+          } else {
+            $version = $env:PACKAGE_VERSION_INPUT
+          }
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw "包版本须为三段数字：$version"
+          }
+          $cargo = Get-Content -LiteralPath Cargo.toml -Raw
+          $package = [regex]::Match($cargo, '(?ms)^\[package\]\s*\r?\n(?<body>.*?)(?=^\[|\z)')
+          $productVersion = [regex]::Match($package.Groups['body'].Value, '(?m)^version\s*=\s*"(?<version>[^"\r\n]+)"\s*$')
+          if (-not $package.Success -or -not $productVersion.Success) {
+            throw '无法从 Cargo.toml 的 [package] 读取产品版本'
+          }
+          if ($version -ne $productVersion.Groups['version'].Value) {
+            throw "包版本 $version 与 Cargo.toml 产品版本 $($productVersion.Groups['version'].Value) 不一致"
+          }
+          "package_version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: 安装 Rust 1.90
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.90.0"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # Cargo 产物缓存默认排除仓库内的 path 依赖；sccache 按内容复用 GPUI、codec 等库，
+      # 不依赖新 checkout 的文件时间。只在构建步骤设置 RUSTC_WRAPPER，保留现有依赖缓存键。
+      - name: 安装编译缓存
+        id: sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: v0.16.0
+
+      - name: 缓存 ONNX Runtime
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ocr-runtime
+          key: ort-windows-x64-v1-${{ hashFiles('dependencies/ppocr-cpu.json') }}
+
+      - name: 准备 VC++ 运行库与 ONNX Runtime
+        id: deps
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products * -property installationPath
+          $redist = Get-ChildItem (Join-Path $vs 'VC\Redist\MSVC') -Directory |
+            Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            ForEach-Object { Get-ChildItem (Join-Path $_.FullName 'x64') -Directory -Filter 'Microsoft.VC*.CRT' } |
+            Select-Object -First 1
+          if (-not $redist) { throw '未找到 x64 VC++ 可再发行运行库目录' }
+          "runtime_directory=$($redist.FullName)" >> $env:GITHUB_OUTPUT
+
+          $manifest = Get-Content dependencies/ppocr-cpu.json -Raw | ConvertFrom-Json
+          $out = Join-Path $env:RUNNER_TEMP 'ocr-runtime'
+          $ready = $true
+          foreach ($file in $manifest.runtime.files) {
+            $path = Join-Path $out $file.name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
+                (Get-Item -LiteralPath $path).Length -ne [int64]$file.bytes -or
+                (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $file.sha256.ToUpperInvariant()) {
+              $ready = $false
+              break
+            }
+          }
+          if ($ready) {
+            Write-Host '复用已按固定清单校验的 ONNX Runtime'
+            "ocr_runtime_directory=$out" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          # 从固定官方源下载，只提取必需成员；缓存命中后不再下载压缩包。
+          $archive = $manifest.runtime.archive
+          $zip = Join-Path $env:RUNNER_TEMP $archive.name
+          $verified = $false
+          $sources = @(@{ url = $archive.url; bytes = $archive.bytes; sha256 = $archive.sha256 })
+          foreach ($source in $sources) {
+            $url = $source.url
+            try {
+              Invoke-WebRequest -Uri $url -OutFile $zip -TimeoutSec 60
+              $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+              if ((Get-Item $zip).Length -ne [int64]$source.bytes -or $hash -ne $source.sha256.ToUpperInvariant()) {
+                throw 'ONNX Runtime 压缩包与固定清单不符'
+              }
+              $verified = $true
+              break
+            } catch {
+              Write-Warning "ONNX Runtime 下载或校验失败：$url；$($_.Exception.Message)"
+            }
+          }
+          if (-not $verified) { throw '未取得校验通过的 ONNX Runtime' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $zipArchive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+          try {
+            foreach ($file in $manifest.runtime.files) {
+              $entry = $zipArchive.GetEntry($file.member)
+              if (-not $entry) { throw "压缩包缺少 $($file.member)" }
+              [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $out $file.name), $true)
+            }
+          } finally { $zipArchive.Dispose() }
+          "ocr_runtime_directory=$out" >> $env:GITHUB_OUTPUT
+
+      - name: Release 构建
+        shell: pwsh
+        env:
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
+          CARGO_INCREMENTAL: "0"
+        run: |
+          $timer = [Diagnostics.Stopwatch]::StartNew()
+          try {
+            ./build.ps1 -Jobs 2 -Timings
+          } finally {
+            $timer.Stop()
+            "Release 构建耗时：$([math]::Round($timer.Elapsed.TotalSeconds, 1)) 秒；$env:NUMBER_OF_PROCESSORS 个逻辑 CPU；LTO off，16 个代码生成单元。" |
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: 编译缓存统计
+        if: always() && steps.sccache.outcome == 'success'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          '```text' | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          & $env:SCCACHE_PATH --show-stats | Tee-Object -Variable stats
+          $stats | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          '```' | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+      - name: 保存构建耗时报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RaiShot-build-timings-${{ github.run_attempt }}
+          path: target/cargo-timings/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 检查 CLI 启动
+        shell: pwsh
+        run: |
+          & ./target/release/raishot-cli.exe --help
+          if ($LASTEXITCODE -ne 0) { throw 'Release CLI 无法正常启动' }
+
+      - name: 打包
+        id: package
+        shell: pwsh
+        run: |
+          $result = ./Tools/package.ps1 `
+            -SourceDirectory target/release `
+            -OutputDirectory dist/ci `
+            -PackageName rustshot `
+            -PackageVersion '${{ steps.version.outputs.package_version }}' `
+            -RuntimeDirectory '${{ steps.deps.outputs.runtime_directory }}' `
+            -OcrRuntimeDirectory '${{ steps.deps.outputs.ocr_runtime_directory }}' `
+            -ReadmePath assets/PORTABLE-README.txt `
+            -IncludeProjectNotices
+          $result | Format-List
+          $checksum = "$($result.zip_path).sha256"
+          "$($result.sha256)  $([IO.Path]::GetFileName($result.zip_path))" | Set-Content -LiteralPath $checksum -Encoding utf8NoBOM
+          "zip_path=$($result.zip_path)" >> $env:GITHUB_OUTPUT
+          "checksum_path=$checksum" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RaiShot-${{ steps.version.outputs.package_version }}
+          path: |
+            ${{ steps.package.outputs.zip_path }}
+            ${{ steps.package.outputs.checksum_path }}
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: 创建 GitHub Release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_ZIP: ${{ steps.package.outputs.zip_path }}
+          PACKAGE_CHECKSUM: ${{ steps.package.outputs.checksum_path }}
+          RELEASE_VERSION: ${{ steps.version.outputs.package_version }}
+        run: |
+          $assets = @($env:PACKAGE_ZIP, $env:PACKAGE_CHECKSUM)
+          $releaseJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:GITHUB_REF_NAME" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $release = $releaseJson | ConvertFrom-Json
+            foreach ($path in $assets) {
+              $name = [IO.Path]::GetFileName($path)
+              $existing = $release.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+              if ($existing) {
+                $digest = 'sha256:' + (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($existing.digest -ne $digest) { throw "同版本资产内容不同或无法核验，禁止覆盖：$name；请使用新版本" }
+              } else {
+                gh release upload $env:GITHUB_REF_NAME $path --repo $env:GITHUB_REPOSITORY
+                if ($LASTEXITCODE -ne 0) { throw "上传 Release 资产失败：$name" }
+              }
+            }
+            if ($release.draft) {
+              gh release edit $env:GITHUB_REF_NAME --draft=false --repo $env:GITHUB_REPOSITORY
+              if ($LASTEXITCODE -ne 0) { throw '发布已有 Release 草稿失败' }
+            }
+          } else {
+            $notes = Join-Path $env:RUNNER_TEMP 'release-notes.txt'
+            $releaseNotes = '包内含三个 EXE、app-local VC++ 运行库、ONNX Runtime、使用说明与许可证；OCR 模型首次使用时下载并校验。附 SHA256 校验文件。'
+            if (Test-Path -LiteralPath CHANGELOG.md) {
+              $changelog = Get-Content -LiteralPath CHANGELOG.md -Raw
+              $releaseVersion = [regex]::Escape($env:RELEASE_VERSION)
+              $sectionPattern = '(?ms)^##[ \t]+(?:\[' + $releaseVersion + '\]|v?' + $releaseVersion + ')(?=[ \t\r\n（(]|$)[^\r\n]*\r?\n(?<notes>.*?)(?=^##[ \t]+|\z)'
+              $section = [regex]::Match($changelog, $sectionPattern)
+              if ($section.Success -and -not [string]::IsNullOrWhiteSpace($section.Groups['notes'].Value)) {
+                $releaseNotes = $section.Groups['notes'].Value.Trim()
+              }
+            }
+            Set-Content -LiteralPath $notes -Value $releaseNotes -Encoding utf8NoBOM
+            gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag `
+              --title "RaiShot $env:GITHUB_REF_NAME" --notes-file $notes
+            if ($LASTEXITCODE -ne 0) { throw '创建 GitHub Release 失败' }
+          }

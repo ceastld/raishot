@@ -1,0 +1,99 @@
+$=var root = Path.GetFullPath({package_path});
+if (Environment.Is64BitOperatingSystem == false)
+{
+    throw new InvalidOperationException("RaiShot 需要 Windows 10/11 64 位系统。");
+}
+var manifestPath = Path.Combine(root, "manifest.json");
+if (File.Exists(manifestPath) == false)
+{
+    throw new InvalidOperationException("RaiShot 依赖包缺少 manifest.json，请移走该版本缓存后重试。");
+}
+var manifest = JObject.Parse(File.ReadAllText(manifestPath));
+if ((int?)manifest["schema_version"] != 1 || (string)manifest["package_name"] != {package_name}
+    || (string)manifest["architecture"] != "windows-x64")
+{
+    throw new InvalidOperationException("RaiShot 依赖包标识或架构不正确。");
+}
+Version actualVersion;
+Version minimumVersion;
+if (Version.TryParse((string)manifest["package_version"], out actualVersion) == false
+    || Version.TryParse({package_version}, out minimumVersion) == false || actualVersion < minimumVersion)
+{
+    throw new InvalidOperationException("RaiShot 依赖包版本不符合动作要求。");
+}
+var files = manifest["files"] as JArray;
+if (files == null) { throw new InvalidOperationException("RaiShot 依赖包清单不完整。"); }
+var names = new System.Collections.Generic.List<string>();
+foreach (var entry in files)
+{
+    var file = entry as JObject;
+    if (file == null || file["path"] == null || file["path"].Type.ToString() != "String")
+    {
+        throw new InvalidOperationException("RaiShot 清单文件项格式不正确。");
+    }
+    var name = (string)file["path"];
+    if (string.IsNullOrWhiteSpace(name) || name == "." || name == ".."
+        || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || Path.IsPathRooted(name)
+        || !string.Equals(Path.GetFileName(name), name, StringComparison.Ordinal)
+        || name.EndsWith(".", StringComparison.Ordinal) || name.EndsWith(" ", StringComparison.Ordinal))
+    {
+        throw new InvalidOperationException("RaiShot 清单只允许包根目录文件名：" + name);
+    }
+    if (names.Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase))) { throw new InvalidOperationException("RaiShot 清单有重复文件名：" + name); }
+    names.Add(name);
+    long bytes;
+    if (file["bytes"] == null || file["bytes"].Type.ToString() != "Integer"
+        || long.TryParse((string)file["bytes"], out bytes) == false || bytes < 0)
+    {
+        throw new InvalidOperationException("RaiShot 清单文件大小不正确：" + name);
+    }
+    if (file["sha256"] == null || file["sha256"].Type.ToString() != "String"
+        || System.Text.RegularExpressions.Regex.IsMatch((string)file["sha256"], "\\A[0-9a-fA-F]{64}\\z") == false)
+    {
+        throw new InvalidOperationException("RaiShot 清单文件 SHA256 格式不正确：" + name);
+    }
+    var path = Path.Combine(root, name);
+    if (File.Exists(path) == false || new FileInfo(path).Length != bytes)
+    {
+        throw new InvalidOperationException("RaiShot 依赖文件缺少或大小不符：" + name);
+    }
+    var sha = System.Security.Cryptography.SHA256.Create();
+    try
+    {
+        var stream = File.OpenRead(path);
+        try
+        {
+            var hash = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "");
+            if (string.Equals(hash, (string)file["sha256"], StringComparison.OrdinalIgnoreCase) == false)
+            {
+                throw new InvalidOperationException("RaiShot 依赖文件校验失败：" + name);
+            }
+        }
+        finally { stream.Dispose(); }
+    }
+    finally { sha.Dispose(); }
+}
+var required = new[] { "raishot.exe", "raishot-gpui.exe", "raishot-cli.exe", "vcruntime140.dll" };
+foreach (var name in required)
+{
+    if (names.Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) == false) { throw new InvalidOperationException("RaiShot 清单缺少必需文件：" + name); }
+}
+foreach (var sectionName in new[] { "runtime", "ocr_runtime" })
+{
+    var section = manifest[sectionName];
+    if (section == null) { continue; }
+    var sectionObject = section as JObject;
+    if (sectionObject == null) { throw new InvalidOperationException("RaiShot 运行库清单格式不正确：" + sectionName); }
+    var declared = sectionObject["files"];
+    if (declared == null) { continue; }
+    var declaredFiles = declared as JArray;
+    if (declaredFiles == null) { throw new InvalidOperationException("RaiShot 运行库文件清单格式不正确：" + sectionName); }
+    foreach (var declaredFile in declaredFiles)
+    {
+        if (declaredFile.Type.ToString() != "String" || names.Any(n => string.Equals(n, (string)declaredFile, StringComparison.OrdinalIgnoreCase)) == false)
+        {
+            throw new InvalidOperationException("RaiShot 清单缺少已声明的运行库文件：" + sectionName);
+        }
+    }
+}
+return Path.Combine(root, "raishot.exe");

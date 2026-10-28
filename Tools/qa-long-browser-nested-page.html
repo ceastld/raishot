@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN" translate="no" class="notranslate">
+<head>
+  <meta charset="utf-8">
+  <meta name="google" content="notranslate">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <meta name="color-scheme" content="light">
+  <title>RustShot Browser Nested QA</title>
+  <style>
+    html,body { margin:0; width:100%; height:100%; overflow:hidden; background:#152238; color:#f3f5f8; }
+    body { font:14px/20px Arial,sans-serif; }
+    header { box-sizing:border-box; height:64px; padding:10px 24px; overflow:hidden; }
+    h1 { font-size:16px; line-height:24px; margin:0; } p { margin:0; }
+    #outer { width:320px; height:240px; margin:24px; overflow-x:hidden; overflow-y:scroll; scrollbar-width:none; scroll-behavior:auto; overscroll-behavior:contain; background:rgb(203,216,227); }
+    #outer-world { position:relative; width:320px; height:1440px; background:rgb(203,216,227); }
+    #inner { position:absolute; top:0; width:152px; height:240px; overflow-x:hidden; overflow-y:scroll; scrollbar-width:none; scroll-behavior:auto; overscroll-behavior:contain; background:rgb(203,216,227); }
+    #outer::-webkit-scrollbar,#inner::-webkit-scrollbar { display:none; width:0; height:0; }
+    canvas { display:block; height:1440px; pointer-events:none; image-rendering:pixelated; }
+    footer { margin:0 24px; max-width:1000px; }
+  </style>
+</head>
+<body>
+  <header><h1 id="title"></h1><p>只观察原生 HWND wheel：外层与内层均可滚动，外层必须始终保持 0。</p></header>
+  <div id="outer" tabindex="-1"><div id="outer-world"><div id="inner" tabindex="-1"><canvas id="world"></canvas></div></div></div>
+  <footer><p>选区中心/鼠标偏心命中分两次独立冷会话；控制器不改变 DOM、滚动或鼠标。</p></footer>
+  <script>
+    'use strict';
+    (() => {
+      const query=new URL(location.href).searchParams,nonce=query.get('nonce'),nestedCase=Number(query.get('case'));
+      if (!nonce || !/^[A-Za-z0-9_-]{20,128}$/.test(nonce) || ![1,2].includes(nestedCase) || query.size!==2) throw new Error('缺少独立文档 nonce/case');
+      if (devicePixelRatio!==1.25) throw new Error('本轮只允许当前已验证 DPR=1.25');
+      const dpr=1.25,documentEpoch=crypto.randomUUID(),innerLeft=nestedCase===1?168:96,innerWidth=320-innerLeft;
+      const spec=Object.freeze({width:400,viewport_height:300,document_height:1800,tile_height:300});
+      document.title=`RustShot Browser Nested QA ${nonce}`;
+      document.getElementById('title').textContent=document.title;
+      const outer=document.getElementById('outer'),inner=document.getElementById('inner'),canvas=document.getElementById('world');
+      inner.style.left=`${innerLeft}px`;inner.style.width=`${innerWidth}px`;canvas.style.width=`${innerWidth}px`;
+      canvas.width=innerWidth*dpr;canvas.height=spec.document_height;
+      const context=canvas.getContext('2d',{alpha:false});if(!context)throw new Error('无法建立不透明 canvas');
+      const image=context.createImageData(canvas.width,canvas.height),edge=value=>Math.round(value*dpr);
+      for(let y=0;y<canvas.height;y++)for(let localX=0;localX<canvas.width;localX++){
+        const x=localX+edge(innerLeft),band=Math.min(5,Math.floor(y/edge(240))),phase=band%3;
+        let rgba=null;
+        if(x<edge(12)&&y<edge(band*240+12))rgba=[251,19,73,255];
+        else if(x>=edge(308)&&y<edge(band*240+12))rgba=[17,239,101,255];
+        else if(x<edge(12)&&y>=edge(band*240+228))rgba=[37,89,247,255];
+        else if(x>=edge(308)&&y>=edge(band*240+228))rgba=[233,181,29,255];
+        else if(x>=edge(12)&&x<edge(308)&&y<edge(band*240+2))rgba=[90+phase*31,40+phase*47,170-phase*29,255];
+        else{const n=((Math.imul(y,157)+Math.imul(x,71))^(Math.imul(y,17)+Math.imul(x,113)))>>>0;
+          rgba=[((Math.imul(y,y)+Math.imul(x,41))>>>0)%251,((Math.imul(y,13)+Math.imul(x,19))>>>0)%251,n%251,255];}
+        image.data.set(rgba,(y*canvas.width+localX)*4);
+      }
+      context.putImageData(image,0,0);
+      let scrollEpoch=0,outerScrollEpoch=0,documentScrollEpoch=0,layoutEpoch=1,signature='';
+      let wheelEvents=0,scrollEvents=0,eventSequence=0;const events=[],eventLimit=256;
+      const rect=value=>{const r=value.getBoundingClientRect();return{left:r.left,top:r.top,width:r.width,height:r.height};};
+      const identity=value=>value===document?'document':value===window?'window':value&&value.id?value.id:value&&value.tagName?value.tagName.toLowerCase():'other';
+      const record=(type,event)=>{
+        if(type==='wheel')wheelEvents++;else scrollEvents++;
+        events.push({sequence:++eventSequence,type,is_trusted:event.isTrusted,observed_unix_ms:Date.now(),
+          delta_x:type==='wheel'?event.deltaX:null,delta_y:type==='wheel'?event.deltaY:null,delta_mode:type==='wheel'?event.deltaMode:null,
+          target:identity(event.target),composed_path:event.composedPath().slice(0,10).map(identity),
+          scroll_epoch:scrollEpoch,outer_scroll_epoch:outerScrollEpoch,document_scroll_epoch:documentScrollEpoch,
+          inner_scroll_top:inner.scrollTop,outer_scroll_top:outer.scrollTop,document_scroll_top:document.scrollingElement.scrollTop,dpr,nested_case:nestedCase});
+        if(events.length>eventLimit)events.shift();
+      };
+      document.addEventListener('wheel',event=>record('wheel',event),{capture:true,passive:true});
+      inner.addEventListener('scroll',event=>{scrollEpoch++;record('scroll',event);},{passive:true});
+      outer.addEventListener('scroll',event=>{outerScrollEpoch++;record('scroll',event);},{passive:true});
+      document.addEventListener('scroll',event=>{if(event.target===document){documentScrollEpoch++;record('scroll',event);}},{passive:true});
+      const measure=()=>{
+        const r=rect(outer),ir=rect(inner),visual=window.visualViewport;
+        const vv={width:visual.width,height:visual.height,scale:visual.scale,offset_left:visual.offsetLeft,offset_top:visual.offsetTop};
+        const next=JSON.stringify([devicePixelRatio,vv,r,ir,inner.clientWidth,inner.clientHeight,outer.clientWidth,outer.clientHeight,inner.scrollHeight,outer.scrollHeight]);
+        if(signature&&signature!==next)layoutEpoch++;signature=next;
+        const physicalTop=inner.scrollTop*dpr,phaseError=physicalTop-Math.round(physicalTop);
+        return{ready:true,document_nonce:nonce,document_epoch:documentEpoch,url:location.href,title:document.title,
+          observed_unix_ms:Date.now(),layout_epoch:layoutEpoch,scroll_epoch:scrollEpoch,scroll_top:inner.scrollTop,scroll_left:inner.scrollLeft,physical_scroll_top:physicalTop,
+          dpr:devicePixelRatio,visual_viewport:vv,viewport:{width:window.innerWidth,height:window.innerHeight},scrollport:r,
+          client_width:outer.clientWidth,client_height:outer.clientHeight,scroll_height:inner.scrollHeight,physical_spec:spec,
+          pattern_id:'bgra-world-nested-v1',observer_mode:'native-auto',scenario:'nested',document_height_css:1440,nested_case:nestedCase,
+          cycle:1,fixture_prepare_calls:0,text_rects:[],text_outside_oracle:true,
+          nested:{inner_rect:ir,inner_left_css:innerLeft,inner_width_css:innerWidth,inner_client_width:inner.clientWidth,inner_client_height:inner.clientHeight,
+            inner_scroll_height:inner.scrollHeight,inner_scroll_left:inner.scrollLeft,outer_client_height:outer.clientHeight,outer_scroll_height:outer.scrollHeight,
+            outer_scroll_top:outer.scrollTop,outer_scroll_left:outer.scrollLeft,outer_scroll_epoch:outerScrollEpoch,
+            document_scroll_top:document.scrollingElement.scrollTop,document_scroll_left:document.scrollingElement.scrollLeft,document_scroll_epoch:documentScrollEpoch,
+            center_hit:identity(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)),inner_center_hit:identity(document.elementFromPoint(ir.left+ir.width/2,ir.top+ir.height/2))},
+          pool:{slot_count:1,backing_bytes:canvas.width*canvas.height*4,scratch_bytes:0,paint_epoch:1,ready:Math.abs(phaseError)<=0.003,
+            painted_ranges:[{tile:0,first_row:0,row_count:1800,revision:1}],visible_world_range:{first_row:physicalTop,row_count:300},physical_phase_error:phaseError,physical_phase_limit:0.003},
+          input_observer:{wheel_events:wheelEvents,scroll_events:scrollEvents,last_event_sequence:eventSequence,log_dropped:Math.max(0,eventSequence-eventLimit),log_limit:eventLimit,events:events.slice()}};
+      };
+      const settled=async()=>{const deadline=performance.now()+5000;let previous=null;
+        while(performance.now()<deadline){await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const state=measure();
+          if(previous&&state.scroll_top===previous.scroll_top&&state.scroll_left===previous.scroll_left&&state.scroll_epoch===previous.scroll_epoch&&state.layout_epoch===previous.layout_epoch&&state.pool.ready)return state;
+          previous=state;}
+        throw new Error('原生嵌套滚动未稳定');};
+      const hitTest=point=>{
+        if(!point||!Number.isFinite(point.x)||!Number.isFinite(point.y))throw new Error('只读点无效');
+        let node=document.elementFromPoint(point.x,point.y);const hit=node,path=[];
+        while(node&&path.length<10){path.push(identity(node));node=node.parentElement;}
+        return{document_nonce:nonce,nested_case:nestedCase,observed_unix_ms:Date.now(),point_css:{x:point.x,y:point.y},
+          target:identity(hit),composed_path:path,in_inner:path.includes('inner'),in_outer:path.includes('outer')};
+      };
+      window.__rustshotLongBrowserNestedQa=Object.freeze({measure,settled,hitTest});
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+{
+  "schema": 1,
+  "cache_revision": "cpu-api24-small-1",
+  "platform": "windows-x86_64",
+  "runtime_api": 24,
+  "runtime": {
+    "directory": "onnxruntime-cpu-1.24.4-win-x64",
+    "archive": {
+      "name": "onnxruntime-win-x64-1.24.4.zip",
+      "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.24.4/onnxruntime-win-x64-1.24.4.zip",
+      "bytes": 74442783,
+      "sha256": "d2319fddfb6ea4db99ccc4b60c85c517bcd855721f5daa6a06d40d7cb2ee2357",
+      "upstream_url": "https://github.com/microsoft/onnxruntime/releases/download/v1.24.4/onnxruntime-win-x64-1.24.4.zip",
+      "upstream_bytes": 74442783,
+      "upstream_sha256": "d2319fddfb6ea4db99ccc4b60c85c517bcd855721f5daa6a06d40d7cb2ee2357"
+    },
+    "files": [
+      {
+        "name": "onnxruntime.dll",
+        "member": "onnxruntime-win-x64-1.24.4/lib/onnxruntime.dll",
+        "bytes": 14203464,
+        "sha256": "b95efb2113b603bbbf3f191061c5516a871ed546893c820e4f3b7b6c358dbf2a"
+      },
+      {
+        "name": "onnxruntime_providers_shared.dll",
+        "member": "onnxruntime-win-x64-1.24.4/lib/onnxruntime_providers_shared.dll",
+        "bytes": 22088,
+        "sha256": "f2540b89707b47895c2a732bfd04e34a695c580d22301ef44c0f01f09b001673"
+      },
+      {
+        "name": "LICENSE-ONNXRuntime.txt",
+        "member": "onnxruntime-win-x64-1.24.4/LICENSE",
+        "bytes": 1094,
+        "sha256": "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674"
+      },
+      {
+        "name": "THIRD-PARTY-ONNXRuntime.txt",
+        "member": "onnxruntime-win-x64-1.24.4/ThirdPartyNotices.txt",
+        "bytes": 331175,
+        "sha256": "fb0af774b4d7cffc5b9d046f2aaeade2f37df2f80abf8033c95dfffcc77a8866"
+      }
+    ]
+  },
+  "models": {
+    "profile": "PP-OCRv6-small",
+    "directory": "ppocrv6-small-pinned-1",
+    "languages": [
+      "zh",
+      "en"
+    ],
+    "detection": {
+      "name": "det.onnx",
+      "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/28fe5895c24fd108c19eb3e8479f4ab385fbfc62/inference.onnx?download=true",
+      "bytes": 9880512,
+      "sha256": "d73e0058b7a8086bbd57f3d10b8bcd4ff95363f67e06e2762b5e814fe9c9410e",
+      "upstream_url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/28fe5895c24fd108c19eb3e8479f4ab385fbfc62/inference.onnx?download=true"
+    },
+    "classification": {
+      "name": "cls.onnx",
+      "url": "https://huggingface.co/PaddlePaddle/PP-LCNet_x0_25_textline_ori_onnx/resolve/aea1f18d97338aaf84b463f90192f2820524a00a/inference.onnx?download=true",
+      "bytes": 1019454,
+      "sha256": "94a6a0a0425f2b5f08b5df72086f2d72abe40f1d22f6d12d2cd83674f11f2ff3",
+      "upstream_url": "https://huggingface.co/PaddlePaddle/PP-LCNet_x0_25_textline_ori_onnx/resolve/aea1f18d97338aaf84b463f90192f2820524a00a/inference.onnx?download=true"
+    },
+    "recognition": {
+      "name": "rec.onnx",
+      "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/b8f84f0b80c529de40b4fbb3544b84fa7233a513/inference.onnx?download=true",
+      "bytes": 21159378,
+      "sha256": "5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634",
+      "upstream_url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/b8f84f0b80c529de40b4fbb3544b84fa7233a513/inference.onnx?download=true"
+    },
+    "dictionary": {
+      "name": "ppocrv6_dict.txt",
+      "url": "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/b03f46425e8ff4442b268ce449e3eef758146cd4/ppocr/utils/dict/ppocrv6_dict.txt",
+      "bytes": 74947,
+      "sha256": "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+      "upstream_url": "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/b03f46425e8ff4442b268ce449e3eef758146cd4/ppocr/utils/dict/ppocrv6_dict.txt"
+    },
+    "license": {
+      "name": "LICENSE-PaddleOCR.txt",
+      "url": "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/b03f46425e8ff4442b268ce449e3eef758146cd4/LICENSE",
+      "bytes": 11376,
+      "sha256": "3840c5c0c61c294264d2dd77b8777be6ddd90121ef4e0e64abcd22edea581d6e",
+      "upstream_url": "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/b03f46425e8ff4442b268ce449e3eef758146cd4/LICENSE"
+    },
+    "contract": {
+      "detection_input": [
+        "N",
+        3,
+        "H",
+        "W"
+      ],
+      "detection_output": [
+        "N",
+        1,
+        "H",
+        "W"
+      ],
+      "classification_input": [
+        "N",
+        3,
+        80,
+        160
+      ],
+      "classification_output": [
+        "N",
+        2
+      ],
+      "recognition_input": [
+        "N",
+        3,
+        48,
+        "W"
+      ],
+      "recognition_output": [
+        "N",
+        "T",
+        18710
+      ]
+    }
+  },
+  "licenses": {
+    "onnxruntime": "MIT",
+    "paddleocr": "Apache-2.0",
+    "model_provenance": "PaddlePaddle official fixed-commit ONNX repositories; upstream model terms remain applicable."
+  },
+  "prerequisites": {
+    "visual_cpp": "Microsoft Visual C++ 2015-2022 x64, four System32 imports checked before preparation",
+    "installer": "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+    "automatic_system_install": false
+  },
+  "policy": "Tiny is default. Small det/rec/dictionary are prepared only for an explicit Small request; equal runtime/classification/license identities share Tiny cache paths. Cache warmup never downloads. No host application, .NET, Agent, DirectML, external CLI or image upload dependency. Published files are verified and never overwritten."
+}

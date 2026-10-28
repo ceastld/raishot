@@ -1,0 +1,60 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true)][string]$Worker,
+    [ValidateSet('handles','parameters','pin')][string[]]$CaseFilter=@('handles','parameters','pin')
+)
+$ErrorActionPreference='Stop'
+$taskRoot=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$taskWorker=(Resolve-Path -LiteralPath $Worker).Path
+$taskHash=(Get-FileHash -LiteralPath $taskWorker).Hash
+if (-not ('RustShotHighlightQa' -as [type])) {
+    Add-Type @'
+using System;using System.Runtime.InteropServices;
+public static class RustShotHighlightQa {
+ delegate bool Callback(IntPtr h,IntPtr d);
+ [DllImport("user32.dll")]static extern bool EnumWindows(Callback c,IntPtr d);
+ [DllImport("user32.dll")]static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern IntPtr OpenMutex(uint a,bool i,string n);
+ [DllImport("kernel32.dll")]static extern bool CloseHandle(IntPtr h);
+ public static int Windows(uint pid){int count=0;EnumWindows((h,d)=>{uint p;GetWindowThreadProcessId(h,out p);if(p==pid)count++;return true;},IntPtr.Zero);return count;}
+ public static bool CaptureExists(){IntPtr h=OpenMutex(0x00100000,false,@"Local\RustShot.MVP.Capture");if(h!=IntPtr.Zero){CloseHandle(h);return true;}int e=Marshal.GetLastWin32Error();if(e==2)return false;throw new System.ComponentModel.Win32Exception(e);}
+}
+'@
+}
+if([RustShotHighlightQa]::CaptureExists()){throw '已有截图会话，保留用户操作，停止高亮圆角专项。'}
+$taskKeys=@('RUSTSHOT_PIN_SMOKE_CASE','RUSTSHOT_QA_NO_RESIDENT_NOTIFY','RUSTSHOT_RADIUS_TOOL','RUSTSHOT_PARAMETER_CAPTURE_CASE')
+$taskOld=@{}
+foreach($taskKey in $taskKeys){$taskOld[$taskKey]=[Environment]::GetEnvironmentVariable($taskKey,'Process')}
+$taskOutput=Join-Path $taskRoot ('target/qa/highlight-radius-native/'+(Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
+[void][IO.Directory]::CreateDirectory($taskOutput)
+try {
+    [Environment]::SetEnvironmentVariable('RUSTSHOT_PIN_SMOKE_CASE','highlight_parameter','Process')
+    [Environment]::SetEnvironmentVariable('RUSTSHOT_QA_NO_RESIDENT_NOTIFY','1','Process')
+    [Environment]::SetEnvironmentVariable('RUSTSHOT_RADIUS_TOOL','highlight','Process')
+    [Environment]::SetEnvironmentVariable('RUSTSHOT_PARAMETER_CAPTURE_CASE','highlight','Process')
+    foreach($taskCase in $CaseFilter) {
+        if([RustShotHighlightQa]::CaptureExists()){throw '有新截图会话，停止后续高亮圆角专项。'}
+        $taskFolder=Join-Path $taskOutput $taskCase
+        [void][IO.Directory]::CreateDirectory($taskFolder)
+        $taskStdout=Join-Path $taskFolder 'stdout.jsonl'
+        $taskStderr=Join-Path $taskFolder 'stderr.log'
+        $taskArgument=switch($taskCase){handles{'--radius-handle-smoke'}parameters{'--parameter-smoke'}pin{'--pin-smoke'}}
+        $taskProcess=Start-Process -FilePath $taskWorker -ArgumentList $taskArgument -WorkingDirectory $taskRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput $taskStdout -RedirectStandardError $taskStderr
+        if(-not $taskProcess.WaitForExit(55000)){throw "高亮圆角 $taskCase 超时，保留自有PID=$($taskProcess.Id)；$taskFolder"}
+        $taskProcess.Refresh()
+        if($taskProcess.ExitCode -ne 0){throw "高亮圆角 $taskCase 失败：$taskFolder"}
+        $taskExpected=switch($taskCase){
+            handles{@('native_highlight_radius_four_rotated_handles_one_undo','native_highlight_radius_fill_only_corner_preview_export')}
+            parameters{@('native_highlight_radius_capture_exact_cancel_wheel_output')}
+            pin{@('native_highlight_radius_pin_keydown_two_bars_stable')}
+        }
+        $taskRows=@(Get-Content -LiteralPath $taskStdout|Where-Object{$_.StartsWith('{')}|ForEach-Object{$_|ConvertFrom-Json})
+        foreach($taskName in $taskExpected){if(@($taskRows|Where-Object{$_.test -eq $taskName -and $_.ok -eq $true}).Count -ne 1){throw "高亮圆角报告缺少 $taskName"}}
+        if(@($taskRows|Where-Object{$_.ok -eq $false}).Count -ne 0){throw '高亮圆角报告包含失败'}
+        if([RustShotHighlightQa]::Windows([uint32]$taskProcess.Id) -ne 0 -or [RustShotHighlightQa]::CaptureExists()){throw '专项窗口或截图互斥体未回收'}
+        if((Get-FileHash -LiteralPath $taskWorker).Hash -ne $taskHash){throw '专项期间产物变化'}
+        $taskSummary=[pscustomobject]@{ok=$true;case=$taskCase;pid=$taskProcess.Id;exit_code=$taskProcess.ExitCode;worker=$taskWorker;sha256=$taskHash;tests=$taskExpected;log=$taskStdout;windows_recycled=$true;capture_mutex_released=$true}
+        $taskSummary|ConvertTo-Json -Depth 5|Set-Content -LiteralPath (Join-Path $taskFolder 'summary.json') -Encoding utf8
+        $taskSummary|ConvertTo-Json -Depth 5 -Compress
+    }
+} finally {foreach($taskKey in $taskKeys){[Environment]::SetEnvironmentVariable($taskKey,$taskOld[$taskKey],'Process')}}
