@@ -1,0 +1,99 @@
+{
+  "variables": [
+    { "key": "package_name", "default": "cea.rustshot", "isLocked": true },
+    { "key": "package_version", "default": "0.4.16", "isLocked": true },
+    { "key": "launch_mode", "default": "region", "desc": "region：直接框选；tray：启动托盘。" },
+    { "key": "launch_args", "default": "" },
+    { "key": "package_path", "default": "" },
+    { "key": "exe_path", "default": "" },
+    { "key": "resident_handle", "default": "0" }
+  ],
+  "steps": [
+    {
+      "key": "sys:assign",
+      "note": "统一解析动作参数；显式参数优先于默认启动方式。",
+      "inputs": { "input.file": "files/resolve-command.value.txt", "stopIfFail": true },
+      "outputs": { "output": "launch_args" }
+    },
+    {
+      "key": "sys:simpleIf",
+      "note": "先查已运行的托盘；常驻通知不访问依赖目录或启动另一个 EXE。",
+      "inputs": { "condition": "$={launch_args} != \"verify\"" },
+      "ifSteps": [
+        {
+          "key": "sys:getWindowTitle",
+          "inputs": {
+            "which": "findWindow",
+            "className": "RustShot.MVP.Window",
+            "onlyVisible": "0",
+            "requireTitle": false,
+            "stopIfFail": false
+          },
+          "outputs": { "handle": "resident_handle" }
+        }
+      ]
+    },
+    {
+      "key": "sys:simpleIf",
+      "note": "仅未运行或手动校验时检查依赖；verify 始终检查所需版本。",
+      "inputs": { "condition": "$={launch_args} == \"verify\" || string.IsNullOrEmpty({resident_handle}) || {resident_handle} == \"0\"" },
+      "ifSteps": [
+        {
+          "key": "sys:dependencycheck",
+          "note": "首次下载依赖；以后使用 Quicker 的版本缓存。",
+          "inputs": { "packageName.var": "package_name", "packageVersion.var": "package_version" },
+          "outputs": { "packagePath": "package_path" }
+        },
+        {
+          "key": "sys:assign",
+          "inputs": { "input": "$=Path.Combine({package_path}, \"raishot.exe\")", "stopIfFail": true },
+          "outputs": { "output": "exe_path" }
+        },
+        {
+          "key": "sys:simpleIf",
+          "note": "仅手动检查程序文件时完整校验；普通启动不读取清单或计算 SHA256。",
+          "inputs": { "condition": "$={launch_args} == \"verify\"" },
+          "ifSteps": [
+            {
+              "key": "sys:assign",
+              "inputs": { "input.file": "files/validate-package.value.txt", "stopIfFail": true },
+              "outputs": { "output": "exe_path" }
+            }
+          ]
+        },
+        {
+          "key": "sys:simpleIf",
+          "note": "未运行时启动程序；校验不启动。",
+          "inputs": { "condition": "$={launch_args} != \"verify\"" },
+          "ifSteps": [
+            {
+              "key": "sys:run",
+              "inputs": {
+                "path.var": "exe_path",
+                "arg.var": "launch_args",
+                "setWorkingDir.var": "package_path"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "sys:simpleIf",
+      "note": "复用正在运行的托盘，与程序自身的单实例转发行为一致；升级程序需先正常退出旧托盘。",
+      "inputs": { "condition": "$={launch_args} != \"verify\" && !string.IsNullOrEmpty({resident_handle}) && {resident_handle} != \"0\"" },
+      "ifSteps": [
+        {
+          "key": "sys:simpleIf",
+          "inputs": { "condition": "$={launch_args} == \"--region\"" },
+          "ifSteps": [
+            {
+              "key": "sys:sendMessage",
+              "inputs": { "operation": "PostMessage", "hWnd.var": "resident_handle", "wMsg": "32771", "wParam": "0", "lParam": "0", "stopIfFail": true }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

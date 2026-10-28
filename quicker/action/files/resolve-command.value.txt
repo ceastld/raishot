@@ -1,0 +1,9 @@
+$=var mode = string.IsNullOrWhiteSpace({quicker_in_param}) ? {launch_mode} : {quicker_in_param};
+mode = (mode ?? "region").Trim().ToLowerInvariant();
+switch (mode)
+{
+    case "region": return "--region";
+    case "tray": return "--tray";
+    case "verify": return "verify";
+    default: throw new InvalidOperationException("RaiShot 动作参数只支持 region（区域截图）、tray（启动托盘）或 verify（仅校验依赖）。");
+}

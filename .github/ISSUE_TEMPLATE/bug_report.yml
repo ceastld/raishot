@@ -1,0 +1,30 @@
+name: 缺陷报告
+description: 报告可以复现的功能问题
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "安全漏洞请先阅读 SECURITY.md。截图与日志请清除个人内容。"
+  - type: input
+    id: version
+    attributes:
+      label: RaiShot 与 Windows 版本
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 写明操作、快捷键、显示器数量及缩放比例。
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 预期结果与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 可选截图或日志

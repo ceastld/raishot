@@ -1,0 +1,27 @@
+[package]
+name = "rustshot-promo-wasm"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "宣传页演示：把生产长截图拼接代码原样编成 WebAssembly"
+
+# 独立于主工程的小 crate，不进入主 workspace，也不依赖 GPUI。
+[workspace]
+
+# 生产测试模块（stitch_regression_tests）读写 PNG 样本。
+[dev-dependencies]
+png = "=0.18.1"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[example]]
+name = "bench"
+path = "examples/bench.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

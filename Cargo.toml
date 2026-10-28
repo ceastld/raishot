@@ -1,0 +1,131 @@
+[package]
+name = "rustshot"
+version = "0.4.16"
+edition = "2021"
+rust-version = "1.90"
+description = "Windows screenshot, annotation, pin, OCR and screen recording tool built with Rust + GPUI"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/ceastld/raishot"
+readme = "README.md"
+# 内部代号 rustshot 不随品牌改名；对外 EXE 名只在下方 [[bin]] 与 src/brand.rs 中定义。
+autobins = false
+
+[[bin]]
+name = "raishot"
+path = "src/bin/resident.rs"
+
+[[bin]]
+name = "raishot-gpui"
+path = "src/bin/gpui.rs"
+
+[[bin]]
+name = "raishot-cli"
+path = "src/bin/cli.rs"
+
+[dependencies]
+gpui = { version = "=0.2.2", default-features = false, features = ["windows-manifest"] }
+# 复用 GPUI 已包含的异步通道，贴图首帧唤醒不新增运行时。
+futures = "=0.3.34"
+# 复用 GPUI 已包含的 lyon 枚举，显式指定圆头/圆角，无新增图形运行时。
+lyon_path = "=1.0.19"
+lyon_tessellation = "=1.0.22"
+parking_lot = "=0.12.5"
+image = { version = "0.25", default-features = false }
+raw-window-handle = "0.6"
+# COM 接口宏直接引用该 crate；复用 windows / GPUI 已有版本。
+windows-core = "=0.61.2"
+png = "=0.18.1"
+# 有界 OpenEXR 适配器复用现有锁定版本和依赖树已启用的特性。
+exr = { version = "=1.74.2", default-features = false }
+# SVG 在有界预检后栅格化，复用依赖树已有的锁定版本。
+resvg = { version = "=0.45.1", default-features = false }
+# 图片嵌入色彩配置先按解压上限读取，复用依赖树已有的Rust解压后端。
+flate2 = "=1.1.10"
+# 贴图工作区使用显式、有版本的 wire DTO；复用 GPUI 已有的依赖版本。
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+# 本机列表和贴图元数据；静态链接SQLite，首次实际访问存储时才打开。
+rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled", "fallible_uint"] }
+# 字符级浮层选择按 Unicode grapheme 边界，避免拆断组合字和 emoji。
+unicode-segmentation = "=1.13.3"
+# PP-OCR 管线在 Rust 进程内执行，固定 API24；原生库与模型按需校验下载。
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "alternative-backend", "api-24"] }
+libloading = "=0.8.9"
+sha2 = "=0.10.9"
+ureq = { version = "=2.12.1", default-features = false, features = ["tls", "native-certs"] }
+zip = { version = "=2.4.2", default-features = false, features = ["deflate"] }
+# 录屏 GIF 导出复用 GPUI image 依赖树已锁定的版本，不新增运行时。
+gif = "=0.14.2"
+# 静态 WebP 有损编码使用可取消、限额输出的原生后端。
+libwebp-sys = { version = "=0.14.4", default-features = false }
+# GIF 的纯像素/调色板热点单独编译，调试界面时也保持优化。
+rustshot-gif-codec = { path = "crates/gif-codec", version = "=0.1.0" }
+# 键盘／鼠标任意组合触发：确定性状态机与低级 Hook 适配，源码随仓库固定，见 vendor/README.md。
+omnitrigger-core = { path = "vendor/omnitrigger/core", version = "=0.1.0" }
+omnitrigger-windows = { path = "vendor/omnitrigger/windows", version = "=0.1.0" }
+
+windows = { version = "=0.61.3", features = [
+    "Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "Win32_System_WinRT",
+    "Graphics_Capture", "Graphics_DirectX", "Graphics_DirectX_Direct3D11", "Win32_System_WinRT_Graphics_Capture", "Win32_System_WinRT_Direct3D11",
+    "Win32_Foundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D10", "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi", "Win32_Globalization",
+    "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_Security", "Win32_Security_Cryptography",
+    "Win32_System_ProcessStatus", "Win32_System_Memory", "Win32_System_DataExchange", "Win32_System_SystemInformation", "Win32_System_Registry", "Win32_Storage_FileSystem",
+    "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Input_Ime", "Win32_UI_HiDpi", "Win32_UI_Accessibility", "Win32_UI_ColorSystem",
+    "Win32_System_SystemServices", "Win32_System_Ole", "Win32_UI_Shell_Common", "Win32_UI_Shell", "Win32_UI_Controls_Dialogs",
+    # 录屏：系统自带 Media Foundation 编解码与 WASAPI 音频，不依赖外部编码器。
+    "Win32_Media_MediaFoundation", "Win32_Media_Audio", "Win32_Media_KernelStreaming", "Win32_Media_Multimedia",
+    "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Devices_FunctionDiscovery", "Win32_UI_Shell_PropertiesSystem",
+] }
+quircs = "=0.10.3"
+# 二维码生成与识别共用已锁定版本，不启用额外图片或SVG依赖。
+qrcode = { version = "=0.14.1", default-features = false }
+# 一维条码只启用读取和字符集支持，避免重复引入图片编解码及原生运行库。
+rxing = { version = "=0.9.3", default-features = false, features = ["decoders", "oned", "encoding_rs"] }
+
+[profile.release]
+opt-level = "s"
+# 三个 EXE 共用大体积库，避免每次链接都跨库重做 LLVM 优化；保留下方热点优化级别。
+lto = "off"
+codegen-units = 16
+strip = true
+panic = "abort"
+
+# OCR 全图像素处理需要速度优化；其余依赖保持现有发布尺寸配置。
+[profile.release.package.rustshot]
+opt-level = 2
+
+[profile.release.package.rustshot-gif-codec]
+opt-level = 3
+
+# GIF 压缩热路径按速度编译，避免尺寸优化降低 LZW 吞吐。
+[profile.release.package.gif]
+opt-level = 3
+
+[profile.release.package.weezl]
+opt-level = 3
+
+# 日常本地运行的是调试版：依赖（GPUI、lyon、图像与编解码）按发布级优化，
+# 否则曲线细分、纹理处理与 GPUI 布局慢一个数量级，贴图逐笔绘制和框选明显卡顿。
+# 本体的 OCR 像素与轮廓处理也需优化；保留增量编译。
+# 本体单 crate 体量大，只保留行号调试信息：panic 回溯仍有文件行号，PDB 与链接明显缩短。
+[profile.dev]
+opt-level = 2
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 3
+debug = false
+
+[profile.dev.package.rustshot-gif-codec]
+opt-level = 3
+debug = false
+
+# 定向回归优先缩短本体代码生成；依赖沿用既有优化，实际 Dev 程序仍用上方配置。
+[profile.test.package.rustshot]
+opt-level = 0
+
+# 保留已通过检查的 Windows D3D 设备，避免 GPUI 启动时创建两次；见 vendor/README.md。
+[patch.crates-io]
+gpui = { path = "vendor/gpui" }
