@@ -73,7 +73,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   build:
-    needs: [prepare, checks]
+    needs: prepare
     runs-on: windows-2025
     outputs:
       version: ${{ needs.prepare.outputs.version }}
@@ -95,6 +95,7 @@ jobs:
         with:
           shared-key: windows-msvc-release
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
 
       # Cargo 产物缓存默认排除仓库内的 path 依赖；sccache 按内容复用 GPUI、codec 等库，
       # 不依赖新 checkout 的文件时间。只在构建步骤设置 RUSTC_WRAPPER，保留现有依赖缓存键。
@@ -259,7 +260,7 @@ jobs:
 
   publish:
     name: 发布 GitHub Release
-    needs: build
+    needs: [checks, build]
     if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 10

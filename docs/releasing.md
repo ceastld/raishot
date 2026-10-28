@@ -1,6 +1,8 @@
 # 验包与发布
 
-Windows CI 在向 `main` 推送或提交 PR 时执行全目标 Clippy 编译检查与核心单元测试；仅 Markdown 或 `docs/` 的修改跳过这些编译任务。Release 工作流复用这些检查，通过后才构建和打包。发布构建由 GitHub Actions 完成，不需要在本机编译 Release。
+Windows CI 在向 `main` 推送或提交 PR 时执行全目标编译检查与核心单元测试；仅 Markdown 或 `docs/` 的修改跳过这些编译任务。两项检查都是必过门槛；Clippy 另行输出完整报告，当前的存量告警暂不阻断，失败时会在运行摘要中标明。
+
+Release 工作流并行执行质量检查和 Release 构建打包，两边成功才允许发布。发布构建由 GitHub Actions 完成，不需要在本机编译 Release。
 
 工作流定义见 [Release](../.github/workflows/release.yml)，开发时的定向验证见[开发](development.md)。
 
@@ -35,7 +37,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-标签触发 Release 工作流。它先确认标签版本、Cargo 产品版本一致，且 changelog 中存在对应条目，再执行 CI 验证、Release 构建和打包。所有材料通过后创建 Release 草稿，上传便携包与校验文件，最后将草稿发布。
+标签触发 Release 工作流。它先确认标签版本、Cargo 产品版本一致，且 changelog 中存在对应条目，再并行执行 CI 验证与 Release 构建打包。两边通过后创建 Release 草稿，上传便携包与校验文件，最后将草稿发布。
 
 ## 失败与重跑
 
