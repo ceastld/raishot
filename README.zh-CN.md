@@ -3,6 +3,7 @@
   <h1>RaiShot</h1>
   <p><strong>截图、长截图、贴图与录屏，专为 Windows 打造。</strong></p>
   <p>
+    <a href="https://github.com/ceastld/raishot/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ceastld/raishot/ci.yml?branch=main&amp;label=CI" alt="Windows CI"></a>
     <a href="https://github.com/ceastld/raishot/releases/latest"><img src="https://img.shields.io/github/v/release/ceastld/raishot?color=078267" alt="最新版本"></a>
     <a href="https://github.com/ceastld/raishot/releases/latest"><img src="https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D4" alt="Windows 10 和 11 x64"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-078267" alt="MIT 许可证"></a>
@@ -80,7 +81,7 @@ GPUI 使用仓库中锁定的版本，本地补丁见[依赖说明](vendor/READM
 
 - [使用指南与快捷键](docs/behavior.md)
 - [更新记录](CHANGELOG.md) · [当前状态与已知限制](docs/status.md) · [开发路线](docs/roadmap.md)
-- [构建说明](docs/development.md) · [架构](docs/architecture.md) · [技术专题](docs/references/README.md)
+- [构建说明](docs/development.md) · [发布流程](docs/releasing.md) · [架构](docs/architecture.md) · [技术专题](docs/references/README.md)
 
 首页介绍主要使用方式，各发布版本的具体变化以更新记录为准；当前源码中的进行中工作及验证范围见状态页。
 

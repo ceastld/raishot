@@ -3,6 +3,7 @@
   <h1>RaiShot</h1>
   <p><strong>Screenshots, scrolling capture, pinning, and recording for Windows.</strong></p>
   <p>
+    <a href="https://github.com/ceastld/raishot/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ceastld/raishot/ci.yml?branch=main&amp;label=CI" alt="Windows CI"></a>
     <a href="https://github.com/ceastld/raishot/releases/latest"><img src="https://img.shields.io/github/v/release/ceastld/raishot?color=078267" alt="Latest release"></a>
     <a href="https://github.com/ceastld/raishot/releases/latest"><img src="https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D4" alt="Windows 10 and 11 x64"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-078267" alt="MIT License"></a>
@@ -80,7 +81,7 @@ Bug reports, reproducible test cases, translations, and code contributions are w
 
 - [Usage and shortcuts](docs/behavior.md)
 - [Changelog](CHANGELOG.md) · [Current status and known limitations](docs/status.md) · [Roadmap](docs/roadmap.md)
-- [Build instructions](docs/development.md) · [Architecture](docs/architecture.md) · [Technical notes](docs/references/README.md)
+- [Build instructions](docs/development.md) · [Release process](docs/releasing.md) · [Architecture](docs/architecture.md) · [Technical notes](docs/references/README.md)
 
 The README describes the main workflows. Release-specific changes are listed in the changelog; the current source also includes work in progress documented in the status page.
 
