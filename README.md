@@ -1,39 +1,89 @@
-# RaiShot
+<div align="center">
+  <img src="assets/app.svg" width="88" height="88" alt="RaiShot icon">
+  <h1>RaiShot</h1>
+  <p><strong>Screenshots, scrolling capture, pinning, and recording for Windows.</strong></p>
+  <p>
+    <a href="https://github.com/ceastld/raishot/releases/latest"><img src="https://img.shields.io/github/v/release/ceastld/raishot?color=078267" alt="Latest release"></a>
+    <a href="https://github.com/ceastld/raishot/releases/latest"><img src="https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D4" alt="Windows 10 and 11 x64"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-078267" alt="MIT License"></a>
+  </p>
+  <p><strong><a href="https://github.com/ceastld/raishot/releases/latest">Download for Windows</a></strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="docs/README.md">Documentation</a></p>
+</div>
 
-[中文说明](README.zh-CN.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
+RaiShot helps you capture a screen region, mark what matters, and copy or save the result. Pin an image or a note beside your work, stitch a scrolling page, extract text locally, or record a short walkthrough—all from the system tray.
 
-RaiShot is a Windows screenshot, annotation, image pinning, OCR, scrolling capture, and screen recording tool written in Rust with GPUI. It runs independently, using native Windows APIs for capture and recording.
+Built with **Rust and GPUI**, with native Windows capture and recording. The interface supports **English and Simplified Chinese**, with light and dark themes that follow Windows by default.
 
 ## Features
 
-- Capture a region across multiple monitors, annotate it, and copy or save the result.
-- Edit vector shapes and text with undo and redo; apply mosaic, blur, and transparent selection edges.
-- Pin images or text above other windows, zoom them, and restore recently closed pins.
-- Recognize text locally and decode QR codes.
-- Capture scrolling content and record MP4 or GIF with system or microphone audio.
-- Follow the Windows theme and choose Chinese or English in settings.
+| Feature | What you can do |
+| --- | --- |
+| **Screenshot** | Capture a region, a window, or multiple monitors. Adjust the selection before copying or saving. |
+| **Annotation** | Add arrows, shapes, text, highlights, mosaic, and blur. Select and edit annotations, with undo and redo. |
+| **Scrolling capture** | Stitch vertical or horizontal content with manual or automatic scrolling, including scrolling back over captured content. |
+| **Pin to screen** | Keep images and text above other windows. Zoom, annotate, adjust opacity, enable click-through, and restore recently closed pins. |
+| **OCR & QR codes** | Recognize text locally, copy the result, and read or generate QR codes. |
+| **Screen recording** | Record MP4 with system or microphone audio, or export GIFs. Show mouse clicks and keystrokes in recordings. |
 
-See [the Chinese documentation](README.zh-CN.md) for controls and current limitations.
+The **library** brings screenshots, pins, and recordings together, with image and video previews and tools for comparing, combining, and batch exporting images.
 
-## Run
+### Long pages, one image
 
-Keep `raishot.exe`, `raishot-gpui.exe`, and `raishot-cli.exe` together, with their original names. Run `raishot.exe` to start the tray application. New configurations use **Ctrl+1** for capture and **Ctrl+2** to pin clipboard images or text; both shortcuts can be changed in settings.
+Capture a webpage, a conversation, or a wide document beyond the visible area. Scroll manually or let RaiShot scroll automatically; the stitched preview updates as you go. You can reverse direction and revisit captured content without simply appending it again.
 
-The current target is Windows 10/11 x64. On HDR displays, captures are converted back to sRGB using the display's SDR content brightness (HDR highlights clip to white). Mixed-DPI behavior still needs further validation. OCR dependencies are downloaded on demand and checked against pinned sizes and SHA-256 values. Settings, optional history, recordings, and OCR cache live under `%LOCALAPPDATA%/RaiShot`.
+The stitcher accounts for fixed headers and floating elements when aligning frames and choosing seams. See the [scrolling capture notes](docs/references/long-capture-floating-elements-2026-10-26.md) for the design and current verification boundaries.
+
+## Get started
+
+**Requires Windows 10 or 11, x64.**
+
+1. Open [the latest release](https://github.com/ceastld/raishot/releases/latest) and download the `RaiShot.*.zip` package.
+2. Extract the whole archive to a folder and run **`raishot.exe`**. Keep the included EXEs and DLLs together.
+3. Press **Ctrl+1** to capture, or **Ctrl+2** to pin an image or text from the clipboard. Both shortcuts can be changed in settings.
+
+Click the tray icon to capture; right-click it for the library, settings, and other tools. On Windows N editions, screen recording requires the Media Feature Pack.
+
+### A few useful shortcuts
+
+| Context | Shortcut | Action |
+| --- | --- | --- |
+| Global | **Ctrl+1** | Start a screenshot |
+| Global | **Ctrl+2** | Pin clipboard image or text |
+| Capture selection | **L** / **G** | Start scrolling capture / screen recording |
+| Capture selection | **R** | Recognize text |
+| Capture selection | **Enter** / **Ctrl+S** | Copy and finish / save |
+| Capture | **Esc** | Close the current panel, cancel an operation, or exit capture |
+
+The global shortcuts above are defaults for a new configuration. The other keys apply to a normal capture selection; text editing, OCR, and other active tools take priority. See the [full controls and behavior guide](docs/behavior.md) for details.
+
+### Local data and OCR
+
+Settings, the pin workspace, optional capture history, recordings, and the OCR cache are stored under `%LOCALAPPDATA%/RaiShot`. Capture history can be enabled in settings.
+
+Text recognition runs locally. On first use, RaiShot downloads the OCR resources it needs and verifies their pinned sizes and SHA-256 checksums. Online translation is a separate, optional feature that uses the service you configure.
 
 ## Build and contribute
 
-Use Rust 1.90 or newer with the MSVC toolchain, Visual Studio C++ build tools, and a Windows SDK. GPUI is pinned in `vendor/gpui` with documented local patches; building and testing need nothing outside this repository.
+Build on Windows with **Rust 1.90+ (MSVC)**, **Visual Studio C++ Build Tools**, and a **Windows SDK**:
 
 ```powershell
-cargo check --locked
+git clone https://github.com/ceastld/raishot.git
+cd raishot
 cargo build --locked
 ```
 
-The internal code name `rustshot` (crate and module names, `RUSTSHOT_*` environment variables, window classes) stays fixed; the product name and executable names are defined only in `src/brand.rs`, the `[[bin]]` entries of `Cargo.toml`, `build.rs`, and `Tools/package.ps1`.
+GPUI is pinned in the repository with [documented local patches](vendor/README.md). Build and test instructions, architecture, technical decisions, and current work are available in the [development documentation](docs/README.md).
 
-Start with the [development documentation](docs/README.md) for architecture, terminology, current work, technical decisions, and design prototypes. This context is included in the repository. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution terms.
+Bug reports, reproducible test cases, translations, and code contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md); report bugs and request features in [Issues](https://github.com/ceastld/raishot/issues). For security-sensitive reports, follow [SECURITY.md](SECURITY.md).
+
+## Documentation
+
+- [Usage and shortcuts](docs/behavior.md)
+- [Changelog](CHANGELOG.md) · [Current status and known limitations](docs/status.md) · [Roadmap](docs/roadmap.md)
+- [Build instructions](docs/development.md) · [Architecture](docs/architecture.md) · [Technical notes](docs/references/README.md)
+
+The README describes the main workflows. Release-specific changes are listed in the changelog; the current source also includes work in progress documented in the status page.
 
 ## License
 
-RaiShot's own code is open source under the [MIT License](LICENSE). Commercial use, modification, redistribution, sublicensing, and private derivatives are permitted; preserve the copyright and license notice in copies or substantial portions of the software. See [the license guide](docs/license.md) for scope. Rights already lawfully granted for earlier releases are unaffected. Third-party code, model weights, runtime libraries, fonts, and other assets retain their own terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+RaiShot is released under the **[MIT License](LICENSE)**. Third-party dependencies, models, fonts, and other assets retain their own licenses; see [Third-party notices](THIRD_PARTY_NOTICES.md) and the [license guide](docs/license.md).
