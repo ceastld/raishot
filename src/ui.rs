@@ -1241,6 +1241,37 @@ pub fn resident_smoke() -> Result<()> {
     run_impl(false, true)
 }
 
+/// 安装、升级和卸载用：向本会话托盘投递 WM_CLOSE，走与托盘菜单“退出”相同的收尾，
+/// 等其进程结束。没有托盘时视为已退出；超时返回 false，由调用方决定是否继续等待。
+pub fn request_resident_exit(timeout: std::time::Duration) -> Result<bool> {
+    use windows::Win32::System::Threading::{
+        OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    };
+    unsafe {
+        let Ok(hwnd) = FindWindowW(w!("RustShot.MVP.Window"), None) else {
+            return Ok(true);
+        };
+        if hwnd.0.is_null() {
+            return Ok(true);
+        }
+        let mut pid = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        let process = if pid == 0 {
+            None
+        } else {
+            OpenProcess(PROCESS_SYNCHRONIZE, false, pid).ok()
+        };
+        PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
+        let Some(process) = process else {
+            return Ok(true);
+        };
+        let millis = timeout.as_millis().min(u32::MAX as u128) as u32;
+        let exited = WaitForSingleObject(process, millis) == WAIT_OBJECT_0;
+        let _ = CloseHandle(process);
+        Ok(exited)
+    }
+}
+
 fn run_impl(idle_probe: bool, smoke: bool) -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     let action_name = args

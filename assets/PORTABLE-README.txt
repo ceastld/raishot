@@ -4,7 +4,8 @@ RaiShot 便携包
 三个程序分别为 raishot.exe（托盘与启动入口）、raishot-gpui.exe（界面工作进程）、
 raishot-cli.exe（命令行入口）。运行 raishot.exe --tray 启动托盘，
 运行 raishot.exe --region 开始框选；命令行用法见 raishot-cli.exe --help。
-升级前请从旧版托盘正常退出，再启动新版。
+升级前请从旧版托盘退出（也可运行 raishot.exe --exit），再启动新版。
+也可改用安装包 RaiShot-*-setup-x64.exe，它会自动处理退出、升级和开机启动。
 
 VC++ 与 ONNX Runtime 的 DLL 必须与 EXE 放在同一目录。
 OCR 模型、字典与相关许可首次使用时按需下载，并按固定大小与 SHA256 校验。

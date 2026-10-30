@@ -18,9 +18,27 @@ gh workflow run release.yml --ref main
 
 手动运行只生成 Actions artifact，不创建或更新 GitHub Release，也不创建标签。当前源码中的 Cargo 版本可能与已发布的最新版本不同；验包仍按源码版本命名，不能据此重用已有发布标签。
 
-运行成功后，从该次运行下载 RaiShot 分发 artifact，解压 artifact 后取得便携 ZIP 与对应的 `.sha256` 文件。核对 ZIP 的 SHA-256，检查包内三个 EXE、VC++ 与 ONNX Runtime 文件、项目和第三方许可材料及 `manifest.json`；实际运行时保持三个 EXE 的名称和相对位置不变。需要验证界面或媒体行为时，在合适的真实 Windows 桌面上使用这份包。
+运行成功后，从该次运行下载 RaiShot 分发 artifact，解压后取得便携 ZIP、安装包及各自的 `.sha256` 文件。核对 ZIP 的 SHA-256，检查包内三个 EXE、VC++ 与 ONNX Runtime 文件、项目和第三方许可材料及 `manifest.json`；实际运行时保持三个 EXE 的名称和相对位置不变。需要验证界面或媒体行为时，在合适的真实 Windows 桌面上使用这份包。
 
 托管 CI 的编译、测试与 CLI 启动检查不等于 GUI／GPU 验收；真实桌面交互、HDR、混合 DPI 和音视频设备等范围仍需按本次改动另行记录。
+
+## 安装包
+
+每次发版同时提供便携 ZIP 和安装包 `RaiShot-X.Y.Z-setup-x64.exe`。安装包由 [installer/raishot.iss](../installer/raishot.iss) 用 Inno Setup 编译。CI 会按固定版本下载 Inno Setup 并校验 SHA256，然后把便携 ZIP 重新展开作为安装文件，因此两种包的程序文件逐件相同。
+
+| 项 | 约定 |
+| --- | --- |
+| 范围 | 只装给当前用户，不需要管理员权限；默认目录 `%LOCALAPPDATA%\Programs\RaiShot`。安装目录不能与数据目录 `%LOCALAPPDATA%\RaiShot` 重叠 |
+| 入口 | 开始菜单快捷方式运行 `raishot.exe --tray`，桌面快捷方式可选；在 HKCU 的 App Paths 登记 `raishot.exe`；可选把安装目录加入用户 PATH，以便直接使用 `raishot-cli` |
+| 开机启动 | 只在首次安装时提供，默认勾选。写入格式与 `src/autostart.rs` 相同；升级时不改动，以用户在设置中的选择为准 |
+| 升级 | 固定 AppId，覆盖原目录。安装前用新包里的 `raishot.exe --exit` 请本会话托盘（安装版或便携版）正常退出，仍占用文件的进程交给 Restart Manager 处理 |
+| 卸载 | 先 `--exit`，再删除程序、快捷方式、App Paths 和 PATH 项。只删除指向本安装目录的启动项。用户数据默认保留，交互卸载时可选择删除；静默卸载一律保留；“图片”中的截图不删 |
+
+`raishot.exe --exit` 等同于托盘菜单“退出”，最多等待 20 秒。退出码 0 表示已退出或没有托盘在运行，1 表示超时，2 表示请求失败。
+
+静默安装使用 `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`，可用 `/TASKS="autostart,desktopicon,clipath"` 选择附加项，静默安装后不会自动启动托盘。CI 在临时目录完成一次静默安装和卸载，核对 CLI、启动项、App Paths 和 PATH 的写入与清理。
+
+安装包暂未签名，首次运行可能出现 SmartScreen 提示。需要签名时，在“构建安装包”步骤之后对 EXE 签名，再生成校验文件。
 
 ## 准备正式版本
 
@@ -37,7 +55,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-标签触发 Release 工作流。它先确认标签版本、Cargo 产品版本一致，且 changelog 中存在对应条目，再并行执行 CI 验证与 Release 构建打包。两边通过后创建 Release 草稿，上传便携包与校验文件，最后将草稿发布。
+标签触发 Release 工作流。它先确认标签版本、Cargo 产品版本一致，且 changelog 中存在对应条目，再并行执行 CI 验证与 Release 构建打包。两边通过后创建 Release 草稿，上传安装包、便携包及各自的校验文件，最后将草稿发布。
 
 ## 失败与重跑
 

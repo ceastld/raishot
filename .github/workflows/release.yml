@@ -248,12 +248,81 @@ jobs:
           & (Join-Path $unpacked 'raishot-cli.exe') --help
           if ($LASTEXITCODE -ne 0) { throw '解压后的便携包 CLI 无法启动' }
 
+      # 安装包从便携 ZIP 重新展开，与 ZIP 文件逐件相同；Inno Setup 固定版本并按 SHA256 校验后免注册安装到临时目录。
+      - name: 构建安装包
+        id: installer
+        shell: pwsh
+        env:
+          INNO_URL: https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe
+          INNO_SHA256: A549929319F9120716677C685535CA4671E4B937B5FDC87E2585F32D8EB30E8C
+          PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
+          PACKAGE_ZIP: ${{ steps.package.outputs.zip_path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+          Invoke-WebRequest -Uri $env:INNO_URL -OutFile $setup -TimeoutSec 120
+          if ((Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash -ne $env:INNO_SHA256) {
+            throw 'Inno Setup 安装程序与固定 SHA256 不符'
+          }
+          $inno = Join-Path $env:RUNNER_TEMP 'inno'
+          $process = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', '/PORTABLE=1', '/NOICONS', "/DIR=$inno")
+          if ($process.ExitCode -ne 0) { throw "Inno Setup 安装失败：$($process.ExitCode)" }
+          $source = Join-Path $env:RUNNER_TEMP 'installer-source'
+          Expand-Archive -LiteralPath $env:PACKAGE_ZIP -DestinationPath $source
+          $output = (New-Item -ItemType Directory -Force -Path 'dist/ci').FullName
+          & (Join-Path $inno 'ISCC.exe') /Qp "/DAppVersion=$env:PACKAGE_VERSION" "/DSourceDir=$source" "/DOutputDir=$output" installer/raishot.iss
+          if ($LASTEXITCODE -ne 0) { throw '安装包编译失败' }
+          $path = Join-Path $output "RaiShot-$env:PACKAGE_VERSION-setup-x64.exe"
+          if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "未生成安装包：$path" }
+          $checksum = "$path.sha256"
+          "$((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($path))" |
+            Set-Content -LiteralPath $checksum -Encoding utf8NoBOM
+          "setup_path=$path" >> $env:GITHUB_OUTPUT
+          "checksum_path=$checksum" >> $env:GITHUB_OUTPUT
+
+      - name: 验证安装与卸载
+        shell: pwsh
+        env:
+          SETUP_PATH: ${{ steps.installer.outputs.setup_path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = Join-Path $env:RUNNER_TEMP 'install-smoke\RaiShot'
+          $log = Join-Path $env:RUNNER_TEMP 'install-smoke.log'
+          $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          $appPaths = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\raishot.exe'
+          $userPath = { [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' }
+          $process = Start-Process -FilePath $env:SETUP_PATH -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$dir", '/TASKS=autostart,clipath', "/LOG=$log")
+          if ($process.ExitCode -ne 0) { Get-Content $log; throw "静默安装失败：$($process.ExitCode)" }
+          if (-not (Select-String -LiteralPath $log -SimpleMatch '--exit exit code: 0' -Quiet)) {
+            Get-Content $log; throw '安装前未能调用 --exit'
+          }
+          & (Join-Path $dir 'raishot-cli.exe') --help
+          if ($LASTEXITCODE -ne 0) { throw '安装后的 CLI 无法启动' }
+          $expected = "`"$dir\raishot.exe`" --tray"
+          if ((Get-ItemProperty -Path $run -Name RaiShot).RaiShot -ne $expected) { throw "开机启动项不符：$expected" }
+          if ((Get-ItemProperty -Path $appPaths).'(default)' -ne "$dir\raishot.exe") { throw 'App Paths 登记不符' }
+          if ((& $userPath) -notcontains $dir) { throw '用户 PATH 未加入安装目录' }
+
+          $uninstaller = Join-Path $dir 'unins000.exe'
+          Start-Process -FilePath $uninstaller -Wait -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          # 卸载程序会复制到临时目录后再执行，等其删除自身。
+          $deadline = (Get-Date).AddSeconds(60)
+          while ((Test-Path -LiteralPath $uninstaller) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (Test-Path -LiteralPath $dir) { Get-ChildItem -Recurse $dir; throw '卸载后仍残留程序目录' }
+          if (Get-ItemProperty -Path $run -Name RaiShot -ErrorAction SilentlyContinue) { throw '卸载后仍残留开机启动项' }
+          if (Test-Path -LiteralPath $appPaths) { throw '卸载后仍残留 App Paths' }
+          if ((& $userPath) -contains $dir) { throw '卸载后用户 PATH 仍含安装目录' }
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: RaiShot-${{ needs.prepare.outputs.version }}
           path: |
             ${{ steps.package.outputs.zip_path }}
             ${{ steps.package.outputs.checksum_path }}
+            ${{ steps.installer.outputs.setup_path }}
+            ${{ steps.installer.outputs.checksum_path }}
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -284,11 +353,15 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $zip = Join-Path 'release-assets' "RaiShot.$env:RELEASE_VERSION.0.zip"
-          $checksum = "$zip.sha256"
-          $assets = @($zip, $checksum)
-          $expected = ((Get-Content -LiteralPath $checksum -Raw).Trim() -split '\s+')[0]
-          if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ne $expected) {
-            throw '下载的 ZIP 与 SHA256 校验文件不一致'
+          $setup = Join-Path 'release-assets' "RaiShot-$env:RELEASE_VERSION-setup-x64.exe"
+          $assets = @()
+          foreach ($file in @($setup, $zip)) {
+            $checksum = "$file.sha256"
+            $expected = ((Get-Content -LiteralPath $checksum -Raw).Trim() -split '\s+')[0]
+            if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $expected) {
+              throw "下载的 $([IO.Path]::GetFileName($file)) 与 SHA256 校验文件不一致"
+            }
+            $assets += @($file, $checksum)
           }
           # 列表接口包含有权限读取的草稿；按 tag 的 REST 接口不能可靠查到草稿。
           $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"

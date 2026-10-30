@@ -55,7 +55,7 @@ RaiShot 将编辑模型、共享渲染和 Windows 界面分开。本文记录各
 
 ## 品牌与界面
 
-产品名称、EXE 名、数据目录与开机启动项只在 `src/brand.rs`、`Cargo.toml` 的 `[[bin]]`、`build.rs` 和 `Tools/package.ps1` 定义，界面标题使用 `brand_title!` 或 `brand::NAME`。内部代号 `rustshot` 用于 crate、模块、源码文件名、窗口类、互斥量和 `RUSTSHOT_*` 环境变量，不随品牌变化；曾用名追加到 `brand::LEGACY_NAMES`，用于迁移旧数据。
+产品名称、EXE 名、数据目录与开机启动项只在 `src/brand.rs`、`Cargo.toml` 的 `[[bin]]`、`build.rs`、`Tools/package.ps1` 和 `installer/raishot.iss` 定义，界面标题使用 `brand_title!` 或 `brand::NAME`。内部代号 `rustshot` 用于 crate、模块、源码文件名、窗口类、互斥量和 `RUSTSHOT_*` 环境变量，不随品牌变化；曾用名追加到 `brand::LEGACY_NAMES`，用于迁移旧数据。
 
 界面文案使用 `tr!("中文", "English")`、`trf!` 或常量表 `i18n::Text`。语言 `system|zh-CN|en` 与主题 `light|dark|system` 默认跟随系统。固定宽度控件要检查英文溢出。
 
@@ -65,4 +65,4 @@ Windows 界面使用锁定的 `vendor/gpui`，不依赖 .NET 或 WebView 运行�
 
 OCR 的 ORT、模型和字典从固定官方来源后台下载，并按固定字节数与 SHA 校验，清单在 `dependencies/*.json`。运行缓存位于用户本机的 `%LOCALAPPDATA%/RaiShot/ocr`；发布包含 VC++ 运行库与 ORT，模型按需下载。
 
-便携 ZIP 由 `Tools/package.ps1` 使用已有 Release 产物打包，脚本不构建、不上传。凭据只放仓库外配置或 CI Secret，不进入仓库、客户端或包。
+便携 ZIP 由 `Tools/package.ps1` 使用已有 Release 产物打包，脚本不构建、不上传；安装包由 `installer/raishot.iss` 从同一个 ZIP 生成，安装约定见[验包与发布](releasing.md#安装包)。凭据只放仓库外配置或 CI Secret，不进入仓库、客户端或包。

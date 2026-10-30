@@ -1,5 +1,5 @@
 //! 对外品牌：显示名、EXE 名、数据目录与开机启动项名。
-//! 改名只改本文件、`Cargo.toml` 的 `[[bin]]`、`build.rs` 的 GPUI 程序名和 `Tools/package.ps1`；
+//! 改名只改本文件、`Cargo.toml` 的 `[[bin]]`、`build.rs` 的 GPUI 程序名、`Tools/package.ps1` 和 `installer/raishot.iss`；
 //! 内部代号 rustshot（crate、模块、窗口类、互斥量、环境变量）不随品牌改名。
 use std::path::PathBuf;
 use std::sync::OnceLock;

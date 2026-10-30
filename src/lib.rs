@@ -418,6 +418,16 @@ pub fn install_worker_diagnostics() {
     capture_failure::install_panic_hook();
 }
 
+/// `raishot.exe --exit`：请本会话托盘正常退出，供安装器升级／卸载前调用；不弹窗。
+/// 退出码 0 表示托盘已退出或未运行，1 表示超时，2 表示请求失败。
+pub fn exit_resident() -> i32 {
+    match ui::request_resident_exit(std::time::Duration::from_secs(20)) {
+        Ok(true) => 0,
+        Ok(false) => 1,
+        Err(_) => 2,
+    }
+}
+
 pub fn run_gui() {
     if let Err(error) = ui::run() {
         report_error(&error.to_string());
