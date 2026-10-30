@@ -75,6 +75,71 @@ impl CommandHotkey {
     }
 }
 
+/// 一项 OpenAI 兼容服务配置；文字翻译与公式识别各自按 id 选用。
+#[derive(Clone, Default, PartialEq, Eq)]
+pub(crate) struct ServiceProfile {
+    pub id: String,
+    /// 自定义配置的名称；内置配置显示固定名称。
+    pub name: String,
+    pub endpoint: String,
+    /// 留空时内置配置使用默认模型。
+    pub model: String,
+    /// 仅内存中的明文；磁盘只保存当前 Windows 用户的 DPAPI 密文。
+    pub api_key: String,
+    /// 解密失败时保留原密文，避免其它设置页保存时把它静默清空。
+    pub(crate) api_key_encrypted: String,
+    /// 自定义配置是否支持图像输入（公式识别需要）。
+    pub vision: bool,
+}
+impl std::fmt::Debug for ServiceProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ServiceProfile")
+            .field("id", &self.id)
+            .field("api_key_configured", &!self.api_key.is_empty())
+            .finish_non_exhaustive()
+    }
+}
+impl ServiceProfile {
+    pub(crate) fn from_builtin(builtin: &crate::translate::Builtin) -> Self {
+        Self {
+            id: builtin.id.into(),
+            endpoint: builtin.endpoint.into(),
+            vision: builtin.vision,
+            ..Self::default()
+        }
+    }
+    pub(crate) fn builtin(&self) -> Option<&'static crate::translate::Builtin> {
+        crate::translate::builtin(&self.id)
+    }
+    pub(crate) fn display_name(&self) -> String {
+        match self.builtin() {
+            Some(builtin) => builtin.name.get().into(),
+            None if self.name.trim().is_empty() => tr!("未命名服务", "Unnamed service").into(),
+            None => self.name.trim().into(),
+        }
+    }
+    pub(crate) fn effective_model(&self) -> &str {
+        match (self.model.trim(), self.builtin()) {
+            ("", Some(builtin)) => builtin.model,
+            (model, _) => model,
+        }
+    }
+    pub(crate) fn needs_key(&self) -> bool {
+        self.builtin().is_some_and(|builtin| builtin.needs_key)
+            || crate::translate::is_deepseek_endpoint(&self.endpoint)
+    }
+    pub(crate) fn supports_vision(&self) -> bool {
+        self.builtin().map_or(self.vision, |builtin| builtin.vision)
+    }
+    pub(crate) fn key_unreadable(&self) -> bool {
+        !self.api_key_encrypted.is_empty() && self.api_key.is_empty()
+    }
+    pub(crate) fn set_api_key(&mut self, key: String) {
+        self.api_key = key;
+        self.api_key_encrypted.clear();
+    }
+}
+
 #[derive(Clone)]
 pub struct Preferences {
     pub theme: ThemeMode,
@@ -104,13 +169,11 @@ pub struct Preferences {
     pub(crate) command_hotkeys: BTreeMap<String, CommandHotkey>,
     /// 保留新版本命令的数据，但本版本不会注册或执行未知命令。
     pub(crate) unknown_command_hotkeys: BTreeMap<String, serde_json::Value>,
-    /// OpenAI 兼容翻译接口根地址；空值关闭翻译入口。
-    pub translate_endpoint: String,
-    pub translate_model: String,
-    /// 仅内存中的 API Key；磁盘只保存当前 Windows 用户的 DPAPI 密文。
-    pub translate_api_key: String,
-    /// 读取失败时保留原密文，避免其它设置页或关闭服务将其静默清空。
-    pub(crate) translate_api_key_encrypted: String,
+    /// 内置配置在前（顺序固定），其后是用户添加的自定义配置。
+    pub(crate) service_profiles: Vec<ServiceProfile>,
+    /// 文字翻译与公式识别各自选用的配置 id；空串表示关闭。
+    pub(crate) translate_profile: String,
+    pub(crate) formula_profile: String,
     /// `auto` 或目标语言代码。
     pub translate_target: String,
     /// 图片翻译引擎：`auto` 默认本机识别、已配置的文本服务翻译并本机排版；`baidu` 显式上传，`local` 本机排版。
@@ -158,10 +221,12 @@ impl Default for Preferences {
             pin_input_trigger: None,
             command_hotkeys: BTreeMap::new(),
             unknown_command_hotkeys: BTreeMap::new(),
-            translate_endpoint: crate::translate::DEFAULT_ENDPOINT.into(),
-            translate_model: crate::translate::DEFAULT_MODEL.into(),
-            translate_api_key: String::new(),
-            translate_api_key_encrypted: String::new(),
+            service_profiles: crate::translate::BUILTINS
+                .into_iter()
+                .map(ServiceProfile::from_builtin)
+                .collect(),
+            translate_profile: crate::translate::INDEX.id.into(),
+            formula_profile: crate::translate::DEEPSEEK.id.into(),
             translate_target: "auto".into(),
             image_translate_engine: "auto".into(),
             baidu_app_id: String::new(),
@@ -204,6 +269,7 @@ impl Preferences {
         let mut pin_modifiers = None;
         let mut pin_key = None;
         let mut pin_mode_present = false;
+        let (mut endpoint, mut model) = (None, None);
         for line in text.lines() {
             let Some((key, value)) = line.split_once('=') else {
                 continue;
@@ -252,8 +318,8 @@ impl Preferences {
                 }
                 "pinHotkeyModifiers" => pin_modifiers = value.parse::<u32>().ok(),
                 "pinHotkeyKey" => pin_key = value.parse::<u32>().ok(),
-                "translateEndpoint" => p.translate_endpoint = value.trim().into(),
-                "translateModel" => p.translate_model = value.trim().into(),
+                "translateEndpoint" => endpoint = Some(value.trim()),
+                "translateModel" => model = Some(value.trim()),
                 "translateTarget" => p.translate_target = value.trim().into(),
                 "imageTranslateEngine" => p.image_translate_engine = value.trim().into(),
                 "baiduAppId" => p.baidu_app_id = value.trim().into(),
@@ -278,6 +344,7 @@ impl Preferences {
         } else if p.pin_hotkey == 3 {
             p.pin_hotkey = 0;
         }
+        p.migrate_legacy_service(endpoint, model.unwrap_or(""), String::new(), String::new());
         // 旧用户若已把 Ctrl+2 用作截图，新增默认不能夺走其明确配置。
         if !pin_mode_present && p.hotkeys_conflict() {
             p.pin_hotkey = 4;
@@ -356,17 +423,16 @@ impl Preferences {
         }
         self.validate()?;
         let mut file = SettingsFile::from(self);
-        if self.translate_api_key_unreadable() {
-            if !self.translate_endpoint.is_empty() {
-                return Err(tr!(
-                    "无法读取已保存的 API Key，请在翻译设置重新填写；原配置未修改。",
-                    "Could not read the saved API key. Enter it again in Translation settings; the original settings are unchanged."
-                )
-                .into());
+        for (saved, profile) in file
+            .service_profiles
+            .iter_mut()
+            .flatten()
+            .zip(&self.service_profiles)
+        {
+            // 解密失败的密文原样保留；加密失败先返回，原子替换入口尚未运行，磁盘和内存草稿都保留。
+            if !profile.key_unreadable() {
+                saved.api_key_encrypted = crate::api_secret::protect(&profile.api_key)?;
             }
-        } else {
-            // 加密失败先返回，原子替换入口尚未运行，磁盘和内存草稿都保留。
-            file.translate_api_key_encrypted = crate::api_secret::protect(&self.translate_api_key)?;
         }
         let json = json_file(path);
         if json.encode(&file).is_err() {
@@ -399,16 +465,110 @@ impl Preferences {
         }
         Ok(())
     }
-    pub(crate) fn translate_api_key_unreadable(&self) -> bool {
-        !self.translate_api_key_encrypted.is_empty() && self.translate_api_key.is_empty()
+    pub(crate) fn service_profile(&self, id: &str) -> Option<&ServiceProfile> {
+        (!id.is_empty())
+            .then(|| {
+                self.service_profiles
+                    .iter()
+                    .find(|profile| profile.id == id)
+            })
+            .flatten()
     }
-    pub(crate) fn set_translate_api_key(&mut self, key: String) {
-        self.translate_api_key = key;
-        self.translate_api_key_encrypted.clear();
+    pub(crate) fn service_profile_mut(&mut self, id: &str) -> Option<&mut ServiceProfile> {
+        self.service_profiles
+            .iter_mut()
+            .find(|profile| !id.is_empty() && profile.id == id)
     }
-    pub(crate) fn preserve_translate_api_key_from(&mut self, latest: &Self) {
-        self.translate_api_key = latest.translate_api_key.clone();
-        self.translate_api_key_encrypted = latest.translate_api_key_encrypted.clone();
+    /// 补齐内置配置并固定其地址与能力；重复或空 id 的自定义项丢弃，选用的配置不存在时视为关闭。
+    fn normalize_service_profiles(&mut self) {
+        let mut profiles: Vec<ServiceProfile> = crate::translate::BUILTINS
+            .into_iter()
+            .map(|builtin| {
+                let mut profile = self
+                    .service_profile(builtin.id)
+                    .cloned()
+                    .unwrap_or_else(|| ServiceProfile::from_builtin(builtin));
+                profile.name.clear();
+                profile.endpoint = builtin.endpoint.into();
+                profile.vision = builtin.vision;
+                profile
+            })
+            .collect();
+        for profile in std::mem::take(&mut self.service_profiles) {
+            if !profile.id.is_empty() && !profiles.iter().any(|existing| existing.id == profile.id)
+            {
+                profiles.push(profile);
+            }
+        }
+        self.service_profiles = profiles;
+        for id in [&mut self.translate_profile, &mut self.formula_profile] {
+            if !self
+                .service_profiles
+                .iter()
+                .any(|profile| profile.id == *id)
+            {
+                id.clear();
+            }
+        }
+    }
+    /// 单一 endpoint/model/key 的旧配置迁移为配置列表：翻译默认回到 Index，公式用 DeepSeek；
+    /// 关闭保持关闭，自定义地址变成一项同时用于两者的自定义配置。`endpoint` 为 None 表示旧文件没有该字段。
+    fn migrate_legacy_service(
+        &mut self,
+        endpoint: Option<&str>,
+        model: &str,
+        api_key: String,
+        api_key_encrypted: String,
+    ) {
+        let model = model.trim();
+        let endpoint = endpoint.map(|endpoint| endpoint.trim().trim_end_matches('/'));
+        let key_owner = match endpoint {
+            None => crate::translate::DEEPSEEK.id.to_owned(),
+            Some("") => {
+                self.translate_profile.clear();
+                self.formula_profile.clear();
+                crate::translate::DEEPSEEK.id.to_owned()
+            }
+            Some(endpoint) if crate::translate::is_deepseek_endpoint(endpoint) => {
+                let id = crate::translate::DEEPSEEK.id;
+                if model != crate::translate::DEEPSEEK_MODEL {
+                    if let Some(profile) = self.service_profile_mut(id) {
+                        profile.model = model.into();
+                    }
+                }
+                id.to_owned()
+            }
+            Some(endpoint)
+                if endpoint.eq_ignore_ascii_case(crate::translate::INDEX_ENDPOINT)
+                    && matches!(model, "" | crate::translate::INDEX_MODEL) =>
+            {
+                crate::translate::INDEX.id.to_owned()
+            }
+            Some(endpoint) => {
+                let id = "custom-1".to_owned();
+                self.service_profiles.push(ServiceProfile {
+                    id: id.clone(),
+                    name: tr!("自定义服务", "Custom service").into(),
+                    endpoint: endpoint.into(),
+                    model: model.into(),
+                    vision: true,
+                    ..ServiceProfile::default()
+                });
+                self.translate_profile = id.clone();
+                self.formula_profile = id.clone();
+                id
+            }
+        };
+        if let Some(profile) = self.service_profile_mut(&key_owner) {
+            profile.api_key = api_key;
+            profile.api_key_encrypted = api_key_encrypted;
+        }
+    }
+    /// 其它页面用旧快照保存时，服务配置与选择以最新值为准。
+    pub(crate) fn preserve_services_from(&mut self, latest: &Self) {
+        self.service_profiles = latest.service_profiles.clone();
+        self.translate_profile = latest.translate_profile.clone();
+        self.formula_profile = latest.formula_profile.clone();
     }
     #[cfg(test)]
     fn serialize_legacy_ini(&self) -> Result<String> {
@@ -465,9 +625,12 @@ impl Preferences {
             "pinHotkey={}\npinHotkeyModifiers={}\npinHotkeyKey={}\n",
             pin_hotkey, custom_pin.modifiers, custom_pin.key
         ));
+        let translate = self.service_profile(&self.translate_profile);
+        let endpoint = translate.map_or(String::new(), |profile| profile.endpoint.clone());
+        let model = translate.map_or(String::new(), |profile| profile.model.clone());
         for (key, value) in [
-            ("translateEndpoint", &self.translate_endpoint),
-            ("translateModel", &self.translate_model),
+            ("translateEndpoint", &endpoint),
+            ("translateModel", &model),
             ("translateTarget", &self.translate_target),
             ("imageTranslateEngine", &self.image_translate_engine),
             ("baiduAppId", &self.baidu_app_id),
@@ -600,7 +763,8 @@ impl Preferences {
     pub fn hotkey_spec_for(&self, target: HotkeyTarget) -> Option<HotkeySpec> {
         if !matches!(target, HotkeyTarget::Capture | HotkeyTarget::ClipboardPin) {
             let binding = self.command_hotkeys.get(target.id())?;
-            return (binding.mode == 3 && binding.custom.validate().is_ok()).then_some(binding.custom);
+            return (binding.mode == 3 && binding.custom.validate().is_ok())
+                .then_some(binding.custom);
         }
         if target == HotkeyTarget::ClipboardPin {
             return match self.pin_hotkey {
@@ -745,6 +909,18 @@ fn json_file(path: &Path) -> JsonFile<'_, SettingsFile> {
     }
 }
 
+/// 服务配置的磁盘结构；内置项不写地址，读入时按内置定义补齐。
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct ServiceProfileFile {
+    id: String,
+    name: String,
+    endpoint: String,
+    model: String,
+    api_key_encrypted: String,
+    vision: bool,
+}
+
 /// settings.json 的磁盘结构；枚举按固定线名存字符串，读入后逐项校验。
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -779,17 +955,30 @@ struct SettingsFile {
     pin_hotkey_key: u32,
     pin_trigger: String,
     command_hotkeys: BTreeMap<String, serde_json::Value>,
-    translate_endpoint: String,
-    translate_model: String,
-    translate_api_key_encrypted: String,
+    /// 旧版单一服务字段：只读取用于迁移，新版不再写出。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    translate_endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    translate_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    translate_api_key_encrypted: Option<String>,
+    /// 缺失表示旧版文件，需要从上面三个字段迁移。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    service_profiles: Option<Vec<ServiceProfileFile>>,
+    translate_profile: String,
+    formula_profile: String,
     translate_target: String,
     image_translate_engine: String,
     baidu_app_id: String,
     baidu_api_key: String,
 }
 impl Default for SettingsFile {
+    /// 读取时文件叠在默认值上；默认不带服务配置，缺这一项的旧文件才会走迁移。
     fn default() -> Self {
-        Self::from(&Preferences::default())
+        Self {
+            service_profiles: None,
+            ..Self::from(&Preferences::default())
+        }
     }
 }
 impl From<&Preferences> for SettingsFile {
@@ -840,9 +1029,28 @@ impl From<&Preferences> for SettingsFile {
                         .map(|(id, binding)| (id.clone(), binding.value())),
                 )
                 .collect(),
-            translate_endpoint: p.translate_endpoint.clone(),
-            translate_model: p.translate_model.clone(),
-            translate_api_key_encrypted: p.translate_api_key_encrypted.clone(),
+            translate_endpoint: None,
+            translate_model: None,
+            translate_api_key_encrypted: None,
+            service_profiles: Some(
+                p.service_profiles
+                    .iter()
+                    .map(|profile| ServiceProfileFile {
+                        id: profile.id.clone(),
+                        name: profile.name.clone(),
+                        endpoint: if profile.builtin().is_some() {
+                            String::new()
+                        } else {
+                            profile.endpoint.clone()
+                        },
+                        model: profile.model.clone(),
+                        api_key_encrypted: profile.api_key_encrypted.clone(),
+                        vision: profile.vision,
+                    })
+                    .collect(),
+            ),
+            translate_profile: p.translate_profile.clone(),
+            formula_profile: p.formula_profile.clone(),
             translate_target: p.translate_target.clone(),
             image_translate_engine: p.image_translate_engine.clone(),
             baidu_app_id: p.baidu_app_id.clone(),
@@ -887,9 +1095,6 @@ impl SettingsFile {
     }
     /// 与旧 INI 相同的校验：未知线名回到默认，相对目录忽略，损坏的自定义热键不生效。
     fn preferences(self) -> Preferences {
-        // 解密失败只保留密文和明确的不可用状态，不退回明文、不清空磁盘字段。
-        let api_key =
-            crate::api_secret::unprotect(&self.translate_api_key_encrypted).unwrap_or_default();
         let mut p = Preferences {
             theme: ThemeMode::from_wire(&self.theme),
             language: LanguageMode::from_wire(&self.language),
@@ -921,23 +1126,43 @@ impl SettingsFile {
             },
             input_trigger: InputTrigger::from_wire(&self.capture_trigger),
             pin_input_trigger: InputTrigger::from_wire(&self.pin_trigger),
-            translate_endpoint: self.translate_endpoint.trim().into(),
-            translate_model: self.translate_model.trim().into(),
-            translate_api_key: api_key,
-            translate_api_key_encrypted: self.translate_api_key_encrypted,
             translate_target: self.translate_target.trim().into(),
             image_translate_engine: self.image_translate_engine.trim().into(),
             baidu_app_id: self.baidu_app_id.trim().into(),
             baidu_api_key: self.baidu_api_key.trim().into(),
             ..Preferences::default()
         };
-        // 只迁移精确的历史内置组合；自定义模型、其它端点与关闭状态保持原值。
-        if p.translate_endpoint.trim_end_matches('/') == "https://index-translate.bilibili.com/v1"
-            && p.translate_model == "Index-Translate-35B-A3B"
-        {
-            p.translate_endpoint = crate::translate::DEFAULT_ENDPOINT.into();
-            p.translate_model = crate::translate::DEFAULT_MODEL.into();
+        // 解密失败只保留密文和明确的不可用状态，不退回明文、不清空磁盘字段。
+        let unprotect =
+            |encrypted: &str| crate::api_secret::unprotect(encrypted).unwrap_or_default();
+        match self.service_profiles {
+            Some(profiles) => {
+                p.service_profiles = profiles
+                    .into_iter()
+                    .map(|file| ServiceProfile {
+                        api_key: unprotect(&file.api_key_encrypted),
+                        id: file.id.trim().into(),
+                        name: file.name.trim().into(),
+                        endpoint: file.endpoint.trim().into(),
+                        model: file.model.trim().into(),
+                        api_key_encrypted: file.api_key_encrypted,
+                        vision: file.vision,
+                    })
+                    .collect();
+                p.translate_profile = self.translate_profile.trim().into();
+                p.formula_profile = self.formula_profile.trim().into();
+            }
+            None => {
+                let encrypted = self.translate_api_key_encrypted.unwrap_or_default();
+                p.migrate_legacy_service(
+                    self.translate_endpoint.as_deref(),
+                    self.translate_model.as_deref().unwrap_or(""),
+                    unprotect(&encrypted),
+                    encrypted,
+                );
+            }
         }
+        p.normalize_service_profiles();
         if self.quick_directory.is_absolute() {
             p.quick_dir = self.quick_directory;
         }
@@ -1149,26 +1374,22 @@ mod tests {
         assert_eq!(hotkey.ocr_profile, OcrProfile::Small);
     }
     #[test]
-    fn translate_service_round_trips_and_empty_endpoint_disables() {
+    fn legacy_ini_translate_service_migrates_to_profiles() {
         let defaults = Preferences::parse_legacy_ini("");
-        assert_eq!(
-            defaults.translate_endpoint,
-            crate::translate::DEFAULT_ENDPOINT
-        );
+        assert_eq!(defaults.translate_profile, crate::translate::INDEX.id);
+        assert_eq!(defaults.formula_profile, crate::translate::DEEPSEEK.id);
         assert_eq!(defaults.translate_target, "auto");
         let custom = Preferences::parse_legacy_ini(
             "translateEndpoint=http://127.0.0.1:8000/v1\ntranslateModel=m\ntranslateTarget=ja\n",
         );
-        let loaded = Preferences::parse_legacy_ini(&custom.serialize_legacy_ini().unwrap());
-        assert_eq!(loaded.translate_endpoint, "http://127.0.0.1:8000/v1");
-        assert_eq!(loaded.translate_model, "m");
-        assert_eq!(loaded.translate_target, "ja");
-        let disabled = Preferences::parse_legacy_ini(
-            &Preferences::parse_legacy_ini("translateEndpoint=\n")
-                .serialize_legacy_ini()
-                .unwrap(),
-        );
-        assert!(disabled.translate_endpoint.is_empty());
+        let profile = custom.service_profile(&custom.translate_profile).unwrap();
+        assert_eq!(profile.endpoint, "http://127.0.0.1:8000/v1");
+        assert_eq!(profile.model, "m");
+        assert_eq!(custom.formula_profile, custom.translate_profile);
+        assert_eq!(custom.translate_target, "ja");
+        let disabled = Preferences::parse_legacy_ini("translateEndpoint=\n");
+        assert!(disabled.translate_profile.is_empty());
+        assert!(disabled.formula_profile.is_empty());
     }
     #[test]
     fn obsolete_ocr_thread_field_is_ignored_and_not_saved() {
@@ -1565,80 +1786,106 @@ mod tests {
     fn api_key_preferences_only_persists_dpapi_and_round_trips_current_user() {
         let dir = TestPreferencesDirectory::new();
         let mut original = Preferences::default();
-        original.set_translate_api_key("test-only-local-api-key".into());
+        original
+            .service_profile_mut("deepseek")
+            .unwrap()
+            .set_api_key("test-only-local-api-key".into());
         original.save_at(&dir.config()).unwrap();
         let text = std::fs::read_to_string(dir.config()).unwrap();
         assert!(!text.contains("test-only-local-api-key"));
-        assert!(text.contains("\"translate_api_key_encrypted\": \"dpapi-v1:"));
-        assert!(!text.contains("\"translate_api_key\":"));
+        assert!(text.contains("\"api_key_encrypted\": \"dpapi-v1:"));
+        assert!(!text.contains("\"api_key\":"));
+        assert!(!text.contains("translate_endpoint"));
         let loaded = Preferences::load_at(&dir.config());
-        assert_eq!(loaded.translate_api_key, "test-only-local-api-key");
-        assert!(!loaded.translate_api_key_unreadable());
+        let deepseek = loaded.service_profile("deepseek").unwrap();
+        assert_eq!(deepseek.api_key, "test-only-local-api-key");
+        assert!(!deepseek.key_unreadable());
+        assert!(loaded.service_profile("index").unwrap().api_key.is_empty());
     }
 
     #[test]
-    fn api_key_decryption_failure_preserves_original_until_replaced() {
+    fn api_key_decryption_failure_preserves_ciphertext_until_replaced() {
         let dir = TestPreferencesDirectory::new();
-        let text = r#"{"translate_api_key_encrypted":"dpapi-v1:00","future_setting":true}"#;
-        std::fs::write(dir.config(), text).unwrap();
+        std::fs::write(
+            dir.config(),
+            r#"{"translate_endpoint":"https://api.deepseek.com/v1","translate_model":"deepseek-flash","translate_api_key_encrypted":"dpapi-v1:00"}"#,
+        )
+        .unwrap();
         let mut loaded = Preferences::load_at(&dir.config());
-        assert!(loaded.translate_api_key.is_empty());
-        assert!(loaded.translate_api_key_unreadable());
-        assert!(loaded.save_at(&dir.config()).is_err());
-        assert_eq!(std::fs::read_to_string(dir.config()).unwrap(), text);
-        loaded.set_translate_api_key("replacement-test-key".into());
+        assert!(loaded.service_profile("deepseek").unwrap().key_unreadable());
+        // 其它设置照常保存，原密文原样写回。
+        loaded.guides = true;
         loaded.save_at(&dir.config()).unwrap();
+        let mut reloaded = Preferences::load_at(&dir.config());
+        assert!(reloaded.guides);
+        let deepseek = reloaded.service_profile("deepseek").unwrap();
+        assert!(deepseek.key_unreadable());
+        assert_eq!(deepseek.api_key_encrypted, "dpapi-v1:00");
+        reloaded
+            .service_profile_mut("deepseek")
+            .unwrap()
+            .set_api_key("replacement-test-key".into());
+        reloaded.save_at(&dir.config()).unwrap();
         assert_eq!(
-            Preferences::load_at(&dir.config()).translate_api_key,
+            Preferences::load_at(&dir.config())
+                .service_profile("deepseek")
+                .unwrap()
+                .api_key,
             "replacement-test-key"
         );
     }
 
     #[test]
-    fn api_key_disabling_service_keeps_unreadable_ciphertext() {
+    fn legacy_single_service_migrates_translation_back_to_index() {
         let dir = TestPreferencesDirectory::new();
-        std::fs::write(
-            dir.config(),
-            r#"{"translate_api_key_encrypted":"dpapi-v1:00"}"#,
-        )
-        .unwrap();
-        let mut loaded = Preferences::load_at(&dir.config());
-        loaded.translate_endpoint.clear();
-        loaded.save_at(&dir.config()).unwrap();
-        let reloaded = Preferences::load_at(&dir.config());
-        assert!(reloaded.translate_api_key_unreadable());
-        assert_eq!(reloaded.translate_api_key_encrypted, "dpapi-v1:00");
-        assert!(reloaded.translate_endpoint.is_empty());
-    }
-
-    #[test]
-    fn api_key_default_service_migration_only_changes_exact_old_pair() {
-        let dir = TestPreferencesDirectory::new();
-        std::fs::write(dir.config(), r#"{"translate_endpoint":"https://index-translate.bilibili.com/v1","translate_model":"Index-Translate-35B-A3B"}"#).unwrap();
-        let migrated = Preferences::load_at(&dir.config());
-        assert_eq!(
-            migrated.translate_endpoint,
-            crate::translate::DEFAULT_ENDPOINT
-        );
-        assert_eq!(migrated.translate_model, crate::translate::DEFAULT_MODEL);
-        assert!(migrated.translate_api_key.is_empty());
-        for (endpoint, model) in [
-            ("https://custom.test/v1", "Index-Translate-35B-A3B"),
-            ("https://index-translate.bilibili.com/v1", "custom"),
-            ("", "Index-Translate-35B-A3B"),
+        let load = |value: serde_json::Value| {
+            std::fs::write(dir.config(), value.to_string()).unwrap();
+            Preferences::load_at(&dir.config())
+        };
+        for endpoint in [
+            "https://api.deepseek.com/v1",
+            "https://index-translate.bilibili.com/v1/",
         ] {
-            std::fs::write(
-                dir.config(),
-                serde_json::to_string(
-                    &serde_json::json!({"translate_endpoint":endpoint,"translate_model":model}),
-                )
-                .unwrap(),
-            )
-            .unwrap();
-            let kept = Preferences::load_at(&dir.config());
-            assert_eq!(kept.translate_endpoint, endpoint);
-            assert_eq!(kept.translate_model, model);
+            let migrated = load(serde_json::json!({"translate_endpoint":endpoint}));
+            assert_eq!(migrated.translate_profile, "index");
+            assert_eq!(migrated.formula_profile, "deepseek");
+            assert_eq!(migrated.service_profiles.len(), 2);
         }
+        let model = load(serde_json::json!({
+            "translate_endpoint":"https://api.deepseek.com/v1","translate_model":"deepseek-pro"
+        }));
+        assert_eq!(
+            model.service_profile("deepseek").unwrap().effective_model(),
+            "deepseek-pro"
+        );
+        let off = load(serde_json::json!({"translate_endpoint":""}));
+        assert!(off.translate_profile.is_empty() && off.formula_profile.is_empty());
+        let absent = load(serde_json::json!({"theme":"dark"}));
+        assert_eq!(absent.translate_profile, "index");
+        let custom = load(serde_json::json!({
+            "translate_endpoint":"https://custom.test/v1","translate_model":"m"
+        }));
+        let profile = custom.service_profile(&custom.translate_profile).unwrap();
+        assert_eq!(profile.endpoint, "https://custom.test/v1");
+        assert!(profile.supports_vision());
+        assert_eq!(custom.formula_profile, profile.id);
+        // 迁移后的新格式再读一次保持不变，内置地址由定义补齐。
+        custom.save_at(&dir.config()).unwrap();
+        let again = Preferences::load_at(&dir.config());
+        assert_eq!(again.service_profiles, custom.service_profiles);
+        assert_eq!(again.translate_profile, custom.translate_profile);
+        let missing = load(serde_json::json!({
+            "service_profiles":[{"id":"index","endpoint":"https://evil.test/v1"},{"id":"x"},{"id":"x"},{"id":""}],
+            "translate_profile":"gone","formula_profile":"x"
+        }));
+        assert_eq!(
+            missing.service_profile("index").unwrap().endpoint,
+            crate::translate::INDEX_ENDPOINT
+        );
+        assert!(missing.service_profile("deepseek").is_some());
+        assert_eq!(missing.service_profiles.len(), 3);
+        assert!(missing.translate_profile.is_empty());
+        assert_eq!(missing.formula_profile, "x");
     }
 
     #[test]

@@ -4010,7 +4010,7 @@ impl CaptureView {
             }
             if mode == crate::toolbar_groups::RecognizeMode::TextTranslate {
                 let preferences = crate::preferences::Preferences::load();
-                let service = crate::translate::Service::from_preferences(&preferences);
+                let service = crate::translate::Service::for_translation(&preferences);
                 let error = service
                     .as_ref()
                     .and_then(|service| service.configuration_error());
@@ -6561,7 +6561,7 @@ impl CaptureView {
             return;
         };
         let Some(service) =
-            crate::translate::Service::from_preferences(&crate::preferences::Preferences::load())
+            crate::translate::Service::for_translation(&crate::preferences::Preferences::load())
         else {
             self.status = tr!("翻译服务未配置", "Translation service is not configured").into();
             cx.notify();

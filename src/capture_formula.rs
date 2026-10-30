@@ -153,11 +153,11 @@ impl CaptureView {
             return;
         }
         let Some(service) =
-            crate::translate::Service::from_preferences(&crate::preferences::Preferences::load())
+            crate::translate::Service::for_formula(&crate::preferences::Preferences::load())
         else {
             session.note = tr!(
-                "请在 设置 ▸ 翻译 中配置 API Key",
-                "Configure an API key in Settings ▸ Translation"
+                "公式识别已关闭；请在 设置 ▸ 翻译 中选择服务",
+                "Formula recognition is off; choose a service in Settings ▸ Translation"
             )
             .into();
             session.failed = true;

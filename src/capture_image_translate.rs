@@ -94,7 +94,7 @@ impl CaptureView {
             self.start_baidu_translation(credentials, preferences.translate_target, window, cx);
             return;
         }
-        if crate::translate::Service::from_preferences(&preferences).is_none() {
+        if crate::translate::Service::for_translation(&preferences).is_none() {
             self.status = tr!(
                 "翻译服务未配置；请在 设置 ▸ 翻译 中填写接口地址",
                 "Translation is not configured; set it in Settings ▸ Translation"
@@ -103,7 +103,7 @@ impl CaptureView {
             cx.notify();
             return;
         }
-        if let Some(error) = crate::translate::Service::from_preferences(&preferences)
+        if let Some(error) = crate::translate::Service::for_translation(&preferences)
             .and_then(|service| service.configuration_error())
         {
             self.status = error;
@@ -291,7 +291,7 @@ impl CaptureView {
             return;
         }
         let Some(service) =
-            crate::translate::Service::from_preferences(&crate::preferences::Preferences::load())
+            crate::translate::Service::for_translation(&crate::preferences::Preferences::load())
         else {
             return;
         };

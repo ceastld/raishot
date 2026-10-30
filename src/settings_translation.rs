@@ -1,8 +1,8 @@
-//! 翻译设置：首屏只有“译成”下拉，即选即存；翻译服务与图片翻译收进“高级”，
-//! 改动先进草稿，与已保存值不同时才出现“应用”条。保存都不发送翻译请求。
+//! 翻译设置：上方按功能（文字翻译、译成、公式识别、图片翻译）选用服务，选中即存；
+//! 下方管理多个服务配置，展开后编辑并点“保存”。保存都不发送翻译或识别请求。
 use super::SettingsView;
 use crate::{
-    preferences::Preferences,
+    preferences::{Preferences, ServiceProfile},
     settings_widgets::{self as widgets, ButtonKind},
     text_field::{TextField, TextFieldEvent},
     toolbar_icons::{self, Icon},
@@ -15,26 +15,275 @@ use gpui::{
     SharedString, Subscription, Window,
 };
 
-/// 文字翻译服务来源：内置只写默认端点与模型，自定义才使用两个输入框，关闭即清空端点。
+/// 需要在线服务的功能；各自记住一个配置 id，空串为关闭。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TextService {
-    Builtin,
-    Custom,
-    Off,
+enum Feature {
+    Translate,
+    Formula,
 }
-impl TextService {
-    fn detect(endpoint: &str, model: &str) -> Self {
-        let (endpoint, model) = (endpoint.trim(), model.trim());
-        if endpoint.is_empty() {
-            Self::Off
-        } else if endpoint.trim_end_matches('/') == crate::translate::DEFAULT_ENDPOINT
-            && (model.is_empty() || model == crate::translate::DEFAULT_MODEL)
-        {
-            Self::Builtin
-        } else {
-            Self::Custom
+impl Feature {
+    fn key(self) -> &'static str {
+        match self {
+            Self::Translate => "translate",
+            Self::Formula => "formula",
         }
     }
+    fn title(self) -> &'static str {
+        match self {
+            Self::Translate => tr!("文字翻译", "Text translation"),
+            Self::Formula => tr!("公式识别", "Formula recognition"),
+        }
+    }
+    fn selected(self, preferences: &Preferences) -> &str {
+        match self {
+            Self::Translate => &preferences.translate_profile,
+            Self::Formula => &preferences.formula_profile,
+        }
+    }
+    fn set(self, preferences: &mut Preferences, id: String) {
+        match self {
+            Self::Translate => preferences.translate_profile = id,
+            Self::Formula => preferences.formula_profile = id,
+        }
+    }
+    /// 公式识别要上传图片，只列支持图像的配置。
+    fn accepts(self, profile: &ServiceProfile) -> bool {
+        self == Self::Translate || profile.supports_vision()
+    }
+}
+
+/// 去掉协议头的地址，用于列表说明和自定义配置的默认名称。
+fn host(endpoint: &str) -> &str {
+    let endpoint = endpoint.trim();
+    endpoint
+        .strip_prefix("https://")
+        .or_else(|| endpoint.strip_prefix("http://"))
+        .unwrap_or(endpoint)
+}
+
+/// 沿现有 ureq 的公开 URL 解析；不调用 call/send，不解析 DNS 或连接服务。
+fn validate_endpoint(endpoint: &str) -> Result<()> {
+    let parsed = ureq::request("POST", endpoint).request_url().map_err(|_| {
+        tr!(
+            "请输入有效的 HTTP 或 HTTPS 接口根地址。",
+            "Enter a valid HTTP or HTTPS API base URL."
+        )
+    })?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || !parsed.as_url().username().is_empty()
+        || parsed.as_url().password().is_some()
+        || parsed.as_url().query().is_some()
+        || parsed.as_url().fragment().is_some()
+    {
+        return Err(tr!(
+            "接口需为 HTTP 或 HTTPS 根地址，不能包含用户名、密码、查询参数或片段。",
+            "Use an HTTP or HTTPS API base URL without credentials, a query, or a fragment."
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn next_custom_id(preferences: &Preferences) -> String {
+    (1..)
+        .map(|n| format!("custom-{n}"))
+        .find(|id| preferences.service_profile(id).is_none())
+        .unwrap()
+}
+
+/// 分组标题，右侧放本组的页面级操作。
+fn section_header(
+    title: &'static str,
+    action: impl IntoElement,
+    palette: crate::capture_toolbar::Palette,
+) -> gpui::Div {
+    div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .min_h(px(28.))
+        .px_1()
+        .child(
+            div()
+                .text_size(px(13.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(rgb(palette.foreground))
+                .child(title),
+        )
+        .child(action)
+}
+
+/// 一项服务配置的编辑草稿；`id` 为空表示新增。
+#[derive(Clone, Default, PartialEq, Eq)]
+struct ProfileDraft {
+    id: String,
+    name: String,
+    endpoint: String,
+    model: String,
+    api_key: String,
+    /// 未编辑密钥的旧草稿不能覆盖另一窗口刚保存的新密钥。
+    initial_api_key: String,
+    vision: bool,
+}
+impl std::fmt::Debug for ProfileDraft {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProfileDraft")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
+    }
+}
+impl ProfileDraft {
+    fn from_profile(profile: &ServiceProfile) -> Self {
+        Self {
+            id: profile.id.clone(),
+            name: profile.name.clone(),
+            endpoint: profile.endpoint.clone(),
+            model: profile.model.clone(),
+            api_key: profile.api_key.clone(),
+            initial_api_key: profile.api_key.clone(),
+            vision: profile.vision,
+        }
+    }
+    /// 校验后把这一项写进最新设置的副本，返回副本和配置 id；其它字段原样保留。
+    fn candidate(&self, latest: &Preferences) -> Result<(Preferences, String)> {
+        if [&self.name, &self.endpoint, &self.model, &self.api_key]
+            .iter()
+            .any(|value| value.chars().any(char::is_control))
+        {
+            return Err(tr!(
+                "服务设置必须是单行文字，不能含控制字符。",
+                "Service settings must be single-line text without control characters."
+            )
+            .into());
+        }
+        let (id, existing) = if self.id.is_empty() {
+            (next_custom_id(latest), None)
+        } else {
+            match latest.service_profile(&self.id) {
+                Some(profile) => (self.id.clone(), Some(profile.clone())),
+                None => {
+                    return Err(tr!(
+                        "这项服务已在其它窗口删除。",
+                        "This service was deleted in another window."
+                    )
+                    .into())
+                }
+            }
+        };
+        let mut profile = existing.unwrap_or_else(|| ServiceProfile {
+            id: id.clone(),
+            ..ServiceProfile::default()
+        });
+        profile.model = self.model.trim().into();
+        if profile.builtin().is_none() {
+            let endpoint = self.endpoint.trim();
+            if endpoint.is_empty() {
+                return Err(tr!("请填写接口根地址。", "Enter the API base URL.").into());
+            }
+            validate_endpoint(endpoint)?;
+            if profile.model.is_empty() {
+                return Err(tr!("请填写模型名称。", "Enter the model name.").into());
+            }
+            profile.endpoint = endpoint.into();
+            profile.name = match self.name.trim() {
+                "" => host(endpoint).trim_end_matches('/').into(),
+                name => name.into(),
+            };
+            profile.vision = self.vision;
+        }
+        if self.api_key != self.initial_api_key {
+            if profile.api_key != self.initial_api_key && profile.api_key != self.api_key.trim() {
+                return Err(tr!(
+                    "API Key 已在其它窗口更新，请取消后重新展开读取最新设置；本次草稿仍保留。",
+                    "The API key changed in another window. Cancel and reopen to load the latest settings; this draft is kept."
+                )
+                .into());
+            }
+            profile.set_api_key(self.api_key.trim().to_owned());
+        }
+        if !profile.api_key.is_ascii() || profile.api_key.chars().any(char::is_whitespace) {
+            return Err(tr!(
+                "API Key 不能包含空格、控制字符或非 ASCII 字符。",
+                "The API key cannot contain spaces, control characters, or non-ASCII characters."
+            )
+            .into());
+        }
+        if profile.needs_key() && profile.api_key.is_empty() {
+            return Err(if profile.key_unreadable() {
+                tr!(
+                    "已保存的 API Key 无法解密，请重新填写。",
+                    "The saved API key cannot be decrypted. Enter it again."
+                )
+            } else {
+                tr!(
+                    "这项服务需要 API Key；保存不会发送请求。",
+                    "This service needs an API key. Saving does not send a request."
+                )
+            }
+            .into());
+        }
+        let mut candidate = latest.clone();
+        match candidate.service_profile_mut(&id) {
+            Some(slot) => *slot = profile,
+            None => candidate.service_profiles.push(profile),
+        }
+        Ok((candidate, id))
+    }
+}
+
+/// 图片翻译引擎与百度凭据的草稿，随图片翻译里的“应用”保存。
+#[derive(Clone, PartialEq, Eq)]
+struct ImageDraft {
+    engine: String,
+    baidu_app_id: String,
+    baidu_api_key: String,
+}
+impl ImageDraft {
+    fn from_preferences(preferences: &Preferences) -> Self {
+        Self {
+            engine: preferences.image_translate_engine.clone(),
+            baidu_app_id: preferences.baidu_app_id.clone(),
+            baidu_api_key: preferences.baidu_api_key.clone(),
+        }
+    }
+    fn normalized_engine(&self) -> &str {
+        match self.engine.trim() {
+            engine @ ("baidu" | "local") => engine,
+            _ => "auto",
+        }
+    }
+    fn candidate(&self, latest: &Preferences) -> Result<Preferences> {
+        if [&self.baidu_app_id, &self.baidu_api_key]
+            .iter()
+            .any(|value| value.chars().any(char::is_control))
+        {
+            return Err(tr!(
+                "翻译设置必须是单行文字，不能含控制字符。",
+                "Translation settings must be single-line text without control characters."
+            )
+            .into());
+        }
+        let mut candidate = latest.clone();
+        candidate.image_translate_engine = self.normalized_engine().to_owned();
+        candidate.baidu_app_id = self.baidu_app_id.trim().to_owned();
+        candidate.baidu_api_key = self.baidu_api_key.trim().to_owned();
+        Ok(candidate)
+    }
+    fn changed(&self, saved: &Preferences) -> bool {
+        let saved = Self::from_preferences(saved);
+        self.normalized_engine() != saved.normalized_engine()
+            || self.baidu_app_id.trim() != saved.baidu_app_id.trim()
+            || self.baidu_api_key.trim() != saved.baidu_api_key.trim()
+    }
+}
+
+/// 其它即时设置沿旧 save 路线时，不能把此窗口持有的旧翻译配置写回去。
+pub(super) fn preserve_latest(preferences: &mut Preferences, latest: &Preferences) {
+    preferences.preserve_services_from(latest);
+    preferences.translate_target = latest.translate_target.clone();
+    preferences.image_translate_engine = latest.image_translate_engine.clone();
+    preferences.baidu_app_id = latest.baidu_app_id.clone();
+    preferences.baidu_api_key = latest.baidu_api_key.clone();
 }
 
 /// 已保存目标语言的三种形态：自动（含空）、菜单里的语言、其它自填文字。
@@ -117,195 +366,20 @@ fn menu_step(cursor: Option<usize>, key: &str) -> Option<usize> {
     })
 }
 
-/// “应用”保存的服务项；目标语言即选即存，不在草稿里。
-fn service_key(preferences: &Preferences) -> [&str; 6] {
-    [
-        &preferences.translate_endpoint,
-        &preferences.translate_model,
-        &preferences.translate_api_key,
-        &preferences.image_translate_engine,
-        &preferences.baidu_app_id,
-        &preferences.baidu_api_key,
-    ]
-}
-
-#[derive(Clone, PartialEq, Eq)]
-struct TranslationDraft {
-    service: TextService,
-    endpoint: String,
-    model: String,
-    api_key: String,
-    /// 未编辑密钥的旧草稿不能覆盖另一窗口刚保存的新密钥。
-    initial_api_key: String,
-    engine: String,
-    baidu_app_id: String,
-    baidu_api_key: String,
-}
-impl std::fmt::Debug for TranslationDraft {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TranslationDraft")
-            .field("service", &self.service)
-            .finish_non_exhaustive()
-    }
-}
-impl TranslationDraft {
-    fn from_preferences(preferences: &Preferences) -> Self {
-        Self {
-            service: TextService::detect(
-                &preferences.translate_endpoint,
-                &preferences.translate_model,
-            ),
-            endpoint: preferences.translate_endpoint.clone(),
-            model: preferences.translate_model.clone(),
-            api_key: preferences.translate_api_key.clone(),
-            initial_api_key: preferences.translate_api_key.clone(),
-            engine: preferences.image_translate_engine.clone(),
-            baidu_app_id: preferences.baidu_app_id.clone(),
-            baidu_api_key: preferences.baidu_api_key.clone(),
-        }
-    }
-    fn candidate(&self, latest: &Preferences) -> Result<Preferences> {
-        if [
-            &self.endpoint,
-            &self.model,
-            &self.api_key,
-            &self.baidu_app_id,
-            &self.baidu_api_key,
-        ]
-        .iter()
-        .any(|value| value.chars().any(char::is_control))
-        {
-            return Err(tr!(
-                "翻译设置必须是单行文字，不能含控制字符。",
-                "Translation settings must be single-line text without control characters."
-            )
-            .into());
-        }
-        let (endpoint, model) = match self.service {
-            TextService::Builtin => (
-                crate::translate::DEFAULT_ENDPOINT,
-                crate::translate::DEFAULT_MODEL,
-            ),
-            TextService::Custom => (self.endpoint.trim(), self.model.trim()),
-            TextService::Off => ("", self.model.trim()),
-        };
-        if self.service == TextService::Custom {
-            if endpoint.is_empty() {
-                return Err(tr!("请填写接口根地址。", "Enter the API base URL.").into());
-            }
-            // 沿现有 ureq 的公开 URL 解析；不调用 call/send，不解析 DNS 或连接服务。
-            let parsed = ureq::request("POST", endpoint).request_url().map_err(|_| {
-                tr!(
-                    "请输入有效的 HTTP 或 HTTPS 接口根地址。",
-                    "Enter a valid HTTP or HTTPS API base URL."
-                )
-            })?;
-            if !matches!(parsed.scheme(), "http" | "https")
-                || !parsed.as_url().username().is_empty()
-                || parsed.as_url().password().is_some()
-                || parsed.as_url().query().is_some()
-                || parsed.as_url().fragment().is_some()
-            {
-                return Err(tr!(
-                    "接口需为 HTTP 或 HTTPS 根地址，不能包含用户名、密码、查询参数或片段。",
-                    "Use an HTTP or HTTPS API base URL without credentials, a query, or a fragment."
-                )
-                .into());
-            }
-        }
-        let mut candidate = latest.clone();
-        candidate.translate_endpoint = endpoint.to_owned();
-        candidate.translate_model = model.to_owned();
-        if self.api_key != self.initial_api_key {
-            if latest.translate_api_key != self.initial_api_key
-                && latest.translate_api_key != self.api_key.trim()
-            {
-                return Err(tr!(
-                    "API Key 已在其它窗口更新，请取消修改读取最新设置后再编辑；本次草稿仍保留。",
-                    "The API key changed in another window. Cancel changes to load the latest settings before editing; this draft is kept."
-                )
-                .into());
-            }
-            candidate.set_translate_api_key(self.api_key.trim().to_owned());
-        }
-        if !candidate.translate_api_key.is_ascii()
-            || candidate.translate_api_key.chars().any(char::is_whitespace)
-        {
-            return Err(tr!(
-                "API Key 不能包含空格、控制字符或非 ASCII 字符。",
-                "The API key cannot contain spaces, control characters, or non-ASCII characters."
-            )
-            .into());
-        }
-        let needs_key = self.service == TextService::Builtin
-            || ureq::request("POST", endpoint)
-                .request_url()
-                .is_ok_and(|url| url.as_url().host_str() == Some("api.deepseek.com"));
-        if needs_key && candidate.translate_api_key.is_empty() {
-            return Err(if candidate.translate_api_key_unreadable() {
-                tr!(
-                    "已保存的 API Key 无法解密，请重新填写 DeepSeek API Key。",
-                    "The saved API key cannot be decrypted. Enter the DeepSeek API key again."
-                )
-            } else {
-                tr!(
-                    "请填写 DeepSeek API Key；保存不会发送请求。",
-                    "Enter a DeepSeek API key. Saving does not send a request."
-                )
-            }
-            .into());
-        }
-        candidate.image_translate_engine = match self.engine.trim() {
-            engine @ ("baidu" | "local") => engine.to_owned(),
-            _ => "auto".to_owned(),
-        };
-        candidate.baidu_app_id = self.baidu_app_id.trim().to_owned();
-        candidate.baidu_api_key = self.baidu_api_key.trim().to_owned();
-        Ok(candidate)
-    }
-    /// 与已保存值的实际效果不同（含校验不过的输入）时才显示“应用”条。
-    fn changed(&self, saved: &Preferences) -> bool {
-        let baseline = Self::from_preferences(saved);
-        match (self.candidate(saved), baseline.candidate(saved)) {
-            (Ok(draft), Ok(base)) => service_key(&draft) != service_key(&base),
-            _ => *self != baseline,
-        }
-    }
-}
-
-/// 发布边界只调用现有 Preferences::save；验证或写入失败都不发布内存草稿。
-fn publish(
-    latest: &Preferences,
-    draft: &TranslationDraft,
-    save: impl FnOnce(&Preferences) -> Result<()>,
-) -> Result<Preferences> {
-    let candidate = draft.candidate(latest)?;
-    save(&candidate)?;
-    Ok(candidate)
-}
-
-/// 其它即时设置沿旧 save 路线时，不能把此窗口持有的旧翻译配置写回去。
-pub(super) fn preserve_latest(preferences: &mut Preferences, latest: &Preferences) {
-    preferences.translate_endpoint = latest.translate_endpoint.clone();
-    preferences.translate_model = latest.translate_model.clone();
-    preferences.preserve_translate_api_key_from(latest);
-    preferences.translate_target = latest.translate_target.clone();
-    preferences.image_translate_engine = latest.image_translate_engine.clone();
-    preferences.baidu_app_id = latest.baidu_app_id.clone();
-    preferences.baidu_api_key = latest.baidu_api_key.clone();
-}
-
 pub(super) struct TranslationFields {
+    /// 服务配置编辑器的输入框；同一时间只展开一项。
+    name: Entity<TextField>,
     endpoint: Entity<TextField>,
     model: Entity<TextField>,
     api_key: Entity<TextField>,
+    /// 正在编辑的配置 id；`Some("")` 表示新增。
+    editing: Option<String>,
     initial_api_key: String,
+    vision: bool,
     /// “其它语言”输入框；回车直接保存目标语言，不进草稿。
     target: Entity<TextField>,
     baidu_app_id: Entity<TextField>,
     baidu_api_key: Entity<TextField>,
-    /// 文字翻译服务来源草稿，随“应用”保存。
-    service: TextService,
     /// 图片翻译引擎草稿（auto / baidu / local），随“应用”保存。
     engine: String,
     /// 目标语言下拉是否展开。
@@ -315,8 +389,8 @@ pub(super) struct TranslationFields {
     menu_cursor: Option<usize>,
     /// “其它语言”输入行是否显示。
     custom_target: bool,
-    /// 高级里“翻译服务”“图片翻译”两行是否展开。
-    service_open: bool,
+    /// 展开中的功能服务下拉。
+    service_menu: Option<Feature>,
     image_open: bool,
     _subscriptions: Vec<Subscription>,
 }
@@ -326,20 +400,24 @@ impl TranslationFields {
         window: &mut Window,
         cx: &mut Context<SettingsView>,
     ) -> Self {
+        let name = cx.new(|cx| {
+            TextField::new_settings(
+                String::new(),
+                crate::i18n::Text("如 本机 Ollama", "e.g. Local Ollama"),
+                cx,
+            )
+        });
         let endpoint = cx.new(|cx| {
             TextField::new_settings(
-                preferences.translate_endpoint.clone(),
+                String::new(),
                 crate::i18n::Text("https://example.com/v1", "https://example.com/v1"),
                 cx,
             )
         });
         let model = cx.new(|cx| {
             TextField::new_settings(
-                preferences.translate_model.clone(),
-                crate::i18n::Text(
-                    crate::translate::DEFAULT_MODEL,
-                    crate::translate::DEFAULT_MODEL,
-                ),
+                String::new(),
+                crate::i18n::Text("模型名称", "Model name"),
                 cx,
             )
         });
@@ -356,7 +434,7 @@ impl TranslationFields {
         });
         let api_key = cx.new(|cx| {
             TextField::new_secret_settings(
-                preferences.translate_api_key.clone(),
+                String::new(),
                 crate::i18n::Text(
                     "填写 API Key（仅本机加密保存）",
                     "API key (encrypted locally)",
@@ -381,11 +459,12 @@ impl TranslationFields {
         // Tab 顺序与页面自上而下一致。
         let fields = [
             &target,
+            &baidu_app_id,
+            &baidu_api_key,
+            &name,
             &endpoint,
             &model,
             &api_key,
-            &baidu_app_id,
-            &baidu_api_key,
         ];
         let group: Vec<_> = fields.iter().map(|field| field.downgrade()).collect();
         let mut subscriptions = Vec::new();
@@ -400,7 +479,13 @@ impl TranslationFields {
                     TextFieldEvent::Submit if *field == view.translation_fields.target => {
                         view.save_custom_target(cx)
                     }
-                    TextFieldEvent::Submit => view.apply_translation(cx),
+                    TextFieldEvent::Submit
+                        if *field == view.translation_fields.baidu_app_id
+                            || *field == view.translation_fields.baidu_api_key =>
+                    {
+                        view.apply_image(cx)
+                    }
+                    TextFieldEvent::Submit => view.save_profile(cx),
                     TextFieldEvent::Changed => {
                         view.status.clear();
                         cx.notify();
@@ -412,39 +497,39 @@ impl TranslationFields {
                 .push(cx.observe_in(field, window, |_: &mut SettingsView, _, _, cx| cx.notify()));
         }
         Self {
+            name,
             endpoint,
             model,
             api_key,
-            initial_api_key: preferences.translate_api_key.clone(),
+            editing: None,
+            initial_api_key: String::new(),
+            vision: false,
             target,
             baidu_app_id,
             baidu_api_key,
-            service: TextService::detect(
-                &preferences.translate_endpoint,
-                &preferences.translate_model,
-            ),
             engine: preferences.image_translate_engine.clone(),
             target_menu: false,
             menu_focus: cx.focus_handle(),
             menu_cursor: None,
             custom_target: false,
-            service_open: preferences.translate_api_key_unreadable()
-                || (preferences.translate_api_key.is_empty()
-                    && TextService::detect(
-                        &preferences.translate_endpoint,
-                        &preferences.translate_model,
-                    ) == TextService::Builtin),
+            service_menu: None,
             image_open: false,
             _subscriptions: subscriptions,
         }
     }
-    fn read(&self, cx: &App) -> TranslationDraft {
-        TranslationDraft {
-            service: self.service,
+    fn read_profile(&self, cx: &App) -> ProfileDraft {
+        ProfileDraft {
+            id: self.editing.clone().unwrap_or_default(),
+            name: self.name.read(cx).text().to_owned(),
             endpoint: self.endpoint.read(cx).text().to_owned(),
             model: self.model.read(cx).text().to_owned(),
             api_key: self.api_key.read(cx).text().to_owned(),
             initial_api_key: self.initial_api_key.clone(),
+            vision: self.vision,
+        }
+    }
+    fn read_image(&self, cx: &App) -> ImageDraft {
+        ImageDraft {
             engine: self.engine.clone(),
             baidu_app_id: self.baidu_app_id.read(cx).text().to_owned(),
             baidu_api_key: self.baidu_api_key.read(cx).text().to_owned(),
@@ -452,6 +537,7 @@ impl TranslationFields {
     }
     pub(super) fn is_composing(&self, cx: &App) -> bool {
         [
+            &self.name,
             &self.endpoint,
             &self.model,
             &self.api_key,
@@ -462,33 +548,33 @@ impl TranslationFields {
         .iter()
         .any(|field| field.read(cx).is_composing())
     }
-    /// 只重置“应用”管的服务草稿；目标语言与展开状态不动。
-    fn reset(&mut self, preferences: &Preferences, cx: &mut Context<SettingsView>) {
-        let draft = TranslationDraft::from_preferences(preferences);
-        self.service = draft.service;
-        self.initial_api_key = preferences.translate_api_key.clone();
-        self.engine = draft.engine;
+    /// 展开一项配置（`id` 为空即新增），输入框换成它的已保存值。
+    fn open_editor(&mut self, id: &str, preferences: &Preferences, cx: &mut Context<SettingsView>) {
+        let draft = preferences
+            .service_profile(id)
+            .map(ProfileDraft::from_profile)
+            .unwrap_or_default();
+        self.editing = Some(draft.id.clone());
+        self.initial_api_key = draft.initial_api_key;
+        self.vision = draft.vision;
         for (field, text) in [
+            (&self.name, draft.name),
             (&self.endpoint, draft.endpoint),
             (&self.model, draft.model),
             (&self.api_key, draft.api_key),
+        ] {
+            field.update(cx, |view, cx| view.set_text(text, cx));
+        }
+    }
+    fn reset_image(&mut self, preferences: &Preferences, cx: &mut Context<SettingsView>) {
+        let draft = ImageDraft::from_preferences(preferences);
+        self.engine = draft.engine;
+        for (field, text) in [
             (&self.baidu_app_id, draft.baidu_app_id),
             (&self.baidu_api_key, draft.baidu_api_key),
         ] {
             field.update(cx, |view, cx| view.set_text(text, cx));
         }
-    }
-    fn select_service(&mut self, service: TextService, cx: &mut Context<SettingsView>) {
-        if service == TextService::Custom && self.service != TextService::Custom {
-            let endpoint = self.endpoint.read(cx).text().trim().trim_end_matches('/');
-            if endpoint.is_empty() || endpoint == crate::translate::DEFAULT_ENDPOINT {
-                // 从内置／关闭切到自定义时清掉内置地址，避免误以为已填好自己的接口。
-                for field in [&self.endpoint, &self.model] {
-                    field.update(cx, |view, cx| view.set_text(String::new(), cx));
-                }
-            }
-        }
-        self.service = service;
     }
 }
 
@@ -506,29 +592,125 @@ impl SettingsView {
             true
         }
     }
-    fn apply_translation(&mut self, cx: &mut Context<Self>) {
+    /// 功能选用哪项服务即选即存，只改这一项。
+    fn select_feature_profile(&mut self, feature: Feature, id: String, cx: &mut Context<Self>) {
+        self.translation_fields.service_menu = None;
+        let latest = Preferences::load();
+        self.preferences = latest.clone();
+        feature.set(&mut self.preferences, id);
+        if !self.save_preferences() {
+            self.preferences = latest;
+            cx.notify();
+            return;
+        }
+        self.status = match self
+            .preferences
+            .service_profile(feature.selected(&self.preferences))
+        {
+            Some(profile) => trf!(
+                "已保存：{}使用 {}，下次使用时生效。",
+                "Saved: {} uses {} from the next use.",
+                feature.title(),
+                profile.display_name()
+            ),
+            None => trf!("已关闭{}。", "{} is off.", feature.title()),
+        };
+        cx.notify();
+    }
+    fn toggle_editor(&mut self, id: &str, cx: &mut Context<Self>) {
         if !self.translation_controls_ready(cx) {
             return;
         }
-        let draft = self.translation_fields.read(cx);
+        if self.translation_fields.editing.as_deref() == Some(id) {
+            self.translation_fields.editing = None;
+        } else {
+            let latest = Preferences::load();
+            self.translation_fields.open_editor(id, &latest, cx);
+            preserve_latest(&mut self.preferences, &latest);
+        }
+        self.status.clear();
+        cx.notify();
+    }
+    fn save_profile(&mut self, cx: &mut Context<Self>) {
+        if self.translation_fields.editing.is_none() || !self.translation_controls_ready(cx) {
+            return;
+        }
+        let draft = self.translation_fields.read_profile(cx);
         let latest = Preferences::load();
-        self.status = match publish(&latest, &draft, Preferences::save) {
-            Ok(saved) => {
-                self.translation_fields.reset(&saved, cx);
+        self.status = match draft
+            .candidate(&latest)
+            .and_then(|(candidate, id)| candidate.save().map(|()| (candidate, id)))
+        {
+            Ok((saved, id)) => {
+                let name = saved
+                    .service_profile(&id)
+                    .map(ServiceProfile::display_name)
+                    .unwrap_or_default();
                 self.preferences = saved;
-                if self.preferences.translate_endpoint.is_empty() {
-                    tr!(
-                        "已关闭文字翻译；设置已保存。",
-                        "Text translation off; settings saved."
-                    )
-                    .into()
-                } else {
-                    tr!(
-                        "服务设置已保存，下次翻译生效。",
-                        "Service settings saved for the next translation."
-                    )
-                    .into()
-                }
+                self.translation_fields.editing = None;
+                trf!("已保存服务“{}”。", "Saved service “{}”.", name)
+            }
+            Err(error) => trf!("服务未保存：{error}", "Service not saved: {error}"),
+        };
+        cx.notify();
+    }
+    /// 正在被功能选用的配置不能删，先换成别的服务。
+    fn delete_profile(&mut self, id: String, cx: &mut Context<Self>) {
+        if !self.translation_controls_ready(cx) {
+            return;
+        }
+        let mut latest = Preferences::load();
+        let Some(profile) = latest.service_profile(&id).cloned() else {
+            self.translation_fields.editing = None;
+            cx.notify();
+            return;
+        };
+        if let Some(feature) = [Feature::Translate, Feature::Formula]
+            .into_iter()
+            .find(|feature| feature.selected(&latest) == id)
+        {
+            self.status = trf!(
+                "“{}”正用于{}，请先在上方换成其它服务。",
+                "“{}” is used for {}. Choose another service above first.",
+                profile.display_name(),
+                feature.title()
+            );
+            cx.notify();
+            return;
+        }
+        latest.service_profiles.retain(|profile| profile.id != id);
+        self.status = match latest.save() {
+            Ok(()) => {
+                self.preferences = latest;
+                self.translation_fields.editing = None;
+                trf!(
+                    "已删除服务“{}”。",
+                    "Deleted service “{}”.",
+                    profile.display_name()
+                )
+            }
+            Err(error) => trf!("服务未删除：{error}", "Service not deleted: {error}"),
+        };
+        cx.notify();
+    }
+    fn apply_image(&mut self, cx: &mut Context<Self>) {
+        if !self.translation_controls_ready(cx) {
+            return;
+        }
+        let draft = self.translation_fields.read_image(cx);
+        let latest = Preferences::load();
+        self.status = match draft
+            .candidate(&latest)
+            .and_then(|candidate| candidate.save().map(|()| candidate))
+        {
+            Ok(saved) => {
+                self.translation_fields.reset_image(&saved, cx);
+                self.preferences = saved;
+                tr!(
+                    "图片翻译设置已保存，下次翻译生效。",
+                    "Image translation settings saved for the next translation."
+                )
+                .into()
             }
             Err(error) => trf!(
                 "翻译设置未保存：{error}",
@@ -537,43 +719,42 @@ impl SettingsView {
         };
         cx.notify();
     }
-    fn cancel_translation_changes(&mut self, cx: &mut Context<Self>) {
+    fn cancel_image_changes(&mut self, cx: &mut Context<Self>) {
         if !self.translation_controls_ready(cx) {
             return;
         }
         let latest = Preferences::load();
-        self.translation_fields.reset(&latest, cx);
+        self.translation_fields.reset_image(&latest, cx);
         preserve_latest(&mut self.preferences, &latest);
-        self.status = tr!(
-            "已取消修改，保留已保存的翻译设置。",
-            "Changes canceled; saved translation settings are kept."
-        )
-        .into();
+        self.status.clear();
         cx.notify();
     }
-    /// 目标语言即时复位为自动；服务默认值只进草稿，仍需“应用”。
+    /// 功能选择、目标语言与图片引擎立即恢复默认；服务配置和已填的 Key 保留。
     fn reset_translation_defaults(&mut self, cx: &mut Context<Self>) {
         if !self.translation_controls_ready(cx) {
             return;
         }
-        let mut defaults = Preferences::default();
-        defaults.preserve_translate_api_key_from(&Preferences::load());
-        self.translation_fields.reset(&defaults, cx);
-        self.translation_fields.custom_target = false;
-        if Target::of(&self.preferences.translate_target) != Target::Auto
-            && !self.save_translation_target(defaults.translate_target.clone())
-        {
+        let latest = Preferences::load();
+        let defaults = Preferences::default();
+        self.preferences = latest.clone();
+        self.preferences.translate_profile = defaults.translate_profile;
+        self.preferences.formula_profile = defaults.formula_profile;
+        self.preferences.translate_target = defaults.translate_target;
+        self.preferences.image_translate_engine = defaults.image_translate_engine;
+        if !self.save_preferences() {
+            self.preferences = latest;
             cx.notify();
             return;
         }
-        self.status = if self.translation_fields.read(cx).changed(&self.preferences) {
-            tr!(
-                "“译成”已恢复为自动；服务默认值已填入，点击应用后生效。",
-                "Target reset to Auto; service defaults filled in, click Apply to use them."
-            )
-        } else {
-            tr!("已恢复默认。", "Defaults restored.")
-        }
+        let fields = &mut self.translation_fields;
+        fields.custom_target = false;
+        fields.service_menu = None;
+        let saved = self.preferences.clone();
+        self.translation_fields.reset_image(&saved, cx);
+        self.status = tr!(
+            "已恢复默认：翻译用 Index，公式用 DeepSeek，译成自动；服务配置与 Key 保留。",
+            "Defaults restored: Index for translation, DeepSeek for formulas, target Auto. Services and keys are kept."
+        )
         .into();
         cx.notify();
     }
@@ -677,28 +858,17 @@ impl SettingsView {
         let palette = crate::theme::palette(cx);
         let surface = widgets::surface(cx);
         let fields = &self.translation_fields;
-        let changed = fields.read(cx).changed(&self.preferences);
-        let target_card = widgets::card(surface, [self.target_row(cx).into_any_element()])
-            .when(fields.custom_target, |card| {
-                card.child(self.custom_target_row(cx))
-            });
-        let service = div()
-            .flex()
-            .flex_col()
-            .child(self.service_row(cx))
-            .when(fields.service_open, |row| row.child(self.service_panel(cx)));
+        let image_changed = fields.read_image(cx).changed(&self.preferences);
         let image = div()
+            .w_full()
             .flex()
             .flex_col()
             .child(self.image_row(cx))
-            .when(fields.image_open, |row| row.child(self.image_panel(cx)));
-        let advanced = widgets::section(tr!("高级", "Advanced"), palette).child(
-            widgets::card(
-                surface,
-                [service.into_any_element(), image.into_any_element()],
-            )
-            .when(changed, |card| {
-                card.child(
+            .when(fields.image_open || image_changed, |row| {
+                row.child(self.image_panel(cx))
+            })
+            .when(image_changed, |row| {
+                row.child(
                     div()
                         .m_1()
                         .px_3()
@@ -710,8 +880,8 @@ impl SettingsView {
                         .rounded_md()
                         .bg(rgba((palette.accent << 8) | 0x24))
                         .child(div().flex_1().min_w(px(140.)).text_size(px(13.)).child(tr!(
-                            "服务设置有改动，应用后下次翻译生效。",
-                            "Service changes take effect after Apply."
+                            "图片翻译有改动，应用后下次翻译生效。",
+                            "Image translation changes take effect after Apply."
                         )))
                         .child(
                             widgets::button(
@@ -722,9 +892,7 @@ impl SettingsView {
                                 surface,
                             )
                             .child(self.settings_probe("settings-translation-cancel"))
-                            .on_click(
-                                cx.listener(|view, _, _, cx| view.cancel_translation_changes(cx)),
-                            ),
+                            .on_click(cx.listener(|view, _, _, cx| view.cancel_image_changes(cx))),
                         )
                         .child(
                             widgets::button(
@@ -735,56 +903,579 @@ impl SettingsView {
                                 surface,
                             )
                             .child(self.settings_probe("settings-translation-apply"))
-                            .on_click(cx.listener(|view, _, _, cx| view.apply_translation(cx))),
+                            .on_click(cx.listener(|view, _, _, cx| view.apply_image(cx))),
                         ),
                 )
-            }),
-        );
-        let footer = div()
+            });
+        let mut features = vec![
+            self.feature_row(Feature::Translate, cx).into_any_element(),
+            self.target_row(cx).into_any_element(),
+        ];
+        if fields.custom_target {
+            features.push(self.custom_target_row(cx).into_any_element());
+        }
+        features.push(self.feature_row(Feature::Formula, cx).into_any_element());
+        features.push(image.into_any_element());
+        let restore = div()
+            .id("settings-translation-defaults")
+            .relative()
+            .px_1()
+            .cursor_pointer()
+            .text_size(px(12.))
+            .text_color(rgb(palette.accent))
+            .hover(|style| style.opacity(0.8))
+            .child(tr!("恢复默认", "Restore defaults"))
+            .child(self.settings_probe("settings-translation-defaults"))
+            .on_click(cx.listener(|view, _, _, cx| view.reset_translation_defaults(cx)));
+        let uses = div()
             .flex()
-            .flex_wrap()
-            .items_center()
+            .flex_col()
+            .flex_shrink_0()
             .gap_2()
-            .child(widgets::note(
-                tr!(
-                    "公式识别发送选区图片；翻译只发送文字；表格识别在本机。选择百度图片翻译时也会上传选区。",
-                    "Formula recognition sends the selection image; translation sends text; tables stay local. Baidu image translation also uploads the selection."
-                ),
+            .child(section_header(
+                tr!("各功能使用", "Features"),
+                restore,
                 palette,
             ))
-            .child(
+            .child(widgets::card(surface, features).w_full());
+        let mut profiles: Vec<AnyElement> = Vec::new();
+        for profile in &self.preferences.service_profiles {
+            let open = fields.editing.as_deref() == Some(profile.id.as_str());
+            profiles.push(
                 div()
-                    .id("settings-translation-defaults")
-                    .relative()
-                    .px_1()
-                    .cursor_pointer()
-                    .text_size(px(12.))
-                    .text_color(rgb(palette.accent))
-                    .hover(|style| style.opacity(0.8))
-                    .child(tr!("全部恢复默认", "Restore defaults"))
-                    .child(self.settings_probe("settings-translation-defaults"))
-                    .on_click(cx.listener(|view, _, _, cx| view.reset_translation_defaults(cx))),
+                    .w_full()
+                    .flex()
+                    .flex_col()
+                    .child(self.profile_row(profile, open, cx))
+                    .when(open, |row| {
+                        row.child(self.profile_editor(Some(profile), cx))
+                    })
+                    .into_any_element(),
             );
+        }
+        if fields.editing.as_deref() == Some("") {
+            profiles.push(
+                div()
+                    .w_full()
+                    .flex()
+                    .flex_col()
+                    .child(widgets::row(
+                        tr!("新服务", "New service"),
+                        Some(
+                            tr!(
+                                "OpenAI 兼容接口，如本机 Ollama、LM Studio 或其它在线服务。",
+                                "Any OpenAI-compatible API, such as local Ollama, LM Studio, or another online service."
+                            )
+                            .into(),
+                        ),
+                        palette,
+                    ))
+                    .child(self.profile_editor(None, cx))
+                    .into_any_element(),
+            );
+        }
+        let add = widgets::button(
+            "settings-translation-profile-add",
+            tr!("添加服务", "Add service"),
+            ButtonKind::Secondary,
+            palette,
+            surface,
+        )
+        .h(px(28.))
+        .text_size(px(12.))
+        .child(self.settings_probe("settings-translation-profile-add"))
+        .on_click(cx.listener(|view, _, _, cx| view.toggle_editor("", cx)));
+        let services = div()
+            .flex()
+            .flex_col()
+            .flex_shrink_0()
+            .gap_2()
+            .child(section_header(tr!("服务配置", "Services"), add, palette))
+            .child(widgets::card(surface, profiles).w_full());
+        let footer = div().w_full().child(
+            widgets::note(
+                tr!(
+                    "翻译只发送所选文字；公式识别只发送选区图片；表格识别在本机。Key 仅当前 Windows 用户可解密。",
+                    "Translation sends only the selected text; formulas send only the selection image; tables stay local. Keys are encrypted for this Windows user."
+                ),
+                palette,
+            )
+            .w_full(),
+        );
         div()
+            .w_full()
             .flex()
             .flex_col()
             .flex_shrink_0()
             .gap_4()
-            .child(target_card)
-            .child(advanced)
+            .child(uses)
+            .child(services)
             .child(footer)
             .into_any_element()
+    }
+    /// 功能行：右侧下拉选择服务；所选服务缺 Key 时说明里直接提示。
+    fn feature_row(&self, feature: Feature, cx: &mut Context<Self>) -> gpui::Div {
+        let palette = crate::theme::palette(cx);
+        let surface = widgets::surface(cx);
+        let saved = &self.preferences;
+        let selected = saved.service_profile(feature.selected(saved));
+        let missing_key =
+            selected.is_some_and(|profile| profile.needs_key() && profile.api_key.is_empty());
+        let description: SharedString = match (selected, feature) {
+            (None, Feature::Translate) => tr!(
+                "已关闭；OCR 结果不再显示翻译入口。",
+                "Off; OCR results no longer offer translation."
+            )
+            .into(),
+            (None, Feature::Formula) => tr!(
+                "已关闭；表格识别在本机，不受影响。",
+                "Off; local table recognition is unaffected."
+            )
+            .into(),
+            (Some(profile), _) if profile.key_unreadable() => tr!(
+                "API Key 无法解密，请在下方服务配置中重新填写。",
+                "The API key cannot be decrypted. Enter it again under Services below."
+            )
+            .into(),
+            (Some(_), _) if missing_key => tr!(
+                "还没有填写 API Key，请在下方服务配置中填写。",
+                "No API key yet. Enter it under Services below."
+            )
+            .into(),
+            (Some(profile), Feature::Translate) => trf!(
+                "{} · 只发送所选文字。",
+                "{} · Sends only the selected text.",
+                profile.effective_model()
+            )
+            .into(),
+            (Some(profile), Feature::Formula) => trf!(
+                "{} · 只发送选区图片。",
+                "{} · Sends only the selection image.",
+                profile.effective_model()
+            )
+            .into(),
+        };
+        let open = self.translation_fields.service_menu == Some(feature);
+        let label: SharedString = selected
+            .map_or_else(
+                || tr!("关闭", "Off").to_owned(),
+                ServiceProfile::display_name,
+            )
+            .into();
+        let trigger_id = format!("settings-translation-{}-service", feature.key());
+        let trigger = div()
+            .id(SharedString::from(trigger_id.clone()))
+            .relative()
+            .h(px(32.))
+            .w(px(220.))
+            .pl_3()
+            .pr_2()
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .gap_2()
+            .rounded_md()
+            .border_1()
+            .border_color(rgb(if open {
+                palette.accent
+            } else if missing_key {
+                palette.danger
+            } else {
+                palette.border
+            }))
+            .bg(rgb(surface.raised))
+            .text_size(px(13.))
+            .cursor_pointer()
+            .hover(move |style| style.bg(rgb(palette.hover)))
+            .on_click(cx.listener(move |view, _, _, cx| {
+                let fields = &mut view.translation_fields;
+                fields.target_menu = false;
+                fields.service_menu = (fields.service_menu != Some(feature)).then_some(feature);
+                cx.notify();
+            }))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .when(selected.is_none(), |label| {
+                        label.text_color(rgb(palette.muted))
+                    })
+                    .child(label),
+            )
+            .child(
+                toolbar_icons::action(
+                    if open { Icon::ChevronUp } else { Icon::Chevron },
+                    palette.muted,
+                )
+                .size(px(14.)),
+            )
+            .child(self.settings_probe(trigger_id));
+        let control = div()
+            .relative()
+            .flex_shrink_0()
+            .child(trigger)
+            .when(open, |control| {
+                control
+                    .child(deferred(
+                        anchored()
+                            .position(point(px(0.), px(0.)))
+                            .snap_to_window()
+                            .child(
+                                div()
+                                    .id("settings-translation-service-backdrop")
+                                    .w(px(8000.))
+                                    .h(px(8000.))
+                                    .occlude()
+                                    .on_any_mouse_down(cx.listener(|view, _, _, cx| {
+                                        view.translation_fields.service_menu = None;
+                                        cx.notify();
+                                    })),
+                            ),
+                    ))
+                    .child(
+                        div().absolute().right_0().bottom_0().child(
+                            deferred(
+                                anchored()
+                                    .anchor(Corner::TopRight)
+                                    .offset(point(px(0.), px(4.)))
+                                    .snap_to_window_with_margin(Edges::all(px(8.)))
+                                    .child(self.service_menu(feature, cx)),
+                            )
+                            .with_priority(1),
+                        ),
+                    )
+            });
+        widgets::row(feature.title(), Some(description), palette).child(control)
+    }
+    fn service_menu(&self, feature: Feature, cx: &mut Context<Self>) -> impl IntoElement {
+        let palette = crate::theme::palette(cx);
+        let menu_bg = if crate::theme::is_light(cx) {
+            0xffffff
+        } else {
+            0x262d36
+        };
+        let current = feature.selected(&self.preferences).to_owned();
+        let mut options: Vec<(String, SharedString, Option<String>)> = self
+            .preferences
+            .service_profiles
+            .iter()
+            .filter(|profile| feature.accepts(profile))
+            .map(|profile| {
+                (
+                    profile.id.clone(),
+                    profile.display_name().into(),
+                    Some(profile.effective_model().to_owned()),
+                )
+            })
+            .collect();
+        options.push((String::new(), tr!("关闭", "Off").into(), None));
+        div()
+            .id(SharedString::from(format!(
+                "settings-translation-{}-menu",
+                feature.key()
+            )))
+            .occlude()
+            .w(px(260.))
+            .p_1()
+            .flex()
+            .flex_col()
+            .rounded_lg()
+            .border_1()
+            .border_color(rgb(palette.border))
+            .bg(rgb(menu_bg))
+            .shadow_lg()
+            .children(options.into_iter().map(|(id, name, model)| {
+                let selected = id == current;
+                let probe = format!(
+                    "settings-translation-{}-option-{}",
+                    feature.key(),
+                    if id.is_empty() { "off" } else { id.as_str() }
+                );
+                div()
+                    .id(SharedString::from(probe.clone()))
+                    .relative()
+                    .min_h(px(32.))
+                    .px(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .rounded_md()
+                    .cursor_pointer()
+                    .text_size(px(13.))
+                    .hover(move |style| style.bg(rgb(palette.hover)))
+                    .child(div().size(px(14.)).flex_shrink_0().when(selected, |slot| {
+                        slot.child(
+                            toolbar_icons::action(Icon::Confirm, palette.accent).size(px(14.)),
+                        )
+                    }))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .when(selected, |label| {
+                                label
+                                    .text_color(rgb(palette.accent))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                            })
+                            .child(name),
+                    )
+                    .when_some(model, |item, model| {
+                        item.child(
+                            div()
+                                .flex_shrink_0()
+                                .max_w(px(110.))
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(px(12.))
+                                .text_color(rgb(palette.muted))
+                                .child(model),
+                        )
+                    })
+                    .child(self.settings_probe(probe))
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.select_feature_profile(feature, id.clone(), cx)
+                    }))
+            }))
+    }
+    /// 配置列表的一行：名称、模型与能力、Key 状态及被哪些功能选用；点击展开编辑。
+    fn profile_row(
+        &self,
+        profile: &ServiceProfile,
+        open: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let palette = crate::theme::palette(cx);
+        let surface = widgets::surface(cx);
+        let capability = if profile.supports_vision() {
+            tr!("文字、图像", "Text, images")
+        } else {
+            tr!("文字", "Text")
+        };
+        let mut description = format!("{} · {capability}", profile.effective_model());
+        if profile.builtin().is_none() {
+            description.push_str(" · ");
+            description.push_str(host(&profile.endpoint));
+        }
+        let (status, warn): (&str, bool) = if profile.key_unreadable() {
+            (tr!("Key 无法解密", "Key unreadable"), true)
+        } else if !profile.api_key.is_empty() {
+            (tr!("Key 已保存", "Key saved"), false)
+        } else if profile.needs_key() {
+            (tr!("缺 Key", "Needs key"), true)
+        } else {
+            (tr!("免 Key", "No key"), false)
+        };
+        let uses: Vec<&str> = [Feature::Translate, Feature::Formula]
+            .into_iter()
+            .filter(|feature| feature.selected(&self.preferences) == profile.id)
+            .map(|feature| match feature {
+                Feature::Translate => tr!("翻译", "Translation"),
+                Feature::Formula => tr!("公式", "Formulas"),
+            })
+            .collect();
+        let id = profile.id.clone();
+        let probe = format!("settings-translation-profile-{}", profile.id);
+        widgets::row(profile.display_name(), Some(description.into()), palette)
+            .id(SharedString::from(probe.clone()))
+            .cursor_pointer()
+            .hover(move |style| style.bg(rgb(surface.nav_hover)))
+            .when(!uses.is_empty(), |row| {
+                row.child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(12.))
+                        .text_color(rgb(palette.muted))
+                        .child(trf!("用于{}", "For {}", uses.join(tr!("、", ", ")))),
+                )
+            })
+            .child(
+                div()
+                    .h(px(22.))
+                    .px_2()
+                    .flex()
+                    .flex_shrink_0()
+                    .items_center()
+                    .rounded_md()
+                    .text_size(px(12.))
+                    .when(warn, |badge| {
+                        badge
+                            .bg(rgba(palette.danger_bg))
+                            .text_color(rgb(palette.danger))
+                    })
+                    .when(!warn, |badge| {
+                        badge.bg(rgb(surface.track)).text_color(rgb(palette.muted))
+                    })
+                    .child(status),
+            )
+            .child(
+                toolbar_icons::action(
+                    if open { Icon::ChevronUp } else { Icon::Chevron },
+                    palette.muted,
+                )
+                .size(px(16.)),
+            )
+            .child(self.settings_probe(probe))
+            .on_click(cx.listener(move |view, _, _, cx| view.toggle_editor(&id, cx)))
+    }
+    /// 展开的编辑器：内置服务只改模型和 Key；自定义服务还可改名称、地址和图像能力。
+    fn profile_editor(
+        &self,
+        profile: Option<&ServiceProfile>,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        let palette = crate::theme::palette(cx);
+        let surface = widgets::surface(cx);
+        let fields = &self.translation_fields;
+        let builtin = profile.and_then(ServiceProfile::builtin);
+        let needs_key = profile.is_some_and(ServiceProfile::needs_key);
+        let label = |text: &'static str| {
+            div()
+                .px_1()
+                .text_size(px(12.))
+                .text_color(rgb(palette.foreground))
+                .child(text)
+        };
+        let mut panel = div().w_full().flex().flex_col().gap_2().px_3().pb(px(14.));
+        if builtin.is_none() {
+            panel = panel
+                .child(label(tr!("名称", "Name")))
+                .child(self.translation_field("settings-translation-profile-name", &fields.name))
+                .child(label(tr!("接口根地址", "API base URL")))
+                .child(self.translation_field("settings-translation-endpoint", &fields.endpoint))
+                .child(widgets::note(
+                    tr!(
+                        "OpenAI 兼容接口，通常以 /v1 结尾。",
+                        "OpenAI-compatible API, usually ending in /v1."
+                    ),
+                    palette,
+                ));
+        }
+        panel = panel
+            .child(label(tr!("模型", "Model")))
+            .child(self.translation_field("settings-translation-model", &fields.model));
+        if let Some(builtin) = builtin {
+            panel = panel.child(widgets::note(
+                trf!(
+                    "留空使用默认模型 {}。",
+                    "Leave empty for the default model {}.",
+                    builtin.model
+                ),
+                palette,
+            ));
+        }
+        panel = panel
+            .child(label(if needs_key {
+                "API Key"
+            } else {
+                tr!("API Key（可选）", "API key (optional)")
+            }))
+            .child(self.translation_field("settings-translation-api-key", &fields.api_key))
+            .when(profile.is_some_and(ServiceProfile::key_unreadable), |panel| {
+                panel.child(widgets::note(
+                    tr!(
+                        "原 API Key 无法解密，请重新填写；原密文仍保留。",
+                        "The saved API key cannot be decrypted. Enter it again; its encrypted value is kept."
+                    ),
+                    palette,
+                ))
+            });
+        if builtin.is_none() {
+            let vision = fields.vision;
+            panel = panel.child(
+                div()
+                    .id("settings-translation-profile-vision")
+                    .relative()
+                    .flex()
+                    .items_center()
+                    .gap_3()
+                    .px_1()
+                    .py_1()
+                    .cursor_pointer()
+                    .child(widgets::switch(vision, palette, surface))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .text_size(px(13.))
+                            .text_color(rgb(palette.foreground))
+                            .child(tr!(
+                                "支持图像输入（可用于公式识别）",
+                                "Accepts images (usable for formulas)"
+                            )),
+                    )
+                    .child(self.settings_probe("settings-translation-profile-vision"))
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.translation_fields.vision = !view.translation_fields.vision;
+                        cx.notify();
+                    })),
+            );
+        }
+        let mut actions = div().flex().items_center().gap_2().pt_1();
+        if let Some(profile) = profile.filter(|profile| profile.builtin().is_none()) {
+            let id = profile.id.clone();
+            actions = actions.child(
+                div()
+                    .id("settings-translation-profile-delete")
+                    .relative()
+                    .px_1()
+                    .cursor_pointer()
+                    .text_size(px(12.))
+                    .text_color(rgb(palette.danger))
+                    .hover(|style| style.opacity(0.8))
+                    .child(tr!("删除这项服务", "Delete service"))
+                    .child(self.settings_probe("settings-translation-profile-delete"))
+                    .on_click(
+                        cx.listener(move |view, _, _, cx| view.delete_profile(id.clone(), cx)),
+                    ),
+            );
+        }
+        actions = actions
+            .child(div().flex_1())
+            .child(
+                widgets::button(
+                    "settings-translation-profile-cancel",
+                    tr!("取消", "Cancel"),
+                    ButtonKind::Secondary,
+                    palette,
+                    surface,
+                )
+                .child(self.settings_probe("settings-translation-profile-cancel"))
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.translation_fields.editing = None;
+                    view.status.clear();
+                    cx.notify();
+                })),
+            )
+            .child(
+                widgets::button(
+                    "settings-translation-profile-save",
+                    tr!("保存", "Save"),
+                    ButtonKind::Primary,
+                    palette,
+                    surface,
+                )
+                .child(self.settings_probe("settings-translation-profile-save"))
+                .on_click(cx.listener(|view, _, _, cx| view.save_profile(cx))),
+            );
+        panel.child(actions)
     }
     fn target_row(&self, cx: &mut Context<Self>) -> gpui::Div {
         let palette = crate::theme::palette(cx);
         let surface = widgets::surface(cx);
-        let off = self.preferences.translate_endpoint.trim().is_empty();
+        let off = self.preferences.translate_profile.is_empty();
         let target = Target::of(&self.preferences.translate_target);
         let open = self.translation_fields.target_menu && !off;
         let description: SharedString = if off {
             tr!(
-                "文字翻译已关闭，可在下方“翻译服务”中开启。",
-                "Text translation is off. Turn it on under Translation service below."
+                "文字翻译已关闭，可在上一行选择服务开启。",
+                "Text translation is off. Choose a service in the row above."
             )
             .into()
         } else if target == Target::Auto {
@@ -829,6 +1520,7 @@ impl SettingsView {
                     .hover(move |style| style.bg(rgb(palette.hover)))
                     .on_click(cx.listener(|view, _, window, cx| {
                         let fields = &mut view.translation_fields;
+                        fields.service_menu = None;
                         fields.target_menu = !fields.target_menu;
                         fields.menu_cursor = None;
                         if fields.target_menu {
@@ -1138,151 +1830,6 @@ impl SettingsView {
             )
             .child(self.settings_probe(id))
     }
-    fn service_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let saved = &self.preferences;
-        let service = TextService::detect(&saved.translate_endpoint, &saved.translate_model);
-        let (badge, description): (_, SharedString) = match service {
-            TextService::Builtin => (
-                "DeepSeek",
-                if saved.translate_api_key_unreadable() {
-                    tr!(
-                        "API Key 无法解密，请重新填写。",
-                        "API key cannot be decrypted; enter it again."
-                    )
-                } else if saved.translate_api_key.is_empty() {
-                    tr!(
-                        "先填写 API Key，即可使用公式识别和翻译。",
-                        "Enter an API key for formulas and translation."
-                    )
-                } else {
-                    tr!(
-                        "已配置 API Key，用于公式识别和翻译。",
-                        "API key configured for formulas and translation."
-                    )
-                }
-                .into(),
-            ),
-            TextService::Custom => {
-                let model = match saved.translate_model.trim() {
-                    "" => crate::translate::DEFAULT_MODEL,
-                    model => model,
-                };
-                let host = saved.translate_endpoint.trim();
-                let host = host
-                    .strip_prefix("https://")
-                    .or_else(|| host.strip_prefix("http://"))
-                    .unwrap_or(host);
-                (tr!("自定义", "Custom"), format!("{model} · {host}").into())
-            }
-            TextService::Off => (
-                tr!("已关闭", "Off"),
-                tr!(
-                    "在线识别与翻译已关闭；本地表格识别仍可使用。",
-                    "Online recognition and translation are off; local tables remain available."
-                )
-                .into(),
-            ),
-        };
-        self.disclosure_row(
-            "settings-translation-service-row",
-            tr!("公式与翻译服务", "Formula and translation service"),
-            description,
-            badge,
-            service == TextService::Builtin,
-            self.translation_fields.service_open,
-            cx,
-        )
-        .on_click(cx.listener(|view, _, _, cx| {
-            let fields = &mut view.translation_fields;
-            fields.service_open = !fields.service_open;
-            cx.notify();
-        }))
-    }
-    fn service_panel(&self, cx: &mut Context<Self>) -> gpui::Div {
-        let palette = crate::theme::palette(cx);
-        let surface = widgets::surface(cx);
-        let service = self.translation_fields.service;
-        let panel = div().flex().flex_col().gap_2().px_3().pb(px(14.)).child(
-            widgets::segmented(surface).children(
-                [
-                    (TextService::Builtin, "builtin", "DeepSeek"),
-                    (TextService::Custom, "custom", tr!("自定义", "Custom")),
-                    (TextService::Off, "off", tr!("关闭", "Off")),
-                ]
-                .into_iter()
-                .map(|(value, key, label)| {
-                    let id = format!("settings-translation-service-{key}");
-                    widgets::segment(
-                        SharedString::from(id.clone()),
-                        label,
-                        service == value,
-                        palette,
-                        surface,
-                    )
-                    .child(self.settings_probe(id))
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.translation_fields.select_service(value, cx);
-                        view.status.clear();
-                        cx.notify();
-                    }))
-                }),
-            ),
-        );
-        let panel = match service {
-            TextService::Builtin => panel.child(builtin_model_card(palette, surface)),
-            TextService::Custom => panel
-                .child(widgets::note(tr!("接口根地址", "API base URL"), palette))
-                .child(self.translation_field(
-                    "settings-translation-endpoint",
-                    &self.translation_fields.endpoint,
-                ))
-                .child(widgets::note(tr!("模型名称", "Model"), palette))
-                .child(self.translation_field(
-                    "settings-translation-model",
-                    &self.translation_fields.model,
-                ))
-                .child(widgets::note(
-                    tr!(
-                        "OpenAI 兼容接口（如以 /v1 结尾）；模型留空使用默认模型。",
-                        "OpenAI-compatible API (for example, ending in /v1). Leave the model empty for the default."
-                    ),
-                    palette,
-                )),
-            TextService::Off => panel.child(widgets::note(
-                tr!(
-                    "关闭在线公式识别与文字翻译；本地表格识别仍可使用。",
-                    "Online formulas and text translation are off; local tables remain available."
-                ),
-                palette,
-            )),
-        };
-        if service == TextService::Off {
-            panel
-        } else {
-            panel
-                .child(widgets::note(
-                    if service == TextService::Builtin { "DeepSeek API Key" } else { tr!("API Key（可选）", "API key (optional)") },
-                    palette,
-                ))
-                .child(self.translation_field("settings-translation-api-key", &self.translation_fields.api_key))
-                .when(self.preferences.translate_api_key_unreadable(), |panel| {
-                    panel.child(widgets::note(
-                        tr!(
-                            "原 API Key 无法解密，请重新填写；原密文仍保留。",
-                            "The saved API key cannot be decrypted. Enter it again; its encrypted value is kept."
-                        ),
-                        palette,
-                    ))
-                })
-                .child(widgets::note(
-                    tr!(
-                        "仅当前 Windows 用户可解密保存在本机的密钥；输入默认隐藏，支持粘贴。DeepSeek 需要 API Key，自定义本机服务可留空。",
-                        "The saved key is encrypted for this Windows user. Input is hidden and can be pasted. DeepSeek requires a key; custom local services may leave it empty."
-                    ),
-                    palette,
-                ))
-        }
-    }
     fn image_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (badge, description) = match self.preferences.image_translate_engine.trim() {
             "baidu" => (
@@ -1330,6 +1877,7 @@ impl SettingsView {
             _ => "auto",
         };
         div()
+            .w_full()
             .flex()
             .flex_col()
             .gap_2()
@@ -1384,152 +1932,171 @@ impl SettingsView {
     }
 }
 
-/// 内置服务只展示模型身份，不暴露端点和模型参数。
-fn builtin_model_card(
-    palette: crate::capture_toolbar::Palette,
-    surface: widgets::Surface,
-) -> gpui::Div {
-    div()
-        .flex()
-        .items_center()
-        .gap_3()
-        .p_3()
-        .rounded_lg()
-        .border_1()
-        .border_color(rgb(surface.line))
-        .bg(rgb(surface.track))
-        .child(
-            div()
-                .size(px(36.))
-                .flex()
-                .flex_shrink_0()
-                .items_center()
-                .justify_center()
-                .rounded_md()
-                .bg(rgba((palette.accent << 8) | 0x2e))
-                .child(toolbar_icons::action(Icon::Translate, palette.accent).size(px(20.))),
-        )
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .flex_1()
-                .min_w_0()
-                .gap_1()
-                .child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .items_center()
-                        .gap_2()
-                        .text_size(px(13.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(rgb(palette.foreground))
-                        .child(tr!(
-                            "DeepSeek 公式识别与翻译",
-                            "DeepSeek formulas and translation"
-                        ))
-                        .child(widgets::badge(tr!("自备密钥", "Your API key"), palette, surface)),
-                )
-                .child(widgets::note(
-                    tr!(
-                        "使用 DeepSeek API；公式只发送选区图，翻译只发送文字，表格识别在本机。",
-                        "DeepSeek API: selection images for formulas, text for translation; tables stay local."
-                    ),
-                    palette,
-                )),
-        )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
+
+    fn draft(id: &str, preferences: &Preferences) -> ProfileDraft {
+        preferences
+            .service_profile(id)
+            .map(ProfileDraft::from_profile)
+            .unwrap_or_default()
+    }
 
     #[test]
-    fn api_key_missing_or_invalid_draft_does_not_write_or_echo_secrets() {
+    fn builtin_profiles_keep_endpoint_and_only_deepseek_requires_a_key() {
         let latest = Preferences::default();
-        let mut draft = TranslationDraft::from_preferences(&latest);
-        let writes = Cell::new(0);
-        assert!(publish(&latest, &draft, |_| {
-            writes.set(writes.get() + 1);
-            Ok(())
-        })
-        .is_err());
-        assert_eq!(writes.get(), 0);
+        let mut index = draft("index", &latest);
+        index.endpoint = "https://stale.test/v1".into();
+        index.vision = true;
+        let (saved, id) = index.candidate(&latest).unwrap();
+        let profile = saved.service_profile(&id).unwrap();
+        assert_eq!(profile.endpoint, crate::translate::INDEX_ENDPOINT);
+        assert!(!profile.supports_vision());
+        assert_eq!(profile.effective_model(), crate::translate::INDEX_MODEL);
+        let mut deepseek = draft("deepseek", &latest);
+        assert!(deepseek.candidate(&latest).is_err());
         for invalid in ["unit test key", "key\nnext", "中文"] {
-            draft.api_key = invalid.into();
-            let error = draft.candidate(&latest).err().unwrap().to_string();
+            deepseek.api_key = invalid.into();
+            let error = deepseek.candidate(&latest).err().unwrap().to_string();
             assert!(!error.contains(invalid));
         }
-        draft.api_key = "test-only-secret-value".into();
-        assert!(!format!("{draft:?}").contains("test-only-secret-value"));
-        let saved = publish(&latest, &draft, |_| Ok(())).unwrap();
-        assert_eq!(saved.translate_api_key, "test-only-secret-value");
+        deepseek.api_key = "test-only-secret-value".into();
+        assert!(!format!("{deepseek:?}").contains("test-only-secret-value"));
+        let (saved, _) = deepseek.candidate(&latest).unwrap();
+        assert_eq!(
+            saved.service_profile("deepseek").unwrap().api_key,
+            "test-only-secret-value"
+        );
+        assert_eq!(saved.translate_profile, latest.translate_profile);
     }
 
     #[test]
-    fn api_key_stale_draft_preserves_newer_key_and_conflicting_edit_is_rejected() {
-        let initial = Preferences {
-            translate_api_key: "old-test-key".into(),
-            ..Default::default()
-        };
-        let mut draft = TranslationDraft::from_preferences(&initial);
-        let latest = Preferences {
-            translate_api_key: "new-test-key".into(),
-            ..initial.clone()
-        };
-        draft.engine = "local".into();
-        let saved = publish(&latest, &draft, |_| Ok(())).unwrap();
-        assert_eq!(saved.translate_api_key, "new-test-key");
-        draft.api_key = "edited-test-key".into();
-        let writes = Cell::new(0);
-        assert!(publish(&latest, &draft, |_| {
-            writes.set(writes.get() + 1);
-            Ok(())
-        })
-        .is_err());
-        assert_eq!(writes.get(), 0);
-        let mut draft = TranslationDraft::from_preferences(&latest);
-        draft.api_key = "edited-test-key".into();
-        assert!(publish(&latest, &draft, |_| Err("模拟写入失败".into())).is_err());
-        assert_eq!(latest.translate_api_key, "new-test-key");
-        assert_eq!(draft.api_key, "edited-test-key");
+    fn new_custom_profile_validates_and_gets_a_fresh_id() {
+        let latest = Preferences::default();
+        let mut new = ProfileDraft::default();
+        for endpoint in [
+            "",
+            "file:///C:/config",
+            "https://example.test/v1?x=1",
+            "https://example.test/v1#fragment",
+            "http://",
+            "https://example.test/v1\nhistory=true",
+        ] {
+            new.endpoint = endpoint.into();
+            new.model = "m".into();
+            assert!(new.candidate(&latest).is_err(), "{endpoint}");
+        }
+        new.endpoint = " http://127.0.0.1:11434/v1/ ".into();
+        new.model.clear();
+        assert!(new.candidate(&latest).is_err());
+        new.model = " qwen3 ".into();
+        new.vision = true;
+        let (saved, id) = new.candidate(&latest).unwrap();
+        assert_eq!(id, "custom-1");
+        let profile = saved.service_profile(&id).unwrap();
+        assert_eq!(profile.name, "127.0.0.1:11434/v1");
+        assert_eq!(profile.endpoint, "http://127.0.0.1:11434/v1/");
+        assert_eq!(profile.model, "qwen3");
+        assert!(profile.supports_vision());
+        assert!(!profile.needs_key());
+        let (again, id) = ProfileDraft {
+            name: "second".into(),
+            ..new
+        }
+        .candidate(&saved)
+        .unwrap();
+        assert_eq!(id, "custom-2");
+        assert_eq!(again.service_profiles.len(), 4);
+    }
+
+    #[test]
+    fn stale_key_draft_keeps_newer_key_and_conflicting_edit_is_rejected() {
+        let mut initial = Preferences::default();
+        initial
+            .service_profile_mut("deepseek")
+            .unwrap()
+            .set_api_key("old-test-key".into());
+        let mut stale = draft("deepseek", &initial);
+        let mut latest = initial.clone();
+        latest
+            .service_profile_mut("deepseek")
+            .unwrap()
+            .set_api_key("new-test-key".into());
+        stale.model = "deepseek-pro".into();
+        let (saved, _) = stale.candidate(&latest).unwrap();
         assert_eq!(
-            publish(&latest, &draft, |_| Ok(()))
-                .unwrap()
-                .translate_api_key,
+            saved.service_profile("deepseek").unwrap().api_key,
+            "new-test-key"
+        );
+        stale.api_key = "edited-test-key".into();
+        assert!(stale.candidate(&latest).is_err());
+        let mut fresh = draft("deepseek", &latest);
+        fresh.api_key = "edited-test-key".into();
+        let (saved, _) = fresh.candidate(&latest).unwrap();
+        assert_eq!(
+            saved.service_profile("deepseek").unwrap().api_key,
             "edited-test-key"
         );
-        let mut stale_other_page = initial;
-        stale_other_page.guides = true;
-        preserve_latest(&mut stale_other_page, &latest);
-        assert_eq!(stale_other_page.translate_api_key, "new-test-key");
-        assert!(stale_other_page.guides);
+        let mut removed = Preferences::default();
+        removed
+            .service_profiles
+            .retain(|profile| profile.id != "deepseek");
+        assert!(draft("deepseek", &initial).candidate(&removed).is_err());
     }
 
     #[test]
-    fn builtin_service_hides_parameters_and_saves_default_endpoint_and_model() {
+    fn profile_save_changes_only_that_profile_and_other_pages_keep_latest_services() {
         let latest = Preferences {
-            translate_api_key: "unit-test-key".into(),
+            theme: crate::theme::ThemeMode::Dark,
+            guides: true,
+            translate_target: "ko".into(),
+            formula_profile: String::new(),
+            quick_dir: std::path::PathBuf::from("D:/saved-elsewhere"),
             ..Default::default()
         };
-        let mut draft = TranslationDraft::from_preferences(&latest);
-        assert_eq!(draft.service, TextService::Builtin);
-        draft.endpoint = "https://stale.test/v1".into();
-        draft.model = "stale".into();
-        let saved = draft.candidate(&latest).unwrap();
-        assert_eq!(saved.translate_endpoint, crate::translate::DEFAULT_ENDPOINT);
-        assert_eq!(saved.translate_model, crate::translate::DEFAULT_MODEL);
-        assert_eq!(
-            TextService::detect(&format!("{}/", crate::translate::DEFAULT_ENDPOINT), ""),
-            TextService::Builtin
-        );
-        assert_eq!(
-            TextService::detect(crate::translate::DEFAULT_ENDPOINT, "other"),
-            TextService::Custom
-        );
-        assert_eq!(TextService::detect(" ", "x"), TextService::Off);
+        let mut index = draft("index", &latest);
+        index.model = "other".into();
+        let (saved, _) = index.candidate(&latest).unwrap();
+        assert_eq!(saved.theme, latest.theme);
+        assert_eq!(saved.quick_dir, latest.quick_dir);
+        assert_eq!(saved.translate_target, "ko");
+        assert!(saved.formula_profile.is_empty());
+        let mut stale_other_page = Preferences {
+            include_cursor: true,
+            ..Default::default()
+        };
+        preserve_latest(&mut stale_other_page, &saved);
+        assert_eq!(stale_other_page.service_profiles, saved.service_profiles);
+        assert!(stale_other_page.formula_profile.is_empty());
+        assert_eq!(stale_other_page.translate_target, "ko");
+        assert!(stale_other_page.include_cursor);
+    }
+
+    #[test]
+    fn image_draft_only_reports_effective_changes() {
+        let saved = Preferences::default();
+        let mut image = ImageDraft::from_preferences(&saved);
+        assert!(!image.changed(&saved));
+        image.engine = "unknown".into();
+        assert!(!image.changed(&saved));
+        image.engine = "baidu".into();
+        assert!(image.changed(&saved));
+        image.baidu_app_id = "id\n".into();
+        assert!(image.candidate(&saved).is_err());
+        image.baidu_app_id = " id ".into();
+        let candidate = image.candidate(&saved).unwrap();
+        assert_eq!(candidate.image_translate_engine, "baidu");
+        assert_eq!(candidate.baidu_app_id, "id");
+    }
+
+    #[test]
+    fn formula_menu_only_offers_profiles_with_images() {
+        let preferences = Preferences::default();
+        let index = preferences.service_profile("index").unwrap();
+        let deepseek = preferences.service_profile("deepseek").unwrap();
+        assert!(Feature::Translate.accepts(index) && Feature::Translate.accepts(deepseek));
+        assert!(!Feature::Formula.accepts(index) && Feature::Formula.accepts(deepseek));
     }
 
     #[test]
@@ -1578,166 +2145,5 @@ mod tests {
         assert_eq!(menu_step(Some(13), "down"), Some(MENU_OTHER));
         assert_eq!(menu_step(Some(MENU_OTHER), "up"), Some(13));
         assert_eq!(menu_step(Some(MENU_OTHER), "down"), Some(MENU_OTHER));
-    }
-
-    #[test]
-    fn apply_bar_only_shows_for_effective_service_changes() {
-        let saved = Preferences {
-            translate_model: String::new(),
-            translate_target: "ja".into(),
-            translate_api_key: "unit-test-key".into(),
-            ..Default::default()
-        };
-        let mut draft = TranslationDraft::from_preferences(&saved);
-        // 内置且模型留空与默认模型等价，不算改动；目标语言不在草稿里。
-        assert!(!draft.changed(&saved));
-        draft.service = TextService::Custom;
-        draft.endpoint.clear();
-        assert!(draft.changed(&saved));
-        assert!(draft.candidate(&saved).is_err());
-        draft.service = TextService::Builtin;
-        assert!(!draft.changed(&saved));
-        draft.engine = "local".into();
-        assert!(draft.changed(&saved));
-        assert_eq!(draft.candidate(&saved).unwrap().translate_target, "ja");
-    }
-
-    #[test]
-    fn draft_changes_only_translation_fields_of_the_latest_preferences() {
-        let latest = Preferences {
-            theme: crate::theme::ThemeMode::Dark,
-            language: crate::i18n::LanguageMode::English,
-            ocr_profile: crate::ppocr::OcrProfile::Small,
-            history: true,
-            include_cursor: true,
-            pin_restore: false,
-            guides: true,
-            quick_dir: std::path::PathBuf::from("D:/saved-elsewhere"),
-            translate_target: "ko".into(),
-            ..Default::default()
-        };
-        let draft = TranslationDraft {
-            service: TextService::Custom,
-            endpoint: " http://127.0.0.1:8000/v1/ ".into(),
-            model: " local-model ".into(),
-            ..TranslationDraft::from_preferences(&Preferences::default())
-        };
-        let saved = publish(&latest, &draft, |_| Ok(())).unwrap();
-        assert_eq!(saved.translate_endpoint, "http://127.0.0.1:8000/v1/");
-        assert_eq!(saved.translate_model, "local-model");
-        assert_eq!(saved.translate_target, "ko");
-        assert_eq!(saved.theme, latest.theme);
-        assert_eq!(saved.language, latest.language);
-        assert_eq!(saved.ocr_profile, latest.ocr_profile);
-        assert_eq!(saved.history, latest.history);
-        assert_eq!(saved.guides, latest.guides);
-        assert_eq!(saved.pin_restore, latest.pin_restore);
-        assert_eq!(saved.include_cursor, latest.include_cursor);
-        assert_eq!(saved.quick_dir, latest.quick_dir);
-        assert_eq!(saved.custom_hotkey, latest.custom_hotkey);
-        assert_eq!(saved.custom_pin_hotkey, latest.custom_pin_hotkey);
-        assert_eq!(saved.pin_zoom_anchor, latest.pin_zoom_anchor);
-    }
-
-    #[test]
-    fn defaults_off_and_custom_default_model_keep_existing_service_semantics() {
-        let latest = Preferences {
-            translate_api_key: "unit-test-key".into(),
-            ..Default::default()
-        };
-        let defaults = TranslationDraft::from_preferences(&latest);
-        assert_eq!(defaults.endpoint, crate::translate::DEFAULT_ENDPOINT);
-        assert_eq!(defaults.model, crate::translate::DEFAULT_MODEL);
-        assert_eq!(latest.translate_target, "auto");
-        assert_eq!(defaults.service, TextService::Builtin);
-        let mut draft = defaults;
-        draft.service = TextService::Off;
-        let disabled = draft.candidate(&latest).unwrap();
-        assert!(crate::translate::Service::from_preferences(&disabled).is_none());
-        draft.service = TextService::Custom;
-        draft.endpoint = crate::translate::DEFAULT_ENDPOINT.into();
-        draft.model.clear();
-        let service =
-            crate::translate::Service::from_preferences(&draft.candidate(&latest).unwrap())
-                .unwrap();
-        assert_eq!(service.model, crate::translate::DEFAULT_MODEL);
-        assert_eq!(
-            crate::translate::target_name(&service.target, "中文"),
-            "英语"
-        );
-        let french = Preferences {
-            translate_target: "法语".into(),
-            translate_api_key: "unit-test-key".into(),
-            ..Default::default()
-        };
-        let service =
-            crate::translate::Service::from_preferences(&draft.candidate(&french).unwrap())
-                .unwrap();
-        assert_eq!(
-            crate::translate::target_name(&service.target, "source"),
-            "法语"
-        );
-    }
-
-    #[test]
-    fn validation_and_write_failure_keep_the_draft_and_only_success_publishes() {
-        let latest = Preferences::default();
-        let before = TranslationDraft::from_preferences(&latest);
-        let mut draft = before.clone();
-        draft.service = TextService::Custom;
-        let writes = Cell::new(0);
-        for endpoint in [
-            "",
-            "file:///C:/config",
-            "https://example.test/v1?x=1",
-            "https://example.test/v1#fragment",
-            "http://",
-            "https://example.test/v1\nhistory=true",
-        ] {
-            draft.endpoint = endpoint.into();
-            assert!(publish(&latest, &draft, |_| {
-                writes.set(writes.get() + 1);
-                Ok(())
-            })
-            .is_err());
-        }
-        assert_eq!(writes.get(), 0);
-        draft.endpoint = "https://example.test/v1".into();
-        assert!(publish(&latest, &draft, |_| {
-            writes.set(writes.get() + 1);
-            Err("模拟原子保存失败".into())
-        })
-        .is_err());
-        assert_eq!(writes.get(), 1);
-        assert_eq!(TranslationDraft::from_preferences(&latest), before);
-        assert_eq!(draft.endpoint, "https://example.test/v1");
-        let saved = publish(&latest, &draft, |_| {
-            writes.set(writes.get() + 1);
-            Ok(())
-        })
-        .unwrap();
-        assert_eq!(writes.get(), 2);
-        assert_eq!(saved.translate_endpoint, "https://example.test/v1");
-    }
-
-    #[test]
-    fn other_setting_save_preserves_newer_translation_and_its_own_pending_change() {
-        let mut stale = Preferences {
-            guides: true,
-            ..Default::default()
-        };
-        let latest = Preferences {
-            translate_endpoint: String::new(),
-            translate_model: "custom".into(),
-            translate_target: "ko".into(),
-            ..Default::default()
-        };
-        preserve_latest(&mut stale, &latest);
-        assert_eq!(
-            TranslationDraft::from_preferences(&stale),
-            TranslationDraft::from_preferences(&latest)
-        );
-        assert_eq!(stale.translate_target, "ko");
-        assert!(stale.guides);
     }
 }

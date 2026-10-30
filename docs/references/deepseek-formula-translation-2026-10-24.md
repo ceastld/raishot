@@ -1,10 +1,10 @@
 # API 公式识别与翻译
 
-默认使用 `https://api.deepseek.com/v1`、`deepseek-flash`。公式识别只在点击识别时上传当前选区图片；文字翻译只发送所选文字。请求明确关闭思考模式，使用现有系统代理，HTTP/SSE 失败不偷偷切换服务。原本精确匹配旧内置默认值的配置迁移到新默认，自定义地址、模型及关闭状态保留。
+服务按功能选用：文字翻译默认 Index 翻译（`https://index-translate.bilibili.com/v1`、`Index-Translate-35B-A3B`，免 Key），公式识别默认 DeepSeek（`https://api.deepseek.com/v1`、`deepseek-flash`）。公式识别只在点击识别时上传当前选区图片；文字翻译只发送所选文字。请求明确关闭思考模式，使用现有系统代理，HTTP/SSE 失败不偷偷切换服务。旧版单一 endpoint/model/key 配置读入时迁移为服务配置列表：Index 或 DeepSeek 地址都迁成“翻译用 Index、公式用 DeepSeek”，原 Key 归入对应内置项；关闭保持关闭；其它地址变成一项同时用于两者的自定义配置。新版只写 `service_profiles`、`translate_profile`、`formula_profile`。
 
 ## 设置与凭据
 
-设置 ▸ 翻译可以填写 API Key，输入框默认遮蔽；服务改动点击应用后保存，不触发联网。内存中保留请求所需的明文，磁盘用 Windows DPAPI 按当前用户加密；无法解密时保留旧密文并提示重新填写。取消草稿及跨页面保存不会把别处更新的 Key 覆盖成旧值。安装包和源码不带维护者凭据。
+设置 ▸ 翻译的“服务配置”里每项服务各自保存 API Key，输入框默认遮蔽；展开编辑后点“保存”，不触发联网。内置服务地址固定、不可删除，只能改模型和 Key。内存中保留请求所需的明文，磁盘用 Windows DPAPI 按当前用户加密；无法解密时保留旧密文并提示重新填写，其它设置照常保存。取消草稿及跨页面保存不会把别处更新的 Key 覆盖成旧值。安装包和源码不带维护者凭据。
 
 ## 公式
 

@@ -8,10 +8,49 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) const DEFAULT_ENDPOINT: &str = "https://api.deepseek.com/v1";
-pub(crate) const DEFAULT_MODEL: &str = "deepseek-flash";
-pub(crate) const LEGACY_ENDPOINT: &str = "https://index-translate.bilibili.com/v1";
-pub(crate) const LEGACY_MODEL: &str = "Index-Translate-35B-A3B";
+pub(crate) const INDEX_ENDPOINT: &str = "https://index-translate.bilibili.com/v1";
+pub(crate) const INDEX_MODEL: &str = "Index-Translate-35B-A3B";
+pub(crate) const DEEPSEEK_ENDPOINT: &str = "https://api.deepseek.com/v1";
+pub(crate) const DEEPSEEK_MODEL: &str = "deepseek-flash";
+
+/// 内置服务配置：地址、名称与能力固定，用户只能改模型和 API Key，不能删除。
+pub(crate) struct Builtin {
+    pub id: &'static str,
+    pub name: crate::i18n::Text,
+    pub endpoint: &'static str,
+    pub model: &'static str,
+    /// 支持图像输入，可用于公式识别。
+    pub vision: bool,
+    pub needs_key: bool,
+}
+pub(crate) const INDEX: Builtin = Builtin {
+    id: "index",
+    name: crate::i18n::Text("Index 翻译（bilibili）", "Index Translate (bilibili)"),
+    endpoint: INDEX_ENDPOINT,
+    model: INDEX_MODEL,
+    vision: false,
+    needs_key: false,
+};
+pub(crate) const DEEPSEEK: Builtin = Builtin {
+    id: "deepseek",
+    name: crate::i18n::Text("DeepSeek", "DeepSeek"),
+    endpoint: DEEPSEEK_ENDPOINT,
+    model: DEEPSEEK_MODEL,
+    vision: true,
+    needs_key: true,
+};
+pub(crate) const BUILTINS: [&Builtin; 2] = [&INDEX, &DEEPSEEK];
+pub(crate) fn builtin(id: &str) -> Option<&'static Builtin> {
+    BUILTINS.into_iter().find(|builtin| builtin.id == id)
+}
+/// DeepSeek 官方接口需要 Key，并有专用的思考开关与错误码。
+pub(crate) fn is_deepseek_endpoint(endpoint: &str) -> bool {
+    ureq::request("POST", endpoint)
+        .request_url()
+        .ok()
+        .and_then(|url| url.as_url().host_str().map(str::to_owned))
+        .is_some_and(|host| host.eq_ignore_ascii_case("api.deepseek.com"))
+}
 /// 单次请求的源文上限（字符）；更长的文字请分段选择后翻译。
 pub(crate) const MAX_SOURCE_CHARS: usize = 12_000;
 
@@ -38,11 +77,10 @@ impl fmt::Debug for Service {
 
 impl Service {
     pub(crate) fn is_deepseek(&self) -> bool {
-        ureq::request("POST", &self.endpoint)
-            .request_url()
-            .ok()
-            .and_then(|url| url.as_url().host_str().map(str::to_owned))
-            .is_some_and(|host| host.eq_ignore_ascii_case("api.deepseek.com"))
+        is_deepseek_endpoint(&self.endpoint)
+    }
+    fn is_index(&self) -> bool {
+        self.endpoint.eq_ignore_ascii_case(INDEX_ENDPOINT)
     }
 
     pub(crate) fn configuration_error(&self) -> Option<String> {
@@ -68,7 +106,7 @@ impl Service {
     }
     /// 内置服务第一次真正发送文字时返回一次说明并记住；自定义服务由用户自己填写，不再提示。
     pub(crate) fn first_use_notice(&self) -> Option<&'static str> {
-        if !self.is_deepseek() || self.configuration_error().is_some() {
+        if !(self.is_deepseek() || self.is_index()) || self.configuration_error().is_some() {
             return None;
         }
         let mut preferences = crate::preferences::Preferences::load();
@@ -77,22 +115,35 @@ impl Service {
         }
         preferences.translation_notice_shown = true;
         let _ = preferences.save();
-        Some(tr!(
-            "翻译会把所选文字发送到 DeepSeek，并按你的 API 账户计费；不发送图片和剪贴板。可在“设置 ▸ 翻译”更换或关闭服务。",
-            "Translation sends the selected text to DeepSeek and uses your API account balance. Images and the clipboard are not sent. Change or disable it in Settings ▸ Translation."
-        ))
+        Some(if self.is_deepseek() {
+            tr!(
+                "翻译会把所选文字发送到 DeepSeek，并按你的 API 账户计费；不发送图片和剪贴板。可在“设置 ▸ 翻译”更换或关闭服务。",
+                "Translation sends the selected text to DeepSeek and uses your API account balance. Images and the clipboard are not sent. Change or disable it in Settings ▸ Translation."
+            )
+        } else {
+            tr!(
+                "翻译会把所选文字发送到哔哩哔哩 Index 翻译服务；不发送图片和剪贴板。可在“设置 ▸ 翻译”更换或关闭服务。",
+                "Translation sends the selected text to bilibili Index Translate. Images and the clipboard are not sent. Change or disable it in Settings ▸ Translation."
+            )
+        })
     }
-    pub(crate) fn from_preferences(preferences: &crate::preferences::Preferences) -> Option<Self> {
-        let endpoint = preferences.translate_endpoint.trim();
+    fn from_profile(preferences: &crate::preferences::Preferences, id: &str) -> Option<Self> {
+        let profile = preferences.service_profile(id)?;
+        let endpoint = profile.endpoint.trim();
         (!endpoint.is_empty()).then(|| Self {
             endpoint: endpoint.trim_end_matches('/').to_owned(),
-            model: match preferences.translate_model.trim() {
-                "" => DEFAULT_MODEL.to_owned(),
-                model => model.to_owned(),
-            },
+            model: profile.effective_model().to_owned(),
             target: preferences.translate_target.trim().to_owned(),
-            api_key: preferences.translate_api_key.trim().to_owned(),
+            api_key: profile.api_key.trim().to_owned(),
         })
+    }
+    /// 文字翻译与图片翻译（本机识别后）使用的服务；None 表示已关闭。
+    pub(crate) fn for_translation(preferences: &crate::preferences::Preferences) -> Option<Self> {
+        Self::from_profile(preferences, &preferences.translate_profile)
+    }
+    /// 公式识别使用的服务，需支持图像输入；None 表示已关闭。
+    pub(crate) fn for_formula(preferences: &crate::preferences::Preferences) -> Option<Self> {
+        Self::from_profile(preferences, &preferences.formula_profile)
     }
 }
 
@@ -992,7 +1043,7 @@ mod tests {
     fn service(endpoint: &str) -> Service {
         Service {
             endpoint: endpoint.into(),
-            model: DEFAULT_MODEL.into(),
+            model: DEEPSEEK_MODEL.into(),
             target: "auto".into(),
             api_key: String::new(),
         }
@@ -1027,7 +1078,7 @@ mod tests {
 
     #[test]
     fn deepseek_protocol_rejects_truncation_and_redacts_credentials() {
-        let mut configured = service(DEFAULT_ENDPOINT);
+        let mut configured = service(DEEPSEEK_ENDPOINT);
         assert!(configured.configuration_error().is_some());
         configured.api_key = "test-key-that-must-not-leak".into();
         assert!(configured.configuration_error().is_none());
@@ -1062,10 +1113,10 @@ mod tests {
             cell.text = "0012".into();
         }
         assert_eq!(
-            translate_table(&service(DEFAULT_ENDPOINT), &grid, &|| false).unwrap(),
+            translate_table(&service(DEEPSEEK_ENDPOINT), &grid, &|| false).unwrap(),
             grid
         );
-        assert!(translate_table(&service(DEFAULT_ENDPOINT), &grid, &|| true).is_err());
+        assert!(translate_table(&service(DEEPSEEK_ENDPOINT), &grid, &|| true).is_err());
         let source = TranslationSource {
             generation: 1,
             body_identity: Arc::new(()),
@@ -1082,7 +1133,7 @@ mod tests {
     #[test]
     #[ignore]
     fn live_deepseek_protected_text_and_merged_table() {
-        let mut service = service(DEFAULT_ENDPOINT);
+        let mut service = service(DEEPSEEK_ENDPOINT);
         service.api_key =
             std::env::var("RUSTSHOT_TEST_DEEPSEEK_KEY").expect("Set the temporary test API key");
         service.target = "zh-CN".into();
@@ -1140,8 +1191,8 @@ mod tests {
 
     #[test]
     fn request_body_disables_thinking_and_bounds_tokens() {
-        let body = request_body(&service(DEFAULT_ENDPOINT), "hi", "简体中文", true);
-        assert_eq!(body["model"], DEFAULT_MODEL);
+        let body = request_body(&service(DEEPSEEK_ENDPOINT), "hi", "简体中文", true);
+        assert_eq!(body["model"], DEEPSEEK_MODEL);
         assert_eq!(body["stream"], true);
         assert_eq!(body["temperature"], 0);
         assert_eq!(body["max_tokens"], 1024);
@@ -1149,7 +1200,7 @@ mod tests {
         assert_eq!(body["stream_options"]["include_usage"], true);
         let long = "a".repeat(5000);
         assert_eq!(
-            request_body(&service(DEFAULT_ENDPOINT), &long, "x", false)["max_tokens"],
+            request_body(&service(DEEPSEEK_ENDPOINT), &long, "x", false)["max_tokens"],
             8192
         );
     }
@@ -1243,7 +1294,7 @@ mod tests {
     #[test]
     #[ignore]
     fn live_default_service_translates_both_directions_without_obeying_source() {
-        let mut service = service(DEFAULT_ENDPOINT);
+        let mut service = service(DEEPSEEK_ENDPOINT);
         service.api_key =
             std::env::var("RUSTSHOT_TEST_DEEPSEEK_KEY").expect("Set the temporary test API key");
         let mut partials = 0;
@@ -1269,18 +1320,32 @@ mod tests {
     }
 
     #[test]
-    fn preferences_configure_or_disable_the_service() {
+    fn preferences_pick_profiles_per_feature_or_disable_them() {
         let mut preferences = crate::preferences::Preferences::default();
-        let service = Service::from_preferences(&preferences).unwrap();
-        assert_eq!(service.endpoint, DEFAULT_ENDPOINT);
-        assert_eq!(service.model, DEFAULT_MODEL);
-        preferences.translate_endpoint = "http://127.0.0.1:8000/v1/".into();
-        preferences.translate_model = " ".into();
-        let service = Service::from_preferences(&preferences).unwrap();
+        let service = Service::for_translation(&preferences).unwrap();
+        assert_eq!(service.endpoint, INDEX_ENDPOINT);
+        assert_eq!(service.model, INDEX_MODEL);
+        assert!(service.configuration_error().is_none());
+        let formula = Service::for_formula(&preferences).unwrap();
+        assert_eq!(formula.endpoint, DEEPSEEK_ENDPOINT);
+        assert!(formula.configuration_error().is_some());
+        preferences
+            .service_profiles
+            .push(crate::preferences::ServiceProfile {
+                id: "custom-1".into(),
+                name: "local".into(),
+                endpoint: "http://127.0.0.1:8000/v1/".into(),
+                model: " m ".into(),
+                ..Default::default()
+            });
+        preferences.translate_profile = "custom-1".into();
+        let service = Service::for_translation(&preferences).unwrap();
         assert_eq!(service.endpoint, "http://127.0.0.1:8000/v1");
-        assert_eq!(service.model, DEFAULT_MODEL);
-        preferences.translate_endpoint = " ".into();
-        assert!(Service::from_preferences(&preferences).is_none());
+        assert_eq!(service.model, "m");
+        preferences.translate_profile.clear();
+        preferences.formula_profile = "missing".into();
+        assert!(Service::for_translation(&preferences).is_none());
+        assert!(Service::for_formula(&preferences).is_none());
     }
 }
 
