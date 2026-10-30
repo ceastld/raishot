@@ -31,6 +31,15 @@ impl FontFamily {
         )
     }
 }
+/// 点阵／矢量字体（System、Fixedsys、Modern 等）只有 GDI 能用，DirectWrite 按名加载不到。
+static NON_OUTLINE: OnceLock<Vec<String>> = OnceLock::new();
+/// 字体能否交给 GPUI 按名加载（菜单里用自身字体预览）。
+pub fn outline_font(name: &str) -> bool {
+    fonts();
+    !NON_OUTLINE
+        .get()
+        .is_some_and(|names| names.iter().any(|s| s.eq_ignore_ascii_case(name)))
+}
 pub fn fonts() -> &'static [String] {
     static FONTS: OnceLock<Vec<String>> = OnceLock::new();
     if let Some(fonts) = FONTS.get() {
@@ -38,18 +47,22 @@ pub fn fonts() -> &'static [String] {
     }
     let _native = native_text_lease();
     FONTS.get_or_init(|| {
-        let mut names = Vec::<String>::new();
+        let mut names = Vec::<(String, bool)>::new();
         unsafe extern "system" fn visit(
             lf: *const LOGFONTW,
-            _: *const TEXTMETRICW,
-            _: u32,
+            tm: *const TEXTMETRICW,
+            kind: u32,
             data: LPARAM,
         ) -> i32 {
             let face = &(*lf).lfFaceName;
             let end = face.iter().position(|c| *c == 0).unwrap_or(face.len());
             let name = String::from_utf16_lossy(&face[..end]);
             if !name.starts_with('@') && !name.is_empty() {
-                (*(data.0 as *mut Vec<String>)).push(name);
+                // 回调里的 TEXTMETRICW 对 TrueType/OpenType 实为 NEWTEXTMETRICW。
+                let flags = (*(tm as *const NEWTEXTMETRICW)).ntmFlags;
+                let outline = kind & TRUETYPE_FONTTYPE != 0
+                    || flags & (NTM_PS_OPENTYPE | NTM_TT_OPENTYPE) != 0;
+                (*(data.0 as *mut Vec<(String, bool)>)).push((name, outline));
             }
             1
         }
@@ -70,6 +83,14 @@ pub fn fonts() -> &'static [String] {
                 let _ = DeleteDC(dc);
             }
         }
+        let _ = NON_OUTLINE.set(
+            names
+                .iter()
+                .filter(|(_, outline)| !outline)
+                .map(|(name, _)| name.clone())
+                .collect(),
+        );
+        let mut names: Vec<String> = names.into_iter().map(|(name, _)| name).collect();
         names.sort_by_key(|s| s.to_lowercase());
         names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
         let mut ordered = vec!["Microsoft YaHei UI".to_owned()];

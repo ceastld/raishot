@@ -7,7 +7,8 @@ use crate::{
     toolbar_layout::{ColorTarget, ToolbarLayout, ToolbarPanel},
     toolbar_widgets::{self as w, Lead, State},
 };
-use gpui::{div, prelude::*, px, rgb, AnyElement, Context};
+use gpui::{div, prelude::*, px, rgb, uniform_list, AnyElement, Context};
+use std::ops::Range;
 
 impl CaptureView {
     pub(crate) fn font_family_popup(
@@ -17,50 +18,64 @@ impl CaptureView {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let p = Palette::new(self.light_theme);
-        let mut body = div()
+        // 系统字体常有数百个，每行又用自身字体预览：只排版可见行，否则首帧要加载全部字体而卡死。
+        let list = uniform_list(
+            "font-choices",
+            text_format::fonts().len(),
+            cx.processor(move |v, range: Range<usize>, _, cx| {
+                range.map(|i| v.font_choice(i, cx)).collect::<Vec<_>>()
+            }),
+        )
+        .flex_1()
+        .min_h(px(0.))
+        .text_size(px(12.5));
+        self.popup_panel(ToolbarPanel::FontFamily, layout, anchor)
+            .p(px(4.))
             .flex()
             .flex_col()
-            .gap(px(1.))
-            .text_size(px(12.5))
             .child(
                 div()
+                    .flex_shrink_0()
                     .px(px(8.))
                     .py(px(4.))
                     .text_size(px(11.5))
                     .text_color(rgb(p.muted))
                     .child(tr!("系统字体", "System font")),
-            );
-        for (i, name) in text_format::fonts().iter().enumerate() {
-            let on = self.editor.style.text.font == FontFamily(i);
-            let mut item = w::menu_row(
-                ("font-choice", i),
-                None,
-                name.clone(),
-                None,
-                State::on(on),
-                p,
             )
-            .font_family(name.clone())
-            .on_click(cx.listener(move |v, _, _, cx| {
-                let mut s = v.editor.style;
-                s.text.font = FontFamily::named(name);
-                v.editor.set_style(s);
-                v.toolbar_panel = ToolbarPanel::None;
-                cx.notify();
-            }));
-            if name == "Consolas" {
-                item = item.child(self.probe("font-consolas"));
-            }
-            if name == "Microsoft YaHei UI" {
-                item = item.child(self.probe("font-yahei"));
-            }
-            body = body.child(item);
-        }
-        self.popup_panel(ToolbarPanel::FontFamily, layout, anchor)
-            .p(px(4.))
-            .overflow_y_scroll()
-            .child(body)
+            .child(list)
             .child(self.probe("toolbar-popup"))
+    }
+
+    fn font_choice(&self, i: usize, cx: &mut Context<Self>) -> AnyElement {
+        let p = Palette::new(self.light_theme);
+        let name = &text_format::fonts()[i];
+        let on = self.editor.style.text.font == FontFamily(i);
+        let mut item = w::menu_row(
+            ("font-choice", i),
+            None,
+            name.clone(),
+            None,
+            State::on(on),
+            p,
+        )
+        // 点阵字体不在 DirectWrite 里，按名加载会重建系统字体集合后回退，直接用界面字体显示。
+        .when(text_format::outline_font(name), |d| {
+            d.font_family(name.clone())
+        })
+        .on_click(cx.listener(move |v, _, _, cx| {
+            let mut s = v.editor.style;
+            s.text.font = FontFamily::named(&text_format::fonts()[i]);
+            v.editor.set_style(s);
+            v.toolbar_panel = ToolbarPanel::None;
+            cx.notify();
+        }));
+        if name == "Consolas" {
+            item = item.child(self.probe("font-consolas"));
+        }
+        if name == "Microsoft YaHei UI" {
+            item = item.child(self.probe("font-yahei"));
+        }
+        item.into_any_element()
     }
 
     /// 细项弹层里的数值框：单击开参数弹层（返回本细项），悬停滚轮调值。
