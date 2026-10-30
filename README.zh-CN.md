@@ -38,8 +38,8 @@ RaiShot 让你截取屏幕上的内容、标出重点，直接复制或保存。
 
 **系统要求：Windows 10 / 11，x64。**
 
-1. 前往[最新发布页](https://github.com/ceastld/raishot/releases/latest)，下载 `RaiShot.*.zip`。
-2. 将压缩包**完整解压**到一个文件夹，运行 **`raishot.exe`**。保留包内 EXE 和 DLL 的同目录关系。
+1. 前往[最新发布页](https://github.com/ceastld/raishot/releases/latest)，下载安装包 `RaiShot-*-setup-x64.exe` 并运行。安装只针对当前用户，不需要管理员权限，完成后自动启动托盘。
+2. 如需便携版，下载 `RaiShot.*.zip`，**完整解压**到一个文件夹后运行 **`raishot.exe`**，保留包内 EXE 和 DLL 的同目录关系。
 3. 按 **Ctrl+1** 截图，按 **Ctrl+2** 将剪贴板中的图片或文字贴到屏幕上。两项快捷键都可以在设置中修改。
 
 单击托盘图标开始截图；右键打开图库、设置和其它工具入口。Windows N 版本使用录屏需要安装媒体功能包。

@@ -1,6 +1,6 @@
 [package]
 name = "rustshot"
-version = "0.4.15"
+version = "0.4.17"
 edition = "2021"
 rust-version = "1.90"
 description = "Windows screenshot, annotation, pin, OCR and screen recording tool built with Rust + GPUI"

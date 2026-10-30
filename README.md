@@ -38,8 +38,8 @@ The stitcher accounts for fixed headers and floating elements when aligning fram
 
 **Requires Windows 10 or 11, x64.**
 
-1. Open [the latest release](https://github.com/ceastld/raishot/releases/latest) and download the `RaiShot.*.zip` package.
-2. Extract the whole archive to a folder and run **`raishot.exe`**. Keep the included EXEs and DLLs together.
+1. Open [the latest release](https://github.com/ceastld/raishot/releases/latest), download the `RaiShot-*-setup-x64.exe` installer and run it. It installs for the current user without administrator rights and starts the tray when done.
+2. For a portable copy, download `RaiShot.*.zip`, extract the whole archive to a folder, and run **`raishot.exe`**. Keep the included EXEs and DLLs together.
 3. Press **Ctrl+1** to capture, or **Ctrl+2** to pin an image or text from the clipboard. Both shortcuts can be changed in settings.
 
 Click the tray icon to capture; right-click it for the library, settings, and other tools. On Windows N editions, screen recording requires the Media Feature Pack.
