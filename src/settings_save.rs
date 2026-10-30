@@ -11,12 +11,14 @@ use gpui::{
     Subscription, Window,
 };
 use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
+/// Apply／Cancel／Reset 也由设置窗口底部的应用条和页眉按钮调用。
 #[derive(Clone)]
-enum Control {
+pub(crate) enum Control {
     Apply,
     Cancel,
     Reset,
     Browse,
+    OpenFolder,
     Format(SaveFormat),
     Compression(PngCompression),
     Quality(i16),
@@ -28,7 +30,6 @@ pub(crate) struct SaveSettings {
     pub(crate) draft: SaveConfig,
     pub(crate) directory: Entity<TextField>,
     pub(crate) template: Entity<TextField>,
-    pub(crate) date_format: Entity<TextField>,
     quality: Entity<QualitySlider>,
     pub(crate) status: String,
     positions: Rc<RefCell<HashMap<String, (f32, f32)>>>,
@@ -59,32 +60,35 @@ impl SaveSettings {
         cx: &mut Context<Self>,
     ) -> Self {
         let draft = store.config.clone();
+        // 设置字段：输入法取消候选送来的空替换不会清掉原文，窗口未激活或未聚焦时不接收原生输入。
         let directory = cx.new(|cx| {
-            TextField::new(
+            TextField::new_settings(
                 draft.directory.to_string_lossy().into_owned(),
-                tr!("绝对路径", "Absolute path"),
+                crate::i18n::Text("绝对路径", "Absolute path"),
                 cx,
             )
         });
         let template = cx.new(|cx| {
-            TextField::new(
+            TextField::new_settings(
                 draft.filename_template.clone(),
-                crate::save_options::default_template(),
+                crate::i18n::Text(
+                    "截图_{date}_{time}_{width}x{height}",
+                    "Screenshot_{date}_{time}_{width}x{height}",
+                ),
                 cx,
             )
         });
-        let date_format = cx.new(|cx| TextField::new(draft.date_format.clone(), "yyyyMMdd", cx));
         let quality = cx.new(|cx| QualitySlider::new(draft.encoding.jpeg_quality, cx));
-        let group: Vec<_> = [&directory, &template, &date_format]
+        let group: Vec<_> = [&directory, &template]
             .iter()
             .map(|field| field.downgrade())
             .collect();
-        for field in [&directory, &template, &date_format] {
+        for field in [&directory, &template] {
             field.update(cx, |v, cx| v.configure_focus(group.clone(), window, cx));
         }
         quality.update(cx, |v, _| v.focus_group = group);
         let mut subscriptions = Vec::new();
-        for field in [&directory, &template, &date_format] {
+        for field in [&directory, &template] {
             subscriptions.push(
                 cx.subscribe_in(field, window, |v: &mut Self, _, event, _, cx| match event {
                     TextFieldEvent::Submit => v.apply(cx),
@@ -108,7 +112,6 @@ impl SaveSettings {
             draft,
             directory,
             template,
-            date_format,
             quality,
             status: String::new(),
             positions,
@@ -118,7 +121,6 @@ impl SaveSettings {
     fn read_fields(&mut self, cx: &App) {
         self.draft.directory = PathBuf::from(self.directory.read(cx).text());
         self.draft.filename_template = self.template.read(cx).text().to_owned();
-        self.draft.date_format = self.date_format.read(cx).text().to_owned();
     }
     /// 把草稿和三个输入框、质量滑块一起换成给定配置。
     fn load_draft(&mut self, config: SaveConfig, cx: &mut Context<Self>) {
@@ -129,19 +131,17 @@ impl SaveSettings {
         self.template.update(cx, |v, cx| {
             v.set_text(self.draft.filename_template.clone(), cx)
         });
-        self.date_format
-            .update(cx, |v, cx| v.set_text(self.draft.date_format.clone(), cx));
         self.quality.update(cx, |v, cx| {
             v.set_value(self.draft.encoding.jpeg_quality, cx)
         });
     }
     pub(crate) fn is_composing(&self, cx: &App) -> bool {
-        [&self.directory, &self.template, &self.date_format]
+        [&self.directory, &self.template]
             .iter()
             .any(|field| field.read(cx).is_composing())
     }
     fn apply(&mut self, cx: &mut Context<Self>) {
-        if [&self.directory, &self.template, &self.date_format]
+        if [&self.directory, &self.template]
             .iter()
             .any(|field| field.read(cx).is_composing())
         {
@@ -171,7 +171,31 @@ impl SaveSettings {
         };
         cx.notify();
     }
-    fn control(&mut self, action: Control, window: &mut Window, cx: &mut Context<Self>) {
+    /// 选择类设置点了就生效：草稿与已保存规则同时修改，草稿里其它未应用的输入保持不变。
+    fn commit(&mut self, change: impl Fn(&mut SaveConfig)) {
+        change(&mut self.draft);
+        let previous = self.store.config.clone();
+        change(&mut self.store.config);
+        self.status = match self.store.save() {
+            Ok(()) => tr!("已保存。", "Saved.").into(),
+            Err(error) => {
+                self.store.config = previous;
+                trf!(
+                    "设置未保存，请重试：{error}",
+                    "Settings not saved, please retry: {error}"
+                )
+            }
+        };
+    }
+    /// 草稿与已保存规则不同（有未应用的输入）。
+    pub(crate) fn has_changes(&self) -> bool {
+        self.draft != self.store.config
+    }
+    /// 草稿已是默认规则，页眉“恢复默认”无需再点。
+    pub(crate) fn draft_is_default(&self) -> bool {
+        self.draft == SaveConfig::default()
+    }
+    pub(crate) fn control(&mut self, action: Control, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_composing(cx) {
             self.status = tr!(
                 "请先确认或取消输入法候选，再继续操作。",
@@ -200,23 +224,31 @@ impl SaveSettings {
                 .into();
             }
             Control::Browse => self.browse(window, cx),
-            Control::Format(format) => {
-                self.draft.encoding.format = format;
-                self.status.clear();
+            Control::OpenFolder => {
+                let directory = self.store.config.directory.clone();
+                if !directory.is_dir() {
+                    self.status = tr!(
+                        "保存目录还不存在，第一次保存时会自动创建。",
+                        "The save folder doesn't exist yet; it is created on the first save."
+                    )
+                    .into();
+                } else if let Err(error) = std::process::Command::new("explorer.exe")
+                    .arg(&directory)
+                    .spawn()
+                {
+                    self.status = error.to_string();
+                }
             }
+            Control::Format(format) => self.commit(|config| config.encoding.format = format),
             Control::Compression(compression) => {
-                self.draft.encoding.png_compression = compression;
-                self.status.clear();
+                self.commit(|config| config.encoding.png_compression = compression)
             }
             Control::Quality(delta) => {
                 let value = (self.draft.encoding.jpeg_quality as i16 + delta).clamp(1, 100) as u8;
                 self.quality.update(cx, |v, cx| v.change(value, cx));
             }
             Control::Date(index) => {
-                self.draft.date_format = DATE_FORMATS[index].into();
-                self.date_format
-                    .update(cx, |v, cx| v.set_text(DATE_FORMATS[index].into(), cx));
-                self.status.clear();
+                self.commit(|config| config.date_format = DATE_FORMATS[index].into())
             }
             Control::Token(token) => self
                 .template
@@ -237,15 +269,12 @@ impl SaveSettings {
                 match chosen {
                     Ok(Ok(Some(paths))) => {
                         if let Some(path) = paths.first() {
-                            v.draft.directory = path.clone();
+                            // 用对话框选的目录是明确的选择，直接生效。
+                            let path = path.clone();
                             v.directory.update(cx, |v, cx| {
                                 v.set_text(path.to_string_lossy().into_owned(), cx)
                             });
-                            v.status = tr!(
-                                "目录已更改，点击“应用”后生效。",
-                                "Folder changed; click Apply to use it."
-                            )
-                            .into();
+                            v.commit(|config| config.directory = path.clone());
                         }
                     }
                     Ok(Err(error)) => v.status = error.to_string(),
@@ -295,6 +324,7 @@ impl SaveSettings {
             .child(probe(self.positions.clone(), id.into()))
             .into_any_element()
     }
+    /// 文件名：一个模板输入框，下方即时示例与可插入的变量；日期格式只能从预设中选，点了即生效。
     fn naming(&self, cx: &mut Context<Self>) -> AnyElement {
         let palette = crate::theme::palette(cx);
         let surface = widgets::surface(cx);
@@ -304,19 +334,40 @@ impl SaveSettings {
                 .text_color(rgb(palette.muted))
                 .child(tr!("插入", "Insert")),
         );
-        for (id, token) in [
-            ("settings-save-token-date", "{date}"),
-            ("settings-save-token-time", "{time}"),
-            ("settings-save-token-width", "{width}"),
-            ("settings-save-token-height", "{height}"),
+        for (id, token, label) in [
+            ("settings-save-token-date", "{date}", tr!("日期", "Date")),
+            ("settings-save-token-time", "{time}", tr!("时间", "Time")),
+            ("settings-save-token-width", "{width}", tr!("宽度", "Width")),
+            (
+                "settings-save-token-height",
+                "{height}",
+                tr!("高度", "Height"),
+            ),
         ] {
             tokens = tokens.child(self.bind(
-                widgets::chip(id, token, false, palette, surface),
+                widgets::chip(id, label, false, palette, surface),
                 id,
                 Control::Token(token),
                 cx,
             ));
         }
+        let (preview, preview_color) = match self
+            .draft
+            .suggested_stem_at(1920, 1080, SaveMoment::EXAMPLE)
+            .and_then(|stem| crate::save_options::file_name(&stem, self.draft.encoding.format))
+        {
+            Ok(name) => (trf!("示例：{name}", "Example: {name}"), palette.muted),
+            Err(error) => (error.to_string(), palette.accent),
+        };
+        let template = widgets::field_block(tr!("文件名模板", "File name template"), palette)
+            .child(self.field("settings-save-template", self.template.clone()))
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .text_color(rgb(preview_color))
+                    .child(preview),
+            )
+            .child(tokens);
         let mut dates = div().flex().flex_wrap().gap_2();
         for (index, date) in DATE_FORMATS.iter().enumerate() {
             dates = dates.child(
@@ -330,48 +381,10 @@ impl SaveSettings {
                 .on_click(cx.listener(move |v, _, w, cx| v.control(Control::Date(index), w, cx))),
             );
         }
-        let (preview, preview_color) = match self
-            .draft
-            .suggested_stem_at(1920, 1080, SaveMoment::EXAMPLE)
-            .and_then(|stem| crate::save_options::file_name(&stem, self.draft.encoding.format))
-        {
-            Ok(name) => (name, palette.foreground),
-            Err(error) => (error.to_string(), palette.accent),
-        };
-        let template = widgets::field_block(tr!("文件名模板", "File name template"), palette)
-            .child(self.field("settings-save-template", self.template.clone()))
-            .child(tokens);
-        let date = widgets::field_block(tr!("日期格式", "Date format"), palette)
-            .child(self.field("settings-save-date-format", self.date_format.clone()))
-            .child(dates);
-        let example = div()
-            .px_3()
-            .py_3()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(
-                div()
-                    .text_size(px(12.))
-                    .text_color(rgb(palette.muted))
-                    .child(tr!(
-                        "示例（1920 × 1080 截图）",
-                        "Example (1920 × 1080 capture)"
-                    )),
-            )
-            .child(
-                div()
-                    .text_size(px(13.))
-                    .text_color(rgb(preview_color))
-                    .child(preview),
-            );
+        let date = widgets::field_block(tr!("日期格式", "Date format"), palette).child(dates);
         widgets::card(
             surface,
-            [
-                template.into_any_element(),
-                date.into_any_element(),
-                example.into_any_element(),
-            ],
+            [template.into_any_element(), date.into_any_element()],
         )
         .into_any_element()
     }
@@ -532,67 +545,23 @@ impl Render for SaveSettings {
                         ButtonKind::Secondary,
                         Control::Browse,
                         cx,
+                    ))
+                    .child(self.button(
+                        "settings-save-open-folder",
+                        tr!("打开文件夹", "Open folder"),
+                        ButtonKind::Secondary,
+                        Control::OpenFolder,
+                        cx,
                     )),
             );
-        // 与翻译服务一致：只有草稿和已保存的规则不同时才出现“取消修改／应用”条。
-        let changed = self.draft != self.store.config;
-        let apply_bar = changed.then(|| {
-            div()
-                .px_3()
-                .py(px(10.))
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap_2()
-                .rounded_md()
-                .bg(gpui::rgba((palette.accent << 8) | 0x24))
-                .child(div().flex_1().min_w(px(140.)).text_size(px(13.)).child(tr!(
-                    "保存规则有改动，应用后下一次保存生效。",
-                    "Save rule changes take effect after Apply."
-                )))
-                .child(self.button(
-                    "settings-save-cancel",
-                    tr!("取消修改", "Cancel"),
-                    ButtonKind::Secondary,
-                    Control::Cancel,
-                    cx,
-                ))
-                .child(self.button(
-                    "settings-save-apply",
-                    tr!("应用", "Apply"),
-                    ButtonKind::Primary,
-                    Control::Apply,
-                    cx,
-                ))
-        });
-        let mut actions = div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_2()
-            .child(self.button(
-                "settings-save-reset",
-                tr!("恢复默认", "Restore defaults"),
-                ButtonKind::Secondary,
-                Control::Reset,
-                cx,
-            ));
-        if !self.status.is_empty() {
-            actions = actions.child(
-                div()
-                    .px_2()
-                    .text_size(px(12.))
-                    .text_color(rgb(palette.accent))
-                    .child(self.status.clone()),
-            );
-        }
+        // “应用／取消修改”条与“恢复默认”由设置窗口底部和页眉提供，切到别的分类也看得到。
         div()
             .flex_shrink_0()
             .flex()
             .flex_col()
             .gap_6()
             .child(widgets::note(
-                tr!("截图、贴图与图片编辑共用保存规则。改动后底部出现“应用”，点击后生效；切换分类不会丢失未应用的修改。", "Captures, pins and the image editor share these save rules. After a change, click \"Apply\" at the bottom to use it; switching tabs keeps unapplied changes."),
+                tr!("截图、贴图与图片编辑共用这些规则。选项点了即生效；手动改了文件夹或文件名后，在窗口底部点“应用”。", "Captures, pins and the image editor share these rules. Choices apply at once; after typing a folder or file name, click \"Apply\" at the bottom of the window."),
                 palette,
             ))
             .child(
@@ -601,8 +570,6 @@ impl Render for SaveSettings {
             )
             .child(widgets::section(tr!("文件名", "File name"), palette).child(self.naming(cx)))
             .child(widgets::section(tr!("图片格式", "Image format"), palette).child(self.encoding(cx)))
-            .children(apply_bar)
-            .child(actions)
             .into_any_element()
     }
 }

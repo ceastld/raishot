@@ -448,13 +448,29 @@ impl SettingsView {
             .flex_shrink_0()
             .track_focus(&self.hotkey_focus)
             .on_key_down(cx.listener(Self::record_hotkey))
-            .child(widgets::note(
+            // 一行说明；进阶组合与被占用时的处理收进“?”悬停说明。
+            .child(
+                div()
+                    .px_1()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .text_size(px(12.))
+                    .text_color(rgb(palette.muted))
+                    .child(tr!(
+                        "点击快捷键框后按下组合键即保存；Esc 取消，Backspace 停用。",
+                        "Click a box and press a combination to save it; Esc cancels, Backspace disables."
+                    ))
+                    .child(widgets::help_badge(
+                        "hotkeys-help",
                         tr!(
-                            "点击快捷键框，按下新组合并全部松开即保存；Esc 取消，Backspace 停用，单击鼠标退出录制。除 Ctrl/Alt/Shift/Win 组合外，也可录 CapsLock + 键、鼠标侧键、按住鼠标键 + 滚轮等；这类组合由托盘监听输入，按住的前缀键在未触发时会稍后补发。组合被占用时保留原快捷键。",
-                            "Click a hotkey box, press the new combination and release to save it. Esc cancels, Backspace disables, a click leaves recording. Besides Ctrl/Alt/Shift/Win combinations you can record CapsLock + key, mouse side buttons, or a held mouse button + wheel; the tray listens for these and replays held prefix keys a moment later when nothing triggers. If a combination is taken, the previous hotkey is kept."
+                            "除 Ctrl/Alt/Shift/Win 组合外，也可录 CapsLock + 键、鼠标侧键、按住鼠标键 + 滚轮等；这类组合由托盘监听输入，按住的前缀键在未触发时会稍后补发。单击鼠标退出录制。组合被占用时保留原快捷键。",
+                            "Besides Ctrl/Alt/Shift/Win combinations you can record CapsLock + key, mouse side buttons, or a held mouse button + wheel; the tray listens for these and replays held prefix keys a moment later when nothing triggers. A click leaves recording. If a combination is taken, the previous hotkey is kept."
                         ),
                         palette,
-                    ))
+                        surface,
+                    )),
+            )
             .children(categories.into_iter().map(|category| {
                 widgets::section(category, palette).child(widgets::card(
                     surface,

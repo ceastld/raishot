@@ -410,3 +410,100 @@ pub(crate) fn icon_button(
             .size(px(16.)),
         )
 }
+
+/// 页眉右侧的页面级操作按钮；固定宽度（取各状态文案最宽者），不可用时变灰且不响应悬停。
+pub(crate) fn header_button(
+    id: impl Into<ElementId>,
+    icon: crate::toolbar_icons::Icon,
+    label: &'static str,
+    width: f32,
+    enabled: bool,
+    palette: Palette,
+    surface: Surface,
+) -> Stateful<Div> {
+    let color = if enabled {
+        palette.foreground
+    } else {
+        palette.muted
+    };
+    div()
+        .id(id)
+        .relative()
+        .h(px(32.))
+        .w(px(width))
+        .px(px(12.))
+        .flex()
+        .flex_shrink_0()
+        .items_center()
+        .justify_center()
+        .gap(px(6.))
+        .rounded_md()
+        .border_1()
+        .border_color(rgb(surface.line))
+        .bg(rgb(surface.raised))
+        .text_size(px(13.))
+        .text_color(rgb(color))
+        .child(crate::toolbar_icons::action(icon, color).size(px(16.)))
+        .child(label)
+        .when(enabled, |button| {
+            button
+                .cursor_pointer()
+                .hover(move |style| style.bg(rgb(palette.hover)))
+        })
+        .when(!enabled, |button| button.opacity(0.6))
+}
+
+/// `header_button` 的宽度：左右内边距 12、图标 16、间距 6、边框 2。
+pub(crate) fn header_button_width(window: &gpui::Window, labels: &[&'static str]) -> f32 {
+    let label = labels
+        .iter()
+        .map(|text| text_width(window, text, 13., FontWeight::NORMAL))
+        .fold(0., f32::max);
+    label + 24. + 16. + 6. + 2.
+}
+
+/// 悬停说明浮层的内容。
+struct Hint(SharedString);
+impl gpui::Render for Hint {
+    fn render(&mut self, _: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+        let palette = crate::theme::palette(cx);
+        let surface = surface(cx);
+        div()
+            .max_w(px(420.))
+            .px_3()
+            .py_2()
+            .rounded_md()
+            .border_1()
+            .border_color(rgb(surface.line))
+            .bg(rgb(surface.raised))
+            .text_size(px(12.))
+            .line_height(px(18.))
+            .text_color(rgb(palette.foreground))
+            .child(self.0.clone())
+    }
+}
+
+/// 带悬停说明的“?”小圆标，用来收起次要的长说明。
+pub(crate) fn help_badge(
+    id: impl Into<ElementId>,
+    text: &'static str,
+    palette: Palette,
+    surface: Surface,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .size(px(18.))
+        .flex()
+        .flex_shrink_0()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .border_1()
+        .border_color(rgb(surface.line))
+        .text_size(px(11.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(rgb(palette.muted))
+        .hover(move |style| style.text_color(rgb(palette.foreground)))
+        .child("?")
+        .tooltip(move |_, cx| cx.new(|_| Hint(text.into())).into())
+}

@@ -435,6 +435,12 @@ impl TextField {
         if self.marked.is_some() {
             return;
         }
+        // 未聚焦时选区可能仍是初始全选；外部插入（如“插入日期”）接在末尾，不能替换整段原文。
+        if !self.focus_handle.is_focused(window) {
+            let end = self.content.len();
+            self.selection = end..end;
+            self.reversed = false;
+        }
         self.replace(None, text, false, None, cx);
         window.focus(&self.focus_handle);
         self.watermark_focus_changed(true, cx);

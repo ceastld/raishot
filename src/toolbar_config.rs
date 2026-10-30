@@ -122,6 +122,61 @@ impl ToolbarConfig {
         crate::toolbar_groups::slots(&self.tools, self.grouped)
     }
 
+    /// 当前排列方式下尚未上主栏、可添加的槽位；顺序同分组定义，未分组工具在后。
+    pub(crate) fn addable_slots(&self) -> Vec<crate::toolbar_groups::Slot> {
+        let shown = self.slots();
+        let ordered: Vec<Tool> = crate::toolbar_groups::GROUPS
+            .into_iter()
+            .flat_map(|group| group.members().iter().copied())
+            .chain(AVAILABLE_TOOLS)
+            .collect();
+        crate::toolbar_groups::slots(&ordered, self.grouped)
+            .into_iter()
+            .filter(|slot| !shown.contains(slot))
+            .collect()
+    }
+
+    /// 添加一个槽位：分组加入组内首个工具，下拉仍列出全组。
+    pub(crate) fn add_slot(&mut self, slot: crate::toolbar_groups::Slot) {
+        use crate::toolbar_groups::Slot;
+        let tool = match slot {
+            Slot::Tool(tool) => tool,
+            Slot::Group(group) => group.members()[0],
+        };
+        if !self.tools.iter().any(|tool| slot.contains(*tool)) {
+            self.tools.push(tool);
+        }
+    }
+
+    /// 移除一个槽位；分组移除其全部已启用工具。
+    pub(crate) fn remove_slot(&mut self, slot: crate::toolbar_groups::Slot) {
+        self.tools.retain(|tool| !slot.contains(*tool));
+    }
+
+    /// 拖放排序：把槽位放到 `target` 槽位所在位置（未上主栏的先加入）；
+    /// 同组工具随分组整体移动，组内相对顺序不变。
+    pub(crate) fn move_slot_to(
+        &mut self,
+        slot: crate::toolbar_groups::Slot,
+        target: crate::toolbar_groups::Slot,
+    ) {
+        self.add_slot(slot);
+        let mut slots = self.slots();
+        let (Some(index), Some(destination)) = (
+            slots.iter().position(|candidate| *candidate == slot),
+            slots.iter().position(|candidate| *candidate == target),
+        ) else {
+            return;
+        };
+        let moved = slots.remove(index);
+        slots.insert(destination, moved);
+        let tools = normalized_tools(&self.tools);
+        self.tools = slots
+            .iter()
+            .flat_map(|slot| tools.iter().copied().filter(|tool| slot.contains(*tool)))
+            .collect();
+    }
+
     pub(crate) fn save(&self) -> Result<()> {
         self.save_at(config_path())
     }
@@ -253,6 +308,55 @@ fn encode_legacy_ini(config: &ToolbarConfig) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::toolbar_groups::{Slot, ToolGroup};
+
+    #[test]
+    fn slot_editing_moves_whole_groups_and_lists_only_missing_slots() {
+        let mut config = ToolbarConfig::default();
+        assert_eq!(
+            config.slots(),
+            [
+                Slot::Group(ToolGroup::Shape),
+                Slot::Group(ToolGroup::Line),
+                Slot::Group(ToolGroup::Mark),
+                Slot::Group(ToolGroup::Text),
+                Slot::Group(ToolGroup::Mosaic),
+                Slot::Group(ToolGroup::Eraser),
+            ]
+        );
+        assert_eq!(config.addable_slots(), [Slot::Tool(Tool::Lasso)]);
+        // 形状组含矩形与椭圆，拖到线条位置时两者一起排到线条之后。
+        config.move_slot_to(Slot::Group(ToolGroup::Shape), Slot::Group(ToolGroup::Line));
+        assert_eq!(
+            &config.tools[..3],
+            [Tool::Arrow, Tool::Rectangle, Tool::Ellipse]
+        );
+        // 后面的组拖到最前。
+        config.move_slot_to(Slot::Group(ToolGroup::Eraser), Slot::Group(ToolGroup::Line));
+        assert_eq!(&config.tools[..2], [Tool::PixelEraser, Tool::Arrow]);
+        // 未上主栏的槽位拖到中间：先加入再就位。
+        config.move_slot_to(Slot::Tool(Tool::Lasso), Slot::Group(ToolGroup::Line));
+        assert_eq!(
+            &config.tools[..3],
+            [Tool::PixelEraser, Tool::Lasso, Tool::Arrow]
+        );
+        config.remove_slot(Slot::Tool(Tool::Lasso));
+        config.remove_slot(Slot::Group(ToolGroup::Shape));
+        assert!(!config.tools.contains(&Tool::Ellipse));
+        assert_eq!(config.addable_slots()[0], Slot::Group(ToolGroup::Shape));
+        config.add_slot(Slot::Group(ToolGroup::Shape));
+        assert_eq!(config.tools.last(), Some(&Tool::Rectangle));
+
+        config.grouped = false;
+        assert!(config.addable_slots().contains(&Slot::Tool(Tool::Ellipse)));
+        config.add_slot(Slot::Tool(Tool::Ellipse));
+        config.move_slot_to(Slot::Tool(Tool::Ellipse), Slot::Tool(Tool::Rectangle));
+        assert_eq!(
+            &config.tools[config.tools.len() - 2..],
+            [Tool::Ellipse, Tool::Rectangle]
+        );
+    }
+
     #[test]
     fn local_fill_toolbar_id_is_fixed_and_old_default_order_stays_unchanged() {
         assert_eq!(tool_id(Tool::LocalFill), Some("localFill"));

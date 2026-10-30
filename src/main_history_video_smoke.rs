@@ -188,6 +188,7 @@ fn memory_settings(
         media_popup: super::super::main_media_popup::MediaPopup::default(),
         tool_popup: super::super::main_tool_popup::ToolPopup::default(),
         _instance: None,
+        toast: Default::default(),
     }
 }
 

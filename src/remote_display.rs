@@ -353,7 +353,7 @@ impl crate::settings_view::SettingsView {
         }
         widgets::row(
             tr!("远程画面兼容", "Remote display"),
-            Some(tr!("长截图、录屏工具栏等默认不进入本机采集，但远程桌面和远控软件也会看不到它们。自动：远程桌面会话或检测到远控输入时改为可见，边框画在选区外；用远控软件仍看不到时选“始终兼容”。", "Long-capture and recording controls normally stay out of local captures, which also hides them from Remote Desktop and remote-control apps. Auto shows them in Remote Desktop sessions or when remote-control input is detected; choose Always if they are still missing.").into()),
+            Some(tr!("远程桌面或远控软件里看不到长截图、录屏控制条时，改为“始终兼容”。", "If long-capture or recording controls are missing over Remote Desktop or remote-control apps, choose Always.").into()),
             palette,
         )
         .flex_wrap()

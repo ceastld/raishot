@@ -9,7 +9,7 @@ use crate::{
 };
 use gpui::{
     div, prelude::*, px, rgb, size, AnyElement, App, AppContext, Bounds, Context, FocusHandle,
-    FontWeight, MouseButton, Render, SharedString, Subscription, TitlebarOptions, Window,
+    FontWeight, MouseButton, Render, Subscription, TitlebarOptions, Window,
     WindowBounds, WindowHandle, WindowOptions,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -28,6 +28,8 @@ pub(crate) mod main_page;
 mod main_pins;
 #[path = "main_tool_popup.rs"]
 mod main_tool_popup;
+#[path = "settings_status.rs"]
+mod status;
 #[path = "settings_titlebar.rs"]
 mod titlebar;
 use main_page::MainPage;
@@ -182,6 +184,8 @@ pub struct SettingsView {
     media_popup: main_media_popup::MediaPopup,
     tool_popup: main_tool_popup::ToolPopup,
     _instance: Option<instance::WindowRegistration>,
+    /// 保存结果的浮动提示状态。
+    pub(crate) toast: status::StatusToast,
 }
 impl SettingsView {
     pub(crate) fn activate_existing(page: Option<MainPage>) -> Result<bool> {
@@ -343,6 +347,7 @@ impl SettingsView {
                         media_popup: main_media_popup::MediaPopup::default(),
                         tool_popup: main_tool_popup::ToolPopup::default(),
                         _instance: None,
+                        toast: Default::default(),
                     }
                 })
             },
@@ -737,6 +742,10 @@ impl SettingsView {
         }
     }
     fn switch_tab(&mut self, tab: SettingsTab, window: &mut Window, cx: &mut Context<Self>) {
+        // 上一页的保存结果不带到新页面；下面取消录制等提示会重新写入。
+        if self.page != MainPage::Settings || self.tab != tab {
+            self.status.clear();
+        }
         if self.page != MainPage::Settings {
             self.show_page(MainPage::Settings, cx);
         }
@@ -797,7 +806,12 @@ impl SettingsView {
                     surface,
                 )
                 .child(self.settings_probe(page.id()))
-                .on_click(cx.listener(move |view, _, _, cx| view.show_page(page, cx))),
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    if view.page != page {
+                        view.status.clear();
+                    }
+                    view.show_page(page, cx)
+                })),
             );
         }
         tabs = tabs.child(
@@ -847,7 +861,12 @@ impl SettingsView {
                         surface,
                     )
                     .child(self.settings_probe(MainPage::Help.id()))
-                    .on_click(cx.listener(|view, _, _, cx| view.show_page(MainPage::Help, cx))),
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        if view.page != MainPage::Help {
+                            view.status.clear();
+                        }
+                        view.show_page(MainPage::Help, cx)
+                    })),
                 ),
             )
             .child(
@@ -994,7 +1013,9 @@ impl SettingsView {
                 .map(|(id, title, description, value)| {
                     self.toggle_row(id, title, description, value, cx)
                 });
+                // 最常改的“完成动作”放最前；低频的远程桌面兼容放最后。
                 column
+                    .child(self.quick_finish_settings(cx))
                     .child(
                         widgets::section(tr!("框选", "Selection"), palette)
                             .child(widgets::card(surface, selection)),
@@ -1002,10 +1023,6 @@ impl SettingsView {
                     .child(
                         widgets::section(tr!("截图内容", "Capture content"), palette)
                             .child(widgets::card(surface, content)),
-                    )
-                    .child(
-                        widgets::section(tr!("远程桌面", "Remote desktop"), palette)
-                            .child(widgets::card(surface, [self.remote_display_settings(cx)])),
                     )
                     .child(
                         widgets::section(tr!("文字识别", "Text recognition"), palette)
@@ -1021,7 +1038,10 @@ impl SettingsView {
                                 palette,
                             )),
                     )
-                    .child(self.quick_finish_settings(cx))
+                    .child(
+                        widgets::section(tr!("远程桌面", "Remote desktop"), palette)
+                            .child(widgets::card(surface, [self.remote_display_settings(cx)])),
+                    )
             }
             SettingsTab::Pin => {
                 let restore = self.toggle_row(
@@ -1054,7 +1074,7 @@ impl SettingsView {
                 // 正文列：视口减侧栏与左右 px_8，最宽 760。
                 let width = (f32::from(window.viewport_size().width) - sidebar_width(window) - 64.)
                     .min(760.);
-                column.child(self.toolbar_settings(width, cx))
+                column.child(self.toolbar_settings(width, window, cx))
             }
         }
     }
@@ -1167,26 +1187,25 @@ impl Render for SettingsView {
                 .child(body_content)
                 .into_any_element()
         };
-        let (status, status_color): (SharedString, u32) = if self.status.is_empty()
-            && self.page != MainPage::Settings
-        {
-            ("".into(), palette.muted)
-        } else if self.status.is_empty() {
-            (
-                    tr!(
-                    "设置即时保存；输入类设置改动后在该页底部点击“应用”。",
-                    "Settings save instantly; for typed settings, click \"Apply\" at the bottom of the page."
-                )
-                    .into(),
-                    palette.muted,
-                )
-        } else {
-            (self.status.clone().into(), palette.accent)
-        };
+        let toast = self.status_toast(cx);
+        let apply_bar = self.save_apply_bar(cx);
         let (page_title, page_description) = if self.page == MainPage::Settings {
             (self.tab.title(), self.tab.description())
         } else {
             (self.page.title(), self.page.description())
+        };
+        // 页面级操作放在标题右侧，不必滚到底部寻找。
+        // 标题行整体是原生拖动区，操作按钮所在宽度要从拖动层里让出，否则点击会变成拖窗口。
+        let (header_action, header_action_width) = match (self.page, self.tab) {
+            (MainPage::Settings, SettingsTab::Toolbar) => {
+                let width = Self::toolbar_reset_width(window);
+                (Some(self.toolbar_reset_button(width, cx)), width)
+            }
+            (MainPage::Settings, SettingsTab::Save) => {
+                let width = Self::save_reset_width(window);
+                (Some(self.save_reset_button(width, cx)), width)
+            }
+            _ => (None, 0.),
         };
         let sidebar_width = sidebar_width(window);
         let band = titlebar::resize_band(window);
@@ -1252,10 +1271,17 @@ impl Render for SettingsView {
                                             .h(px(32.))
                                             .flex()
                                             .items_center()
-                                            .text_size(px(24.))
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .text_ellipsis()
-                                            .child(page_title),
+                                            .gap_3()
+                                            .child(
+                                                div()
+                                                    .flex_1()
+                                                    .min_w(px(0.))
+                                                    .text_size(px(24.))
+                                                    .font_weight(FontWeight::SEMIBOLD)
+                                                    .text_ellipsis()
+                                                    .child(page_title),
+                                            )
+                                            .children(header_action),
                                     )
                                     .child(
                                         div()
@@ -1265,7 +1291,14 @@ impl Render for SettingsView {
                                             .child(page_description),
                                     ),
                             )
-                            .child(titlebar::drag_layer(titlebar::CAPTION_WIDTH, band))
+                            .child(titlebar::drag_layer(
+                                if header_action_width > 0. {
+                                    titlebar::CAPTION_WIDTH + 16. + header_action_width + 8.
+                                } else {
+                                    titlebar::CAPTION_WIDTH
+                                },
+                                band,
+                            ))
                             .child(titlebar::caption_buttons(band, window, cx)),
                     )
                     .child(
@@ -1275,33 +1308,10 @@ impl Render for SettingsView {
                             .min_h(px(0.))
                             .overflow_hidden()
                             .child(content)
-                            .child(self.content_probe()),
+                            .child(self.content_probe())
+                            .children(toast),
                     )
-                    .when(!status.is_empty(), |column| {
-                        column.child(
-                            div()
-                                .id("settings-status")
-                                .flex_shrink_0()
-                                .min_h(px(36.))
-                                .px_8()
-                                .py_2()
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .border_t_1()
-                                .border_color(rgb(surface.line))
-                                .text_size(px(12.))
-                                .text_color(rgb(status_color))
-                                .child(
-                                    div()
-                                        .size(px(6.))
-                                        .flex_shrink_0()
-                                        .rounded_full()
-                                        .bg(rgb(status_color)),
-                                )
-                                .child(div().flex_1().min_w(px(0.)).child(status)),
-                        )
-                    }),
+                    .children(apply_bar),
             );
         div()
             .relative()

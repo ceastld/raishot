@@ -11,6 +11,7 @@ mod audio_devices;
 mod autostart;
 mod baidu_image_translate;
 mod brush_cursor;
+mod hand_cursor;
 mod canvas_source;
 mod capture;
 mod capture_arrow_properties;

@@ -590,19 +590,20 @@ async fn verify(owner: WindowHandle<CaptureView>, cx: &mut AsyncApp) -> Result<(
         ToolbarConfig::load().tools == DEFAULT_TOOLS,
         "恢复默认工具栏未保存",
     )?;
-    settings_button(settings, "toolbar-toggle-rectangle", cx).await?;
-    settings_button(settings, "toolbar-up-ellipse", cx).await?;
+    settings_button(settings, "toolbar-remove-group-shape", cx).await?;
+    settings_button(settings, "toolbar-add-group-shape", cx).await?;
     let config = ToolbarConfig::load();
     ensure(
         config.tools
             == [
                 Tool::Arrow,
                 Tool::Pen,
-                Tool::Ellipse,
                 Tool::Text,
                 Tool::Mosaic,
+                Tool::PixelEraser,
+                Tool::Rectangle,
             ],
-        "真实工具栏设置未隐藏矩形并将椭圆上移",
+        "真实工具栏设置未移除形状组并重新添加到末尾",
     )?;
     settings
         .update(cx, |v, _, _| {
