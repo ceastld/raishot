@@ -3,6 +3,7 @@ use super::*;
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 
 const SCHEMA_VERSION: i64 = 1;
+const IMPORT_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[derive(Default, Serialize, Deserialize)]
 struct Documents {
@@ -51,6 +52,9 @@ fn open(dir: &Path) -> Result<Connection> {
     if initialized(&connection)? {
         return Ok(connection);
     }
+    // 首次导入只发生一次，另一进程可能正在同步写入整份旧工作区；放宽等待，
+    // 等它提交后在事务内看到已初始化即可直接使用，不让后到者因 300ms 超时而加载失败。
+    connection.busy_timeout(IMPORT_BUSY_TIMEOUT)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     transaction.execute_batch(
         "CREATE TABLE IF NOT EXISTS pin_meta (
@@ -90,6 +94,7 @@ fn open(dir: &Path) -> Result<Connection> {
         persist(&transaction, WireWorkspace::from(&workspace))?;
     }
     transaction.commit()?;
+    connection.busy_timeout(crate::storage_db::BUSY_TIMEOUT)?;
     Ok(connection)
 }
 

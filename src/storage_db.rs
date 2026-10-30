@@ -9,7 +9,8 @@ use std::{
 const DATABASE_NAME: &str = "library.sqlite3";
 const APPLICATION_ID: i64 = 0x52534854;
 const STORAGE_VERSION: i64 = 1;
-const BUSY_TIMEOUT: Duration = Duration::from_millis(300);
+/// 普通读写遇锁最多等待的时长，界面路径不因数据库长时间卡住。
+pub(crate) const BUSY_TIMEOUT: Duration = Duration::from_millis(300);
 
 pub(crate) fn path_in(workspace: &Path) -> PathBuf {
     workspace.join(DATABASE_NAME)
