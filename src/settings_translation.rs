@@ -366,6 +366,20 @@ fn menu_step(cursor: Option<usize>, key: &str) -> Option<usize> {
     })
 }
 
+#[derive(Clone, Default, PartialEq, Eq)]
+enum ModelList {
+    #[default]
+    Idle,
+    Loading,
+    Ready(Vec<String>),
+    Failed(String),
+}
+
+/// 内置且免 Key 的服务（Index）模型写死，没有可改的项，列表里不展开。
+fn configurable(profile: &ServiceProfile) -> bool {
+    profile.builtin().map_or(true, |builtin| builtin.needs_key)
+}
+
 pub(super) struct TranslationFields {
     /// 服务配置编辑器的输入框；同一时间只展开一项。
     name: Entity<TextField>,
@@ -376,6 +390,12 @@ pub(super) struct TranslationFields {
     editing: Option<String>,
     initial_api_key: String,
     vision: bool,
+    /// 展开项从服务 `/models` 拉到的模型；`model_fetch` 为代次，地址、Key 变化或收起后旧结果作废。
+    models: ModelList,
+    model_fetch: u64,
+    model_menu: bool,
+    /// 手动输入模型名：取不到列表，或要用列表外的模型。
+    model_manual: bool,
     /// “其它语言”输入框；回车直接保存目标语言，不进草稿。
     target: Entity<TextField>,
     baidu_app_id: Entity<TextField>,
@@ -488,6 +508,11 @@ impl TranslationFields {
                     TextFieldEvent::Submit => view.save_profile(cx),
                     TextFieldEvent::Changed => {
                         view.status.clear();
+                        let fields = &view.translation_fields;
+                        if *field == fields.endpoint || *field == fields.api_key {
+                            // 停顿后再取，逐字输入不连发请求。
+                            view.fetch_models(std::time::Duration::from_millis(600), cx);
+                        }
                         cx.notify();
                     }
                 },
@@ -504,6 +529,10 @@ impl TranslationFields {
             editing: None,
             initial_api_key: String::new(),
             vision: false,
+            models: ModelList::Idle,
+            model_fetch: 0,
+            model_menu: false,
+            model_manual: false,
             target,
             baidu_app_id,
             baidu_api_key,
@@ -557,6 +586,9 @@ impl TranslationFields {
         self.editing = Some(draft.id.clone());
         self.initial_api_key = draft.initial_api_key;
         self.vision = draft.vision;
+        self.models = ModelList::Idle;
+        self.model_menu = false;
+        self.model_manual = false;
         for (field, text) in [
             (&self.name, draft.name),
             (&self.endpoint, draft.endpoint),
@@ -617,16 +649,124 @@ impl SettingsView {
         };
         cx.notify();
     }
+    /// 收起编辑器；进行中的模型请求结果随代次作废。
+    fn close_editor(&mut self) {
+        let fields = &mut self.translation_fields;
+        fields.editing = None;
+        fields.model_fetch += 1;
+        fields.models = ModelList::Idle;
+        fields.model_menu = false;
+    }
+    /// 取模型列表的地址与 Key；只在缺地址时返回提示。是否要 Key 不预判：
+    /// 本机服务和部分在线服务免 Key 也能列出模型，需要时由服务返回 401 再提示。
+    fn model_source(&self, cx: &App) -> std::result::Result<(String, String), &'static str> {
+        let fields = &self.translation_fields;
+        let builtin = fields
+            .editing
+            .as_deref()
+            .and_then(crate::translate::builtin);
+        let endpoint = builtin.map_or_else(
+            || fields.endpoint.read(cx).text().trim().to_owned(),
+            |builtin| builtin.endpoint.to_owned(),
+        );
+        if validate_endpoint(&endpoint).is_err() {
+            return Err(tr!(
+                "填写接口地址后可获取模型列表。",
+                "Enter the base URL to load models."
+            ));
+        }
+        let key = fields.api_key.read(cx).text().trim().to_owned();
+        Ok((endpoint, key))
+    }
+    /// 从当前地址取模型列表；`delay` 用于输入停顿后再发，期间的新输入会让旧请求作废。
+    fn fetch_models(&mut self, delay: std::time::Duration, cx: &mut Context<Self>) {
+        let fields = &mut self.translation_fields;
+        if fields.editing.is_none() {
+            return;
+        }
+        fields.model_fetch += 1;
+        let generation = fields.model_fetch;
+        let Ok((endpoint, key)) = self.model_source(cx) else {
+            self.translation_fields.models = ModelList::Idle;
+            return;
+        };
+        self.translation_fields.models = ModelList::Loading;
+        cx.spawn(async move |view, cx| {
+            if !delay.is_zero() {
+                cx.background_executor().timer(delay).await;
+                if view
+                    .update(cx, |view, _| {
+                        view.translation_fields.model_fetch != generation
+                    })
+                    .unwrap_or(true)
+                {
+                    return;
+                }
+            }
+            let result = cx
+                .background_executor()
+                .spawn(async move { crate::translate::list_models(&endpoint, &key) })
+                .await;
+            let _ = view.update(cx, |view, cx| {
+                let fields = &mut view.translation_fields;
+                if fields.model_fetch == generation {
+                    fields.models = match result {
+                        Ok(ids) => ModelList::Ready(ids),
+                        Err(error) => ModelList::Failed(error),
+                    };
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+    /// 展开项与已保存值不同（新增时为填了任何内容）才可保存。
+    fn profile_dirty(&self, cx: &App) -> bool {
+        let mut draft = self.translation_fields.read_profile(cx);
+        match self
+            .preferences
+            .service_profile(&draft.id)
+            .filter(|_| !draft.id.is_empty())
+        {
+            Some(profile) => {
+                let saved = ProfileDraft::from_profile(profile);
+                draft.initial_api_key = saved.initial_api_key.clone();
+                draft != saved
+            }
+            None => {
+                draft.initial_api_key.clear();
+                draft != ProfileDraft::default()
+            }
+        }
+    }
+    fn pick_model(&mut self, model: String, cx: &mut Context<Self>) {
+        let fields = &mut self.translation_fields;
+        fields.model_menu = false;
+        fields.model_manual = false;
+        fields
+            .model
+            .update(cx, |field, cx| field.set_text(model, cx));
+        self.status.clear();
+        cx.notify();
+    }
+    fn type_model(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let fields = &mut self.translation_fields;
+        fields.model_menu = false;
+        fields.model_manual = true;
+        window.focus(&fields.model.read(cx).focus_handle);
+        cx.notify();
+    }
     fn toggle_editor(&mut self, id: &str, cx: &mut Context<Self>) {
         if !self.translation_controls_ready(cx) {
             return;
         }
         if self.translation_fields.editing.as_deref() == Some(id) {
-            self.translation_fields.editing = None;
+            self.close_editor();
         } else {
             let latest = Preferences::load();
             self.translation_fields.open_editor(id, &latest, cx);
             preserve_latest(&mut self.preferences, &latest);
+            self.fetch_models(std::time::Duration::ZERO, cx);
         }
         self.status.clear();
         cx.notify();
@@ -647,7 +787,7 @@ impl SettingsView {
                     .map(ServiceProfile::display_name)
                     .unwrap_or_default();
                 self.preferences = saved;
-                self.translation_fields.editing = None;
+                self.close_editor();
                 trf!("已保存服务“{}”。", "Saved service “{}”.", name)
             }
             Err(error) => trf!("服务未保存：{error}", "Service not saved: {error}"),
@@ -661,7 +801,7 @@ impl SettingsView {
         }
         let mut latest = Preferences::load();
         let Some(profile) = latest.service_profile(&id).cloned() else {
-            self.translation_fields.editing = None;
+            self.close_editor();
             cx.notify();
             return;
         };
@@ -682,7 +822,7 @@ impl SettingsView {
         self.status = match latest.save() {
             Ok(()) => {
                 self.preferences = latest;
-                self.translation_fields.editing = None;
+                self.close_editor();
                 trf!(
                     "已删除服务“{}”。",
                     "Deleted service “{}”.",
@@ -946,6 +1086,9 @@ impl SettingsView {
                     .w_full()
                     .flex()
                     .flex_col()
+                    .rounded_md()
+                    // 展开项的标题行与编辑区共用一块底色，读作一个整体。
+                    .when(open, |item| item.bg(rgb(surface.nav_selected)))
                     .child(self.profile_row(profile, open, cx))
                     .when(open, |row| {
                         row.child(self.profile_editor(Some(profile), cx))
@@ -959,6 +1102,8 @@ impl SettingsView {
                     .w_full()
                     .flex()
                     .flex_col()
+                    .rounded_md()
+                    .bg(rgb(surface.nav_selected))
                     .child(widgets::row(
                         tr!("新服务", "New service"),
                         Some(
@@ -1250,7 +1395,7 @@ impl SettingsView {
         profile: &ServiceProfile,
         open: bool,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> AnyElement {
         let palette = crate::theme::palette(cx);
         let surface = widgets::surface(cx);
         let capability = if profile.supports_vision() {
@@ -1262,6 +1407,10 @@ impl SettingsView {
         if profile.builtin().is_none() {
             description.push_str(" · ");
             description.push_str(host(&profile.endpoint));
+        }
+        let configurable = configurable(profile);
+        if !configurable {
+            description.push_str(tr!(" · 内置，免配置", " · Built-in, no setup"));
         }
         let (status, warn): (&str, bool) = if profile.key_unreadable() {
             (tr!("Key 无法解密", "Key unreadable"), true)
@@ -1282,10 +1431,7 @@ impl SettingsView {
             .collect();
         let id = profile.id.clone();
         let probe = format!("settings-translation-profile-{}", profile.id);
-        widgets::row(profile.display_name(), Some(description.into()), palette)
-            .id(SharedString::from(probe.clone()))
-            .cursor_pointer()
-            .hover(move |style| style.bg(rgb(surface.nav_hover)))
+        let row = widgets::row(profile.display_name(), Some(description.into()), palette)
             .when(!uses.is_empty(), |row| {
                 row.child(
                     div()
@@ -1313,7 +1459,18 @@ impl SettingsView {
                         badge.bg(rgb(surface.track)).text_color(rgb(palette.muted))
                     })
                     .child(status),
-            )
+            );
+        if !configurable {
+            // 没有可改的项：不可点，箭头位置留空保持右侧对齐。
+            return row
+                .child(div().size(px(16.)).flex_shrink_0())
+                .into_any_element();
+        }
+        row.id(SharedString::from(probe.clone()))
+            .cursor_pointer()
+            .when(!open, |row| {
+                row.hover(move |style| style.bg(rgb(surface.nav_hover)))
+            })
             .child(
                 toolbar_icons::action(
                     if open { Icon::ChevronUp } else { Icon::Chevron },
@@ -1323,8 +1480,9 @@ impl SettingsView {
             )
             .child(self.settings_probe(probe))
             .on_click(cx.listener(move |view, _, _, cx| view.toggle_editor(&id, cx)))
+            .into_any_element()
     }
-    /// 展开的编辑器：内置服务只改模型和 Key；自定义服务还可改名称、地址和图像能力。
+    /// 展开的编辑器：标签在左、输入在右。内置服务只改模型和 Key；自定义服务还可改名称、地址和图像能力。
     fn profile_editor(
         &self,
         profile: Option<&ServiceProfile>,
@@ -1334,68 +1492,134 @@ impl SettingsView {
         let surface = widgets::surface(cx);
         let fields = &self.translation_fields;
         let builtin = profile.and_then(ServiceProfile::builtin);
-        let needs_key = profile.is_some_and(ServiceProfile::needs_key);
-        let label = |text: &'static str| {
+        let label_width = px(if crate::i18n::is_english() { 76. } else { 64. });
+        let line = |label: &'static str, control: AnyElement| {
             div()
-                .px_1()
-                .text_size(px(12.))
-                .text_color(rgb(palette.foreground))
-                .child(text)
+                .w_full()
+                .flex()
+                .items_center()
+                .gap_3()
+                .child(
+                    div()
+                        .w(label_width)
+                        .flex_shrink_0()
+                        .text_size(px(13.))
+                        .text_color(rgb(palette.muted))
+                        .child(label),
+                )
+                .child(div().flex_1().min_w(px(0.)).child(control))
         };
-        let mut panel = div().w_full().flex().flex_col().gap_2().px_3().pb(px(14.));
+        // 字段下的说明与输入框左缘对齐。
+        let hint = || {
+            div()
+                .w_full()
+                .mt(px(-4.))
+                .pl(label_width + px(12.))
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_x_1()
+                .text_size(px(12.))
+                .line_height(px(18.))
+                .text_color(rgb(palette.muted))
+        };
+        let link = |id: &'static str, text: &'static str| {
+            div()
+                .id(id)
+                .relative()
+                .cursor_pointer()
+                .text_color(rgb(palette.accent))
+                .hover(|style| style.opacity(0.8))
+                .child(text)
+                .child(self.settings_probe(id))
+        };
+        let mut panel = div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .px_3()
+            .pt(px(2.))
+            .pb_3();
         if builtin.is_none() {
             panel = panel
-                .child(label(tr!("名称", "Name")))
-                .child(self.translation_field("settings-translation-profile-name", &fields.name))
-                .child(label(tr!("接口根地址", "API base URL")))
-                .child(self.translation_field("settings-translation-endpoint", &fields.endpoint))
-                .child(widgets::note(
-                    tr!(
-                        "OpenAI 兼容接口，通常以 /v1 结尾。",
-                        "OpenAI-compatible API, usually ending in /v1."
-                    ),
-                    palette,
-                ));
-        }
-        panel = panel
-            .child(label(tr!("模型", "Model")))
-            .child(self.translation_field("settings-translation-model", &fields.model));
-        if let Some(builtin) = builtin {
-            panel = panel.child(widgets::note(
-                trf!(
-                    "留空使用默认模型 {}。",
-                    "Leave empty for the default model {}.",
-                    builtin.model
-                ),
-                palette,
-            ));
-        }
-        panel = panel
-            .child(label(if needs_key {
-                "API Key"
-            } else {
-                tr!("API Key（可选）", "API key (optional)")
-            }))
-            .child(self.translation_field("settings-translation-api-key", &fields.api_key))
-            .when(profile.is_some_and(ServiceProfile::key_unreadable), |panel| {
-                panel.child(widgets::note(
-                    tr!(
-                        "原 API Key 无法解密，请重新填写；原密文仍保留。",
-                        "The saved API key cannot be decrypted. Enter it again; its encrypted value is kept."
-                    ),
-                    palette,
+                .child(line(
+                    tr!("名称", "Name"),
+                    self.translation_field("settings-translation-profile-name", &fields.name),
                 ))
+                .child(line(
+                    tr!("接口地址", "Base URL"),
+                    self.translation_field("settings-translation-endpoint", &fields.endpoint),
+                ))
+                .child(hint().child(tr!(
+                    "OpenAI 兼容接口，通常以 /v1 结尾。",
+                    "OpenAI-compatible, usually ends in /v1."
+                )));
+        }
+        panel = panel
+            .child(line(tr!("模型", "Model"), self.model_control(builtin, cx)))
+            .child(self.model_hint(hint(), link, cx));
+        let key_saved = {
+            let key = fields.api_key.read(cx).text();
+            !key.is_empty() && key == fields.initial_api_key
+        };
+        let has_key = !fields.api_key.read(cx).text().is_empty();
+        let key = div()
+            .relative()
+            .w_full()
+            .child(self.translation_field("settings-translation-api-key", &fields.api_key))
+            .when(has_key, |key| {
+                key.child(
+                    div()
+                        .id("settings-translation-api-key-clear")
+                        .absolute()
+                        .top(px(6.))
+                        .right(px(6.))
+                        .size(px(24.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(4.))
+                        .cursor_pointer()
+                        .hover(move |style| style.bg(rgb(palette.hover)))
+                        .child(toolbar_icons::action(Icon::Close, palette.muted).size(px(14.)))
+                        .child(self.settings_probe("settings-translation-api-key-clear"))
+                        .on_click(cx.listener(|view, _, window, cx| {
+                            let field = view.translation_fields.api_key.clone();
+                            field.update(cx, |field, cx| field.set_text(String::new(), cx));
+                            window.focus(&field.read(cx).focus_handle);
+                            view.fetch_models(std::time::Duration::ZERO, cx);
+                            cx.notify();
+                        })),
+                )
             });
+        panel = panel.child(line("API Key", key.into_any_element()));
+        if profile.is_some_and(ServiceProfile::key_unreadable) {
+            panel = panel.child(hint().text_color(rgb(palette.danger)).child(tr!(
+                "原 API Key 无法解密，请重新填写；原密文仍保留。",
+                "The saved API key cannot be decrypted. Enter it again; its encrypted value is kept."
+            )));
+        } else if key_saved {
+            panel = panel.child(hint().child(tr!(
+                "已加密保存，只有当前 Windows 用户可解密。",
+                "Encrypted; only this Windows user can decrypt it."
+            )));
+        } else if !profile.is_some_and(ServiceProfile::needs_key) {
+            panel = panel.child(hint().child(tr!(
+                "可选；本机服务通常不需要。",
+                "Optional; local servers usually need none."
+            )));
+        }
         if builtin.is_none() {
             let vision = fields.vision;
             panel = panel.child(
                 div()
                     .id("settings-translation-profile-vision")
                     .relative()
+                    .ml(label_width + px(12.))
                     .flex()
                     .items_center()
                     .gap_3()
-                    .px_1()
                     .py_1()
                     .cursor_pointer()
                     .child(widgets::switch(vision, palette, surface))
@@ -1406,8 +1630,8 @@ impl SettingsView {
                             .text_size(px(13.))
                             .text_color(rgb(palette.foreground))
                             .child(tr!(
-                                "支持图像输入（可用于公式识别）",
-                                "Accepts images (usable for formulas)"
+                                "支持图像输入，可用于公式识别",
+                                "Accepts images; usable for formulas"
                             )),
                     )
                     .child(self.settings_probe("settings-translation-profile-vision"))
@@ -1417,7 +1641,15 @@ impl SettingsView {
                     })),
             );
         }
-        let mut actions = div().flex().items_center().gap_2().pt_1();
+        let dirty = self.profile_dirty(cx);
+        let mut actions = div()
+            .mt(px(2.))
+            .pt(px(10.))
+            .border_t_1()
+            .border_color(rgb(surface.line))
+            .flex()
+            .items_center()
+            .gap_2();
         if let Some(profile) = profile.filter(|profile| profile.builtin().is_none()) {
             let id = profile.id.clone();
             actions = actions.child(
@@ -1429,7 +1661,7 @@ impl SettingsView {
                     .text_size(px(12.))
                     .text_color(rgb(palette.danger))
                     .hover(|style| style.opacity(0.8))
-                    .child(tr!("删除这项服务", "Delete service"))
+                    .child(tr!("删除服务", "Delete"))
                     .child(self.settings_probe("settings-translation-profile-delete"))
                     .on_click(
                         cx.listener(move |view, _, _, cx| view.delete_profile(id.clone(), cx)),
@@ -1438,17 +1670,31 @@ impl SettingsView {
         }
         actions = actions
             .child(div().flex_1())
+            .when(dirty, |actions| {
+                actions.child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(rgb(palette.muted))
+                        .child(tr!("有未保存的修改", "Unsaved changes")),
+                )
+            })
             .child(
                 widgets::button(
                     "settings-translation-profile-cancel",
-                    tr!("取消", "Cancel"),
+                    if dirty {
+                        tr!("取消", "Cancel")
+                    } else {
+                        tr!("收起", "Close")
+                    },
                     ButtonKind::Secondary,
                     palette,
                     surface,
                 )
+                .h(px(28.))
+                .text_size(px(12.))
                 .child(self.settings_probe("settings-translation-profile-cancel"))
                 .on_click(cx.listener(|view, _, _, cx| {
-                    view.translation_fields.editing = None;
+                    view.close_editor();
                     view.status.clear();
                     cx.notify();
                 })),
@@ -1456,15 +1702,371 @@ impl SettingsView {
             .child(
                 widgets::button(
                     "settings-translation-profile-save",
-                    tr!("保存", "Save"),
+                    if profile.is_some() {
+                        tr!("保存", "Save")
+                    } else {
+                        tr!("添加", "Add")
+                    },
                     ButtonKind::Primary,
                     palette,
                     surface,
                 )
+                .h(px(28.))
+                .text_size(px(12.))
                 .child(self.settings_probe("settings-translation-profile-save"))
-                .on_click(cx.listener(|view, _, _, cx| view.save_profile(cx))),
+                // 没有改动时置灰且不响应。
+                .when(!dirty, |button| button.opacity(0.45).cursor_default())
+                .when(dirty, |button| {
+                    button.on_click(cx.listener(|view, _, _, cx| view.save_profile(cx)))
+                }),
             );
         panel.child(actions)
+    }
+    /// 模型：从服务拉到的列表里选；内置服务的默认模型置顶。手动模式显示输入框。
+    fn model_control(
+        &self,
+        builtin: Option<&'static crate::translate::Builtin>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let palette = crate::theme::palette(cx);
+        let surface = widgets::surface(cx);
+        let fields = &self.translation_fields;
+        if fields.model_manual {
+            let back = matches!(fields.models, ModelList::Ready(_)).then(|| {
+                widgets::button(
+                    "settings-translation-model-list",
+                    tr!("从列表选", "Pick from list"),
+                    ButtonKind::Secondary,
+                    palette,
+                    surface,
+                )
+                .h(px(36.))
+                .text_size(px(12.))
+                .child(self.settings_probe("settings-translation-model-list"))
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.translation_fields.model_manual = false;
+                    cx.notify();
+                }))
+            });
+            return div()
+                .w_full()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .child(self.translation_field("settings-translation-model", &fields.model)),
+                )
+                .children(back)
+                .into_any_element();
+        }
+        let model = fields.model.read(cx).text().trim().to_owned();
+        let open = fields.model_menu;
+        let shown: Option<(String, bool)> = if !model.is_empty() {
+            Some((model.clone(), false))
+        } else {
+            builtin.map(|builtin| (builtin.model.to_owned(), true))
+        };
+        let placeholder = if fields.models == ModelList::Loading {
+            tr!("正在获取模型…", "Loading models…")
+        } else {
+            tr!("选择模型", "Choose a model")
+        };
+        let trigger = div()
+            .id("settings-translation-model")
+            .relative()
+            .h(px(36.))
+            .w_full()
+            .pl_3()
+            .pr_2()
+            .flex()
+            .items_center()
+            .gap_2()
+            .rounded_md()
+            .border_1()
+            .border_color(rgb(if open { palette.accent } else { palette.border }))
+            .bg(rgb(surface.track))
+            .text_size(px(13.))
+            .cursor_pointer()
+            .hover(move |style| style.bg(rgb(palette.hover)))
+            .on_click(cx.listener(|view, _, _, cx| {
+                let fields = &mut view.translation_fields;
+                fields.model_menu = !fields.model_menu;
+                fields.service_menu = None;
+                fields.target_menu = false;
+                cx.notify();
+            }))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .map(|label| match &shown {
+                        Some((name, default)) => label
+                            .child(div().min_w(px(0.)).text_ellipsis().child(name.clone()))
+                            .when(*default, |label| {
+                                label.child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .text_size(px(12.))
+                                        .text_color(rgb(palette.muted))
+                                        .child(tr!("默认", "default")),
+                                )
+                            }),
+                        None => label.text_color(rgb(palette.muted)).child(placeholder),
+                    }),
+            )
+            .child(
+                toolbar_icons::action(
+                    if open { Icon::ChevronUp } else { Icon::Chevron },
+                    palette.muted,
+                )
+                .size(px(14.)),
+            )
+            .child(self.settings_probe("settings-translation-model"));
+        div()
+            .relative()
+            .w_full()
+            .child(trigger)
+            .when(open, |control| {
+                control
+                    .child(deferred(
+                        anchored()
+                            .position(point(px(0.), px(0.)))
+                            .snap_to_window()
+                            .child(
+                                div()
+                                    .id("settings-translation-model-backdrop")
+                                    .w(px(8000.))
+                                    .h(px(8000.))
+                                    .occlude()
+                                    .on_any_mouse_down(cx.listener(|view, _, _, cx| {
+                                        view.translation_fields.model_menu = false;
+                                        cx.notify();
+                                    })),
+                            ),
+                    ))
+                    .child(
+                        div().absolute().left_0().bottom_0().child(
+                            deferred(
+                                anchored()
+                                    .anchor(Corner::TopLeft)
+                                    .offset(point(px(0.), px(4.)))
+                                    .snap_to_window_with_margin(Edges::all(px(8.)))
+                                    .child(self.model_menu(builtin, &model, cx)),
+                            )
+                            .with_priority(1),
+                        ),
+                    )
+            })
+            .into_any_element()
+    }
+    fn model_menu(
+        &self,
+        builtin: Option<&'static crate::translate::Builtin>,
+        current: &str,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let palette = crate::theme::palette(cx);
+        let menu_bg = if crate::theme::is_light(cx) {
+            0xffffff
+        } else {
+            0x262d36
+        };
+        // (写入值, 显示名, 附注)；写入空串即使用内置默认模型。
+        let mut options: Vec<(String, String, Option<&'static str>)> = Vec::new();
+        if let Some(builtin) = builtin {
+            options.push((
+                String::new(),
+                builtin.model.into(),
+                Some(tr!("默认", "default")),
+            ));
+        }
+        if let ModelList::Ready(ids) = &self.translation_fields.models {
+            for id in ids {
+                if builtin.is_none_or(|builtin| builtin.model != id) {
+                    options.push((id.clone(), id.clone(), None));
+                }
+            }
+        }
+        if !current.is_empty() && !options.iter().any(|(value, ..)| value == current) {
+            options.push((
+                current.to_owned(),
+                current.to_owned(),
+                Some(tr!("不在列表中", "not listed")),
+            ));
+        }
+        let loading = self.translation_fields.models == ModelList::Loading;
+        div()
+            .id("settings-translation-model-menu")
+            .occlude()
+            .w(px(320.))
+            .max_h(px(280.))
+            .overflow_y_scroll()
+            .p_1()
+            .flex()
+            .flex_col()
+            .rounded_lg()
+            .border_1()
+            .border_color(rgb(palette.border))
+            .bg(rgb(menu_bg))
+            .shadow_lg()
+            .when(loading, |menu| {
+                menu.child(
+                    div()
+                        .px(px(10.))
+                        .py(px(6.))
+                        .text_size(px(12.))
+                        .text_color(rgb(palette.muted))
+                        .child(tr!("正在获取模型列表…", "Loading models…")),
+                )
+            })
+            .children(
+                options
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, (value, name, note))| {
+                        let selected = value == current;
+                        let probe = format!("settings-translation-model-option-{index}");
+                        div()
+                            .id(SharedString::from(probe.clone()))
+                            .relative()
+                            .flex_shrink_0()
+                            .min_h(px(32.))
+                            .px(px(10.))
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .rounded_md()
+                            .cursor_pointer()
+                            .text_size(px(13.))
+                            .hover(move |style| style.bg(rgb(palette.hover)))
+                            .child(div().size(px(14.)).flex_shrink_0().when(selected, |slot| {
+                                slot.child(
+                                    toolbar_icons::action(Icon::Confirm, palette.accent)
+                                        .size(px(14.)),
+                                )
+                            }))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(px(0.))
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .when(selected, |label| {
+                                        label
+                                            .text_color(rgb(palette.accent))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                    })
+                                    .child(name),
+                            )
+                            .when_some(note, |item, note| {
+                                item.child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .text_size(px(12.))
+                                        .text_color(rgb(palette.muted))
+                                        .child(note),
+                                )
+                            })
+                            .child(self.settings_probe(probe))
+                            .on_click(
+                                cx.listener(move |view, _, _, cx| {
+                                    view.pick_model(value.clone(), cx)
+                                }),
+                            )
+                    }),
+            )
+            .child(
+                div()
+                    .h(px(1.))
+                    .mx(px(6.))
+                    .my_1()
+                    .flex_shrink_0()
+                    .bg(rgb(palette.border)),
+            )
+            .child(
+                div()
+                    .id("settings-translation-model-manual")
+                    .relative()
+                    .flex_shrink_0()
+                    .min_h(px(32.))
+                    .px(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .rounded_md()
+                    .cursor_pointer()
+                    .text_size(px(13.))
+                    .text_color(rgb(palette.muted))
+                    .hover(move |style| style.bg(rgb(palette.hover)))
+                    .child(toolbar_icons::action(Icon::Edit, palette.muted).size(px(14.)))
+                    .child(tr!("手动输入模型名…", "Type a model name…"))
+                    .child(self.settings_probe("settings-translation-model-manual"))
+                    .on_click(cx.listener(|view, _, window, cx| view.type_model(window, cx))),
+            )
+    }
+    /// 模型下方一行：列表来源与数量、取不到的原因，以及重试／手动输入入口。
+    fn model_hint(
+        &self,
+        hint: gpui::Div,
+        link: impl Fn(&'static str, &'static str) -> gpui::Stateful<gpui::Div>,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        let palette = crate::theme::palette(cx);
+        let fields = &self.translation_fields;
+        let manual = || {
+            link(
+                "settings-translation-model-type",
+                tr!("手动输入", "Type it"),
+            )
+            .on_click(cx.listener(|view, _, window, cx| view.type_model(window, cx)))
+        };
+        let source = self.model_source(cx);
+        match (&fields.models, source) {
+            (_, Err(blocker)) => hint
+                .child(blocker)
+                .when(!fields.model_manual, |hint| hint.child(manual())),
+            (ModelList::Loading, Ok(_)) => hint.child(tr!("正在获取模型列表…", "Loading models…")),
+            (ModelList::Failed(error), Ok(_)) => hint
+                .child(div().text_color(rgb(palette.danger)).child(trf!(
+                    "获取模型列表失败：{}",
+                    "Could not load models: {}",
+                    error
+                )))
+                .child(
+                    link("settings-translation-model-retry", tr!("重试", "Retry")).on_click(
+                        cx.listener(|view, _, _, cx| {
+                            view.fetch_models(std::time::Duration::ZERO, cx);
+                            cx.notify();
+                        }),
+                    ),
+                )
+                .when(!fields.model_manual, |hint| hint.child("·").child(manual())),
+            (ModelList::Ready(ids), Ok((endpoint, _))) => hint
+                .child(trf!(
+                    "{} 提供 {} 个模型 ·",
+                    "From {}: {} models ·",
+                    host(&endpoint),
+                    ids.len()
+                ))
+                .child(
+                    link("settings-translation-model-refresh", tr!("刷新", "Refresh")).on_click(
+                        cx.listener(|view, _, _, cx| {
+                            view.fetch_models(std::time::Duration::ZERO, cx);
+                            cx.notify();
+                        }),
+                    ),
+                ),
+            (ModelList::Idle, Ok(_)) => hint,
+        }
     }
     fn target_row(&self, cx: &mut Context<Self>) -> gpui::Div {
         let palette = crate::theme::palette(cx);

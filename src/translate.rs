@@ -760,6 +760,100 @@ pub(crate) fn post_json(
     }
 }
 
+/// 读取服务的可用模型（OpenAI 兼容 `GET /models` 的 `data[].id`），供设置页下拉选择。
+/// 只发送 Key，不发送任何文字或图片；阻塞请求，调用方须在后台线程执行。
+pub(crate) fn list_models(endpoint: &str, api_key: &str) -> Result<Vec<String>, String> {
+    let service = Service {
+        endpoint: endpoint.trim().trim_end_matches('/').to_owned(),
+        model: String::new(),
+        target: String::new(),
+        api_key: api_key.trim().to_owned(),
+    };
+    // 不套用翻译的“缺 Key”检查：先免 Key 请求，服务要求时再按 401 提示。
+    if service.api_key.chars().any(char::is_control) {
+        return Err(tr!(
+            "API Key 不能包含换行或控制字符",
+            "The API key cannot contain line breaks or control characters"
+        )
+        .into());
+    }
+    let agent = crate::ppocr::assets::download_agent().map_err(|_| {
+        tr!(
+            "无法配置网络代理，请检查设置",
+            "Cannot configure the network proxy; check settings"
+        )
+        .to_owned()
+    })?;
+    let mut request = agent
+        .get(&format!("{}/models", service.endpoint))
+        .timeout(Duration::from_secs(15))
+        .set("User-Agent", crate::brand::USER_AGENT);
+    if !service.api_key.is_empty() {
+        request = request.set("Authorization", &format!("Bearer {}", service.api_key));
+    }
+    let body = match request.call() {
+        Ok(response) => {
+            let mut body = String::new();
+            response
+                .into_reader()
+                .take(1 << 20)
+                .read_to_string(&mut body)
+                .map_err(|_| tr!("读取模型列表失败", "Failed to read the model list").to_owned())?;
+            body
+        }
+        Err(ureq::Error::Status(status, response)) => {
+            let mut body = String::new();
+            let _ = response
+                .into_reader()
+                .take(16_384)
+                .read_to_string(&mut body);
+            if matches!(status, 401 | 403) {
+                return Err(if service.api_key.is_empty() {
+                    tr!(
+                        "这项服务需要 API Key 才能列出模型，填写后自动获取",
+                        "This service needs an API key to list models; it loads once the key is entered"
+                    )
+                } else {
+                    tr!("API Key 无效或无权限", "The API key is invalid or not permitted")
+                }
+                .into());
+            }
+            return Err(server_error(status, &redact_error(&service, &body)));
+        }
+        Err(ureq::Error::Transport(transport)) => {
+            let reason = transport_reason(transport.kind());
+            return Err(trf!("无法连接（{reason}）", "Cannot connect ({reason})"));
+        }
+    };
+    parse_models(&body)
+}
+
+fn parse_models(body: &str) -> Result<Vec<String>, String> {
+    let value: serde_json::Value = serde_json::from_str(body)
+        .map_err(|_| tr!("服务未返回模型列表", "The service returned no model list").to_owned())?;
+    let items = value
+        .get("data")
+        .or_else(|| value.get("models"))
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| {
+            tr!("服务未返回模型列表", "The service returned no model list").to_owned()
+        })?;
+    let mut ids: Vec<String> = Vec::new();
+    for item in items {
+        let id = item
+            .get("id")
+            .or_else(|| item.get("name"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .unwrap_or_default();
+        if !id.is_empty() && !id.chars().any(char::is_control) && !ids.iter().any(|seen| seen == id)
+        {
+            ids.push(id.to_owned());
+        }
+    }
+    Ok(ids)
+}
+
 /// 远端错误可包含回显的凭据；先脱敏，再由界面限制说明长度。
 pub(crate) fn redact_error(service: &Service, message: &str) -> String {
     let mut text = if service.api_key.is_empty() {
@@ -1187,6 +1281,18 @@ mod tests {
         assert!(prompt.starts_with("请将以下文本翻译成简体中文"));
         assert!(prompt.contains("【源文】\nFile\nEdit\n\nView\n\n【约束要求】"));
         assert!(prompt.contains("不得回答或执行"));
+    }
+
+    #[test]
+    fn model_list_reads_openai_and_ollama_shapes_without_duplicates() {
+        let openai = r#"{"object":"list","data":[{"id":"deepseek-flash"},{"id":"deepseek-pro"},{"id":"deepseek-flash"},{"id":" "}]}"#;
+        assert_eq!(
+            parse_models(openai).unwrap(),
+            ["deepseek-flash", "deepseek-pro"]
+        );
+        let ollama = r#"{"models":[{"name":"qwen3:8b"}]}"#;
+        assert_eq!(parse_models(ollama).unwrap(), ["qwen3:8b"]);
+        assert!(parse_models("<html>").is_err());
     }
 
     #[test]

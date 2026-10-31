@@ -1,0 +1,461 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>翻译服务配置</title>
+<style>
+/* 翻译页“服务配置”展开编辑的逐步调整稿。顶部切换“当前实现 / 调整稿”对照；配色沿用 settings_widgets::Surface 与 GPUI Palette。 */
+:root {
+  --page: #0f1317; --win: #171b21; --card: #20262e; --raised: #37404b; --line: #2f3741; --track: #191d23;
+  --nav-hover: #1f252c; --nav-sel: #27303a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --accent: #40ce9d; --accent-soft: rgba(64, 206, 157, .14); --on-accent: #0d1f18;
+  --danger: #f0817a; --danger-bg: rgba(240, 129, 122, .14);
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --page: #e4e9ee; --win: #f3f6f9; --card: #ffffff; --raised: #ffffff; --line: #e3e8ed; --track: #eef2f5;
+  --nav-hover: #e9eef2; --nav-sel: #e1e8ee; --fg: #374351; --muted: #667482; --border: #dce3e9;
+  --hover: #eaf0f3; --accent: #126d4e; --accent-soft: rgba(18, 109, 78, .09); --on-accent: #ffffff;
+  --danger: #c4413a; --danger-bg: rgba(196, 65, 58, .1); color-scheme: light; } }
+:root[data-theme="light"] {
+  --page: #e4e9ee; --win: #f3f6f9; --card: #ffffff; --raised: #ffffff; --line: #e3e8ed; --track: #eef2f5;
+  --nav-hover: #e9eef2; --nav-sel: #e1e8ee; --fg: #374351; --muted: #667482; --border: #dce3e9;
+  --hover: #eaf0f3; --accent: #126d4e; --accent-soft: rgba(18, 109, 78, .09); --on-accent: #ffffff;
+  --danger: #c4413a; --danger-bg: rgba(196, 65, 58, .1); color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--ui); padding: 18px 16px 40px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; text-align: left; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+h1 { font-size: 17px; font-weight: 600; margin: 0 auto 0 0; }
+.tog { display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); }
+.tog button { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--muted); }
+.tog button.on { background: var(--card); color: var(--fg); font-weight: 600; }
+.layout { display: grid; grid-template-columns: minmax(0, 672px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* 设置窗口（只画内容区；宽度按 860 窗口减侧栏 188） */
+.win { background: var(--win); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+.head { padding: 16px 32px 8px; font-size: 24px; font-weight: 600; }
+.scroll { padding: 4px 32px 24px; display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 640px) { .head, .scroll { padding-left: 16px; padding-right: 16px; } }
+.status { min-height: 36px; padding: 8px 32px; display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.status.hot { color: var(--accent); }
+.status.bad { color: var(--danger); }
+
+.section { display: flex; flex-direction: column; gap: 8px; }
+.shead { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; min-height: 28px; }
+.shead b { font-size: 13px; font-weight: 600; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; }
+.sep { height: 1px; background: var(--line); margin: 0 12px; }
+.row { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 8px 12px; border-radius: 6px; }
+.row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row .txt b { font-weight: 400; font-size: 14px; }
+.row .txt span { font-size: 12px; line-height: 18px; color: var(--muted); }
+.row.click { cursor: pointer; width: 100%; }
+.row.click:hover { background: var(--nav-hover); }
+.dd { height: 32px; width: 220px; padding: 0 8px 0 12px; display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--raised); font-size: 13px; }
+.dd span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd svg { width: 14px; height: 14px; color: var(--muted); }
+.note { padding: 0 4px; font-size: 12px; line-height: 18px; color: var(--muted); }
+.btn { height: 32px; padding: 0 14px; border-radius: 6px; font-size: 13px; border: 1px solid var(--line); background: var(--raised); flex-shrink: 0; }
+.btn:hover:not(:disabled) { background: var(--hover); }
+.btn.sm { height: 28px; font-size: 12px; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.pri:hover:not(:disabled) { opacity: .9; background: var(--accent); }
+.btn:disabled { opacity: .45; cursor: default; }
+.badge { height: 22px; padding: 0 8px; border-radius: 6px; background: var(--track); color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; white-space: nowrap; flex-shrink: 0; }
+.badge.warn { background: var(--danger-bg); color: var(--danger); }
+.chev { width: 16px; height: 16px; color: var(--muted); flex-shrink: 0; transition: transform .12s; }
+.uses { font-size: 12px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.link { font-size: 12px; color: var(--accent); }
+.link.danger { color: var(--danger); }
+.link:hover { opacity: .8; }
+
+/* ---------- 当前实现：标签、输入、说明逐行堆叠 ---------- */
+.cur .editor { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 14px; }
+.cur .editor .lbl { padding: 0 4px; font-size: 12px; }
+.cur .input { height: 36px; }
+.cur .actions { display: flex; align-items: center; gap: 8px; padding-top: 4px; }
+
+/* ---------- 调整稿 ---------- */
+.input { width: 100%; height: 32px; border: 1px solid var(--border); border-radius: 6px; background: var(--track); color: var(--fg);
+  padding: 0 10px; font: 13px var(--ui); }
+.input::placeholder { color: var(--muted); opacity: .8; }
+.input:focus { outline: none; border-color: var(--accent); }
+/* 展开项：行与编辑区同一块底色，和其它行区分开 */
+.new .item.open { background: var(--nav-sel); border-radius: 6px; }
+.new .item.open > .row.click:hover { background: transparent; }
+.new .item.open + .sep, .new .sep:has(+ .item.open) { visibility: hidden; }
+.new .editor { padding: 2px 12px 12px; display: grid; grid-template-columns: var(--lw, 72px) minmax(0, 1fr); gap: 10px 12px; align-items: center; }
+.new .editor .lbl { font-size: 13px; color: var(--muted); }
+.new .editor .hint { grid-column: 2; margin-top: -4px; font-size: 12px; line-height: 18px; color: var(--muted); }
+.new .editor .hint.bad { color: var(--danger); }
+.new .editor .full { grid-column: 1 / -1; }
+.new .editor .wide { grid-column: 2; }
+.secret { position: relative; }
+.secret .input { padding-right: 64px; letter-spacing: .5px; }
+.secret .tools { position: absolute; right: 4px; top: 4px; display: flex; gap: 2px; }
+.ib { width: 24px; height: 24px; border-radius: 4px; display: grid; place-items: center; color: var(--muted); }
+.ib:hover { background: var(--hover); color: var(--fg); }
+.ib svg { width: 15px; height: 15px; }
+/* 模型下拉 */
+.mwrap { position: relative; }
+.dd.wide-dd { width: 100%; background: var(--track); }
+.dd.wide-dd.open { border-color: var(--accent); }
+.dd em { font-style: normal; color: var(--muted); margin-left: 8px; font-size: 12px; }
+.dd em.ph { margin-left: 0; font-size: 13px; }
+.dd:disabled { opacity: .6; cursor: default; }
+.mmenu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 10; max-height: 260px; overflow-y: auto;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 4px; box-shadow: 0 12px 32px rgba(0,0,0,.4); }
+.mi { width: 100%; min-height: 32px; padding: 0 10px; border-radius: 6px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.mi:hover { background: var(--hover); }
+.mi .ck { width: 14px; height: 14px; flex-shrink: 0; color: var(--accent); display: grid; }
+.mi .ck svg { width: 14px; height: 14px; }
+.mi .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mi .s { color: var(--muted); font-size: 12px; }
+.mi.on .n { color: var(--accent); font-weight: 600; }
+.mi[data-manual] .n, .mi[data-manual] .ck { color: var(--muted); }
+.msep { height: 1px; background: var(--line); margin: 4px 6px; }
+.mstate { padding: 6px 10px; font-size: 12px; color: var(--muted); }
+.spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.mrow { display: flex; gap: 8px; }
+.hint .bad { color: var(--danger); }
+.hint .link { font-size: 12px; }
+.sim { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.check { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
+.sw { width: 36px; height: 20px; border-radius: 10px; background: var(--raised); border: 1px solid var(--border); position: relative; flex-shrink: 0; transition: background .12s; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: left .12s, background .12s; }
+.sw.on { background: var(--accent); border-color: var(--accent); }
+.sw.on::after { left: 18px; background: var(--on-accent); }
+.new .actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding-top: 10px; margin-top: 2px; border-top: 1px solid var(--line); }
+.new .actions .grow { flex: 1; }
+.new .actions .dirty { font-size: 12px; color: var(--muted); }
+@media (max-width: 560px) {
+  .new .editor { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .new .editor .hint, .new .editor .wide { grid-column: 1; margin-top: 0; }
+  .new .editor .lbl { margin-top: 6px; }
+  .row { flex-wrap: wrap; }
+}
+
+/* 设计说明 */
+.notes { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.notes h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.notes ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.notes li span { color: var(--muted); }
+.notes code { font: 12px Consolas, "Cascadia Mono", monospace; background: var(--track); padding: 1px 5px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>翻译 · 服务配置</h1>
+    <label class="sim"><input type="checkbox" id="failSim">模拟获取模型失败</label>
+    <div class="tog" id="modeTog"><button data-mode="cur">当前实现</button><button data-mode="new" class="on">调整稿</button></div>
+    <div class="tog" id="langTog"><button data-ui="zh" class="on">中文</button><button data-ui="en">English</button></div>
+  </div>
+  <div class="layout">
+    <div class="win">
+      <div class="head" id="head"></div>
+      <div class="scroll" id="scroll"></div>
+      <div class="status" id="status"></div>
+    </div>
+    <aside class="notes" id="notes"></aside>
+  </div>
+</div>
+
+<script>
+const ICON = {
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 6a9.6 9.6 0 0 1 1.4-.1c6 0 9.5 6.1 9.5 6.1a17 17 0 0 1-2.7 3.4M6.6 7.4A16.6 16.6 0 0 0 2.5 12S6 18.5 12 18.5a9 9 0 0 0 4.2-1"/><path d="M9.9 10a2.8 2.8 0 0 0 4 4"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>',
+};
+let ui = 'zh', mode = 'new';
+const t = (zh, en) => ui === 'zh' ? zh : en;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// 与 preferences 的 ServiceProfile 对应：builtin 有默认模型，只可改模型和 Key。
+const profiles = [
+  // fixed：模型写死、免 Key，没有可编辑项，行不展开。
+  { id: 'index', name: 'Index Translate (bilibili)', builtin: true, fixed: true, def: 'Index-Translate-35B-A3B', model: '', vision: false, needsKey: false, key: '' },
+  { id: 'deepseek', name: 'DeepSeek', builtin: true, def: 'deepseek-flash', model: '', vision: true, needsKey: true, key: 'sk-6c1f0e9b2d7a4f3e8a3f9', endpoint: 'https://api.deepseek.com/v1' },
+  { id: 'custom-1', name: '本机 Ollama', builtin: false, endpoint: 'http://127.0.0.1:11434/v1', model: 'qwen2.5vl:7b', vision: true, needsKey: false, key: '' },
+];
+// 模拟 GET {endpoint}/models 的返回；真实实现按 OpenAI 兼容接口取 data[].id。
+const REMOTE = {
+  'api.deepseek.com': ['deepseek-flash', 'deepseek-pro'],
+  '127.0.0.1:11434': ['qwen2.5vl:7b', 'qwen3:8b', 'gemma3:4b', 'llama3.2-vision:11b', 'deepseek-r1:7b'],
+};
+const uses = { translate: 'index', formula: 'deepseek' };
+const view = { editing: null, draft: null, reveal: false, status: '', tone: '', error: null,
+  models: { state: 'idle', list: [], msg: '', from: '' }, modelMenu: false, manual: false };
+let failSim = false, fetchSeq = 0;
+
+const model = p => p.model || p.def;
+const host = e => e.replace(/^https?:\/\//, '').split('/')[0];
+function openEditor(id) {
+  if (view.editing === id) { view.editing = null; view.draft = null; return; }
+  const p = profiles.find(p => p.id === id);
+  view.editing = id; view.reveal = false; view.error = null;
+  view.draft = p ? { name: p.name, endpoint: p.endpoint || '', model: p.model, key: p.key, vision: p.vision }
+    : { name: '', endpoint: '', model: '', key: '', vision: false };
+  view.models = { state: 'idle', list: [], msg: '', from: '' }; view.modelMenu = false;
+  // 已保存的模型不在默认列表里时先显示为手动值，列表回来后若包含它就自然选中。
+  view.manual = false;
+  fetchModels();
+}
+// 能取列表的前提：地址有效，且需要 Key 的服务已填 Key。
+function fetchBlocker() {
+  const d = view.draft, p = profiles.find(p => p.id === view.editing);
+  if (!/^https?:\/\/[^?#\s]+$/.test(d.endpoint.trim())) return t('先填写接口地址，再获取模型列表。', 'Enter the base URL to load models.');
+  if (p?.needsKey && !d.key.trim()) return t('填写 API Key 后可获取模型列表。', 'Enter the API key to load models.');
+  return '';
+}
+function fetchModels() {
+  if (!view.draft || fetchBlocker()) { view.models = { state: 'idle', list: [], msg: '', from: '' }; return; }
+  const seq = ++fetchSeq, from = host(view.draft.endpoint.trim());
+  view.models = { state: 'loading', list: view.models.list, msg: '', from };
+  setTimeout(() => {
+    if (seq !== fetchSeq || !view.draft) return;
+    const list = REMOTE[from];
+    view.models = failSim || !list
+      ? { state: 'error', list: [], from, msg: failSim ? t('401 API Key 无效', '401 invalid API key') : t('连接被拒绝', 'connection refused') }
+      : { state: 'ok', list, msg: '', from };
+    render();
+  }, 700);
+}
+openEditor('deepseek');
+function dirty() {
+  const d = view.draft, p = profiles.find(p => p.id === view.editing);
+  if (!d) return false;
+  if (!p) return Object.values(d).some(v => v && v !== false);
+  return d.model !== p.model || d.key !== p.key || (!p.builtin && (d.name !== p.name || d.endpoint !== p.endpoint || d.vision !== p.vision));
+}
+
+function rowHtml(p, open) {
+  const cap = p.vision ? t('文字、图像', 'Text, images') : t('文字', 'Text');
+  let desc = `${esc(model(p))} · ${cap}`;
+  if (!p.builtin) desc += ` · ${esc(host(p.endpoint))}`;
+  const [status, warn] = p.key ? [t('Key 已保存', 'Key saved'), false] : p.needsKey ? [t('缺 Key', 'Needs key'), true] : [t('免 Key', 'No key'), false];
+  const used = Object.entries(uses).filter(([, id]) => id === p.id).map(([f]) => f === 'translate' ? t('翻译', 'Translation') : t('公式', 'Formulas'));
+  const meta = `${used.length ? `<span class="uses">${t('用于', 'For ')}${used.join(t('、', ', '))}</span>` : ''}
+    <span class="badge${warn ? ' warn' : ''}">${status}</span>`;
+  // 固定服务没有可改的项：不可点、无箭头，用占位保持右侧对齐。
+  if (p.fixed && mode === 'new') return `<div class="row">
+    <div class="txt"><b>${esc(p.name)}</b><span>${desc} · ${t('内置，免配置', 'Built-in, no setup')}</span></div>${meta}<span class="chev"></span></div>`;
+  return `<button class="row click" data-edit="${p.id}" aria-expanded="${open}">
+    <div class="txt"><b>${esc(p.name)}</b><span>${desc}</span></div>
+    ${meta}
+    <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="${open ? 'transform:rotate(180deg)' : ''}"><path d="m6 9 6 6 6-6"/></svg>
+  </button>`;
+}
+
+function curEditor(p) {
+  const d = view.draft, builtin = p?.builtin;
+  const lbl = s => `<div class="lbl">${s}</div>`;
+  let h = '';
+  if (!builtin) h += lbl(t('名称', 'Name')) + `<input class="input" data-f="name" value="${esc(d.name)}" placeholder="${t('如 本机 Ollama', 'e.g. Local Ollama')}">`
+    + lbl(t('接口根地址', 'API base URL')) + `<input class="input" data-f="endpoint" value="${esc(d.endpoint)}" placeholder="https://example.com/v1">`
+    + `<div class="note">${t('OpenAI 兼容接口，通常以 /v1 结尾。', 'OpenAI-compatible API, usually ending in /v1.')}</div>`;
+  h += lbl(t('模型', 'Model')) + `<input class="input" data-f="model" value="${esc(d.model)}" placeholder="${t('模型名称', 'Model name')}">`;
+  if (builtin) h += `<div class="note">${t(`留空使用默认模型 ${p.def}。`, `Leave empty for the default model ${p.def}.`)}</div>`;
+  h += lbl(p?.needsKey ? 'API Key' : t('API Key（可选）', 'API key (optional)'))
+    + `<input class="input" type="password" data-f="key" value="${esc(d.key)}" placeholder="${t('填写 API Key（仅本机加密保存）', 'API key (encrypted locally)')}">`;
+  if (!builtin) h += `<label class="check"><span class="sw${d.vision ? ' on' : ''}" data-vision></span>${t('支持图像输入（可用于公式识别）', 'Accepts images (usable for formulas)')}</label>`;
+  h += `<div class="actions">${p && !builtin ? `<button class="link danger" data-del>${t('删除这项服务', 'Delete service')}</button>` : ''}<span style="flex:1"></span>
+    <button class="btn" data-cancel>${t('取消', 'Cancel')}</button><button class="btn pri" data-save>${t('保存', 'Save')}</button></div>`;
+  return `<div class="editor">${h}</div>`;
+}
+
+// 模型：默认是从服务拉到的列表里选；列表取不到或要填列表外的名字时，改为手动输入。
+function modelPicker(p) {
+  const d = view.draft, m = view.models, def = p?.def;
+  if (view.manual) return `<div class="mrow"><input class="input" id="f-model" data-f="model" value="${esc(d.model)}"
+      placeholder="${def ? esc(def) + t('（默认）', ' (default)') : t('模型名称', 'Model name')}">
+    ${m.state === 'ok' ? `<button class="btn sm" data-pickmode>${t('从列表选', 'Pick from list')}</button>` : ''}</div>`;
+  const shown = d.model || def;
+  const label = shown ? `${esc(shown)}${!d.model && def ? `<em>${t('默认', 'default')}</em>` : ''}`
+    : `<em class="ph">${m.state === 'loading' ? t('正在获取模型…', 'Loading models…') : t('选择模型', 'Choose a model')}</em>`;
+  const disabled = m.state !== 'ok' && !shown;
+  let menu = '';
+  if (view.modelMenu) {
+    const items = [];
+    if (def) items.push(['', def, t('默认', 'default')]);
+    m.list.filter(id => id !== def).forEach(id => items.push([id, id, '']));
+    if (d.model && d.model !== def && !m.list.includes(d.model)) items.push([d.model, d.model, t('不在列表中', 'not listed')]);
+    menu = `<div class="mmenu" role="listbox">
+      ${m.state === 'loading' ? `<div class="mstate">${t('正在获取模型…', 'Loading models…')}</div>` : ''}
+      ${items.map(([v, name, sub]) => { const on = v === d.model || (!v && !d.model);
+        return `<button class="mi${on ? ' on' : ''}" data-model="${esc(v)}"><span class="ck">${on ? ICON.check : ''}</span><span class="n">${esc(name)}</span>${sub ? `<span class="s">${sub}</span>` : ''}</button>`; }).join('')}
+      <div class="msep"></div>
+      <button class="mi" data-manual><span class="ck">${ICON.edit}</span><span class="n">${t('手动输入模型名…', 'Type a model name…')}</span></button>
+    </div>`;
+  }
+  return `<div class="mwrap"><button class="dd wide-dd${view.modelMenu ? ' open' : ''}" id="f-model" data-mmenu ${disabled ? 'disabled' : ''}>
+      <span>${label}</span>${m.state === 'loading' ? '<i class="spin"></i>' : ICON.chev}</button>${menu}</div>`;
+}
+function modelHint() {
+  const m = view.models, block = view.draft && fetchBlocker();
+  if (block) return block;
+  if (m.state === 'loading') return t(`正在从 ${m.from} 获取…`, `Loading from ${m.from}…`);
+  if (m.state === 'error') return `<span class="bad">${t('获取模型列表失败', 'Could not load models')}：${esc(m.msg)}</span>
+    <button class="link" data-refetch>${t('重试', 'Retry')}</button> · <button class="link" data-manual>${t('手动输入', 'Type it')}</button>`;
+  if (m.state === 'ok') return `${t(`${m.from} 提供 ${m.list.length} 个模型`, `${m.list.length} models from ${m.from}`)} · <button class="link" data-refetch>${t('刷新', 'Refresh')}</button>`;
+  return '';
+}
+
+function newEditor(p) {
+  const d = view.draft, builtin = p?.builtin, err = view.error;
+  const lbl = (s, f) => `<label class="lbl" for="f-${f}">${s}</label>`;
+  const hint = (f, s) => err?.field === f ? `<div class="hint bad">${err.msg}</div>` : s ? `<div class="hint">${s}</div>` : '';
+  let h = '';
+  if (!builtin) {
+    h += lbl(t('名称', 'Name'), 'name') + `<input class="input" id="f-name" data-f="name" value="${esc(d.name)}" placeholder="${esc(d.endpoint ? host(d.endpoint) : t('如 本机 Ollama', 'e.g. Local Ollama'))}">` + hint('name');
+    h += lbl(t('接口地址', 'Base URL'), 'endpoint') + `<input class="input" id="f-endpoint" data-f="endpoint" value="${esc(d.endpoint)}" placeholder="https://example.com/v1">`
+      + hint('endpoint', t('OpenAI 兼容接口，通常以 /v1 结尾。', 'OpenAI-compatible, usually ends in /v1.'));
+  }
+  h += lbl(t('模型', 'Model'), 'model') + modelPicker(p) + hint('model', modelHint());
+  const saved = p && p.key && d.key === p.key;
+  h += lbl('API Key', 'key') + `<div class="secret">
+      <input class="input" id="f-key" data-f="key" type="${view.reveal ? 'text' : 'password'}" value="${esc(d.key)}" autocomplete="off"
+        placeholder="${p?.needsKey ? t('必填', 'Required') : t('可选，本机服务通常不需要', 'Optional; local servers usually need none')}">
+      <span class="tools">${d.key ? `<button class="ib" data-reveal title="${view.reveal ? t('隐藏', 'Hide') : t('显示', 'Show')}">${view.reveal ? ICON.eyeOff : ICON.eye}</button>
+        <button class="ib" data-clear title="${t('清除', 'Clear')}">${ICON.x}</button>` : ''}</span></div>`
+    + hint('key', saved ? t('已加密保存，只有当前 Windows 用户可解密。', 'Encrypted; only this Windows user can decrypt it.') : '');
+  if (!builtin) h += `<span></span><label class="check wide" data-vision><span class="sw${d.vision ? ' on' : ''}"></span>${t('支持图像输入，可用于公式识别', 'Accepts images; usable for formulas')}</label>`;
+  const isDirty = dirty();
+  h += `<div class="actions">${p && !builtin ? `<button class="link danger" data-del>${t('删除服务', 'Delete')}</button>` : ''}<span class="grow"></span>
+    ${isDirty ? `<span class="dirty">${t('有未保存的修改', 'Unsaved changes')}</span>` : ''}
+    <button class="btn sm" data-cancel>${isDirty ? t('取消', 'Cancel') : t('收起', 'Close')}</button>
+    <button class="btn sm pri" data-save ${isDirty ? '' : 'disabled'}>${p ? t('保存', 'Save') : t('添加', 'Add')}</button></div>`;
+  return `<div class="editor" style="--lw:${ui === 'zh' ? 64 : 76}px">${h}</div>`;
+}
+
+function render() {
+  // 重绘会重建输入框：记下焦点和光标，绘完还原
+  const a = document.activeElement, af = a?.dataset?.f, pos = af && a.selectionStart;
+  draw();
+  if (af) { const el = document.querySelector(`[data-f="${af}"]`); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} } }
+}
+function draw() {
+  document.getElementById('head').textContent = t('翻译', 'Translation');
+  const editor = mode === 'new' ? newEditor : curEditor;
+  const items = profiles.map(p => {
+    const open = view.editing === p.id;
+    return `<div class="item${open ? ' open' : ''}">${rowHtml(p, open)}${open ? editor(p) : ''}</div>`;
+  });
+  if (view.editing === '') items.push(`<div class="item open"><div class="row"><div class="txt"><b>${t('新服务', 'New service')}</b><span>${t('OpenAI 兼容接口，如本机 Ollama、LM Studio 或其它在线服务。', 'Any OpenAI-compatible API, such as Ollama or LM Studio.')}</span></div></div>${editor(null)}</div>`);
+  const sel = id => esc(profiles.find(p => p.id === id)?.name ?? t('关闭', 'Off'));
+  document.getElementById('scroll').innerHTML = `
+    <div class="section">
+      <div class="shead"><b>${t('各功能使用', 'Features')}</b><button class="link">${t('恢复默认', 'Restore defaults')}</button></div>
+      <div class="card">
+        <div class="row"><div class="txt"><b>${t('文字翻译', 'Translation')}</b><span>Index-Translate-35B-A3B · ${t('只发送所选文字。', 'Sends only the selected text.')}</span></div><div class="dd"><span>${sel(uses.translate)}</span>${ICON.chev}</div></div>
+        <div class="sep"></div>
+        <div class="row"><div class="txt"><b>${t('公式识别', 'Formulas')}</b><span>deepseek-flash · ${t('只发送选区图片。', 'Sends only the selection image.')}</span></div><div class="dd"><span>${sel(uses.formula)}</span>${ICON.chev}</div></div>
+      </div>
+    </div>
+    <div class="section ${mode}">
+      <div class="shead"><b>${t('服务配置', 'Services')}</b><button class="btn sm" data-add>${t('添加服务', 'Add service')}</button></div>
+      <div class="card">${items.join('<div class="sep"></div>')}</div>
+    </div>
+    <div class="note">${t('翻译只发送所选文字；公式识别只发送选区图片；表格识别在本机。Key 仅当前 Windows 用户可解密。', 'Translation sends only the selected text; formulas send only the selection image; tables stay local. Keys are encrypted for this Windows user.')}</div>`;
+  const st = document.getElementById('status');
+  st.textContent = view.status || t('功能选用即时保存；服务展开后点“保存”。', 'Feature choices save instantly; services save with Save.');
+  st.className = 'status ' + view.tone;
+  renderNotes();
+}
+
+function save() {
+  const d = view.draft, p = profiles.find(p => p.id === view.editing);
+  view.error = null;
+  if (!p?.builtin) {
+    if (!/^https?:\/\/[^?#\s]+$/.test(d.endpoint.trim())) view.error = { field: 'endpoint', msg: t('请填写有效的 HTTP(S) 地址。', 'Enter a valid HTTP(S) URL.') };
+    else if (!d.model.trim()) view.error = { field: 'model', msg: t('请填写模型名称。', 'Enter the model name.') };
+  }
+  if (!view.error && (p ? p.needsKey : false) && !d.key.trim()) view.error = { field: 'key', msg: t('这项服务需要 API Key。', 'This service needs an API key.') };
+  if (view.error) { render(); document.getElementById('f-' + view.error.field)?.focus(); return; }
+  const name = d.name.trim() || host(d.endpoint);
+  if (p) Object.assign(p, { model: d.model.trim(), key: d.key.trim() }, p.builtin ? {} : { name, endpoint: d.endpoint.trim(), vision: d.vision });
+  else profiles.push({ id: 'custom-' + Date.now(), name, builtin: false, endpoint: d.endpoint.trim(), model: d.model.trim(), vision: d.vision, needsKey: false, key: d.key.trim() });
+  view.status = t(`已保存服务“${name || p.name}”。`, `Saved service “${name || p.name}”.`); view.tone = 'hot';
+  view.editing = null; view.draft = null; render();
+}
+
+document.addEventListener('click', ev => {
+  const el = ev.target.closest('[data-edit],[data-add],[data-cancel],[data-save],[data-reveal],[data-clear],[data-vision],[data-del],[data-mmenu],[data-model],[data-manual],[data-pickmode],[data-refetch]');
+  if (!el) { if (view.modelMenu) { view.modelMenu = false; render(); } return; }
+  ev.preventDefault();
+  view.status = ''; view.tone = '';
+  if (!el.hasAttribute('data-mmenu')) view.modelMenu = false;
+  if (el.hasAttribute('data-mmenu')) view.modelMenu = !view.modelMenu;
+  else if (el.dataset.model !== undefined) { view.draft.model = el.dataset.model; if (view.error?.field === 'model') view.error = null; }
+  else if (el.hasAttribute('data-manual')) { view.manual = true; render(); return document.getElementById('f-model')?.focus(); }
+  else if (el.hasAttribute('data-pickmode')) view.manual = false;
+  else if (el.hasAttribute('data-refetch')) fetchModels();
+  else if (el.dataset.edit !== undefined) openEditor(el.dataset.edit);
+  else if (el.hasAttribute('data-add')) openEditor('');
+  else if (el.hasAttribute('data-cancel')) { view.editing = null; view.draft = null; }
+  else if (el.hasAttribute('data-save')) return save();
+  else if (el.hasAttribute('data-reveal')) view.reveal = !view.reveal;
+  else if (el.hasAttribute('data-clear')) { view.draft.key = ''; render(); return document.getElementById('f-key')?.focus(); }
+  else if (el.hasAttribute('data-vision')) view.draft.vision = !view.draft.vision;
+  else if (el.hasAttribute('data-del')) { view.status = t('“本机 Ollama”未被功能选用，已删除。', 'Deleted “Local Ollama”.'); view.tone = 'hot';
+    profiles.splice(profiles.findIndex(p => p.id === view.editing), 1); view.editing = null; }
+  render();
+});
+document.addEventListener('input', ev => {
+  const f = ev.target.dataset.f; if (!f || !view.draft) return;
+  view.draft[f] = ev.target.value;
+  if (view.error?.field === f) view.error = null;
+  // 地址或 Key 改了，停顿后重新取模型列表
+  if (mode === 'new' && (f === 'endpoint' || f === 'key')) {
+    clearTimeout(view.refetch); fetchSeq++;
+    view.models = { state: 'idle', list: [], msg: '', from: '' };
+    view.refetch = setTimeout(() => { fetchModels(); render(); }, 600);
+  }
+  render();
+});
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && view.modelMenu) { view.modelMenu = false; render(); return; }
+  if (!ev.target.dataset?.f) return;
+  if (ev.key === 'Enter') save();
+  if (ev.key === 'Escape' && view.manual && view.models.state === 'ok') { view.manual = false; render(); return; }
+  if (ev.key === 'Escape') { view.editing = null; view.draft = null; render(); }
+});
+
+function renderNotes() {
+  document.getElementById('notes').innerHTML = `<h2>第 2 轮调整</h2><ol>
+    <li><b>Index 不再展开</b>：模型写死、免 Key，没有可改项；行不可点、无箭头，说明里标“内置，免配置”。</li>
+    <li><b>模型从服务拉取后选择</b>：展开即请求 <code>GET {接口}/models</code>，下拉列出返回的模型；内置服务的默认模型置顶标“默认”。</li>
+    <li><b>取不到列表时有路可走</b>：缺 Key／缺地址时提示先填；失败时字段下显示原因和“重试 · 手动输入”。下拉末项“手动输入模型名…”覆盖列表外的模型。</li>
+    <li>改地址或 Key 后停顿 0.6 秒自动重取；字段下显示来源和数量，可“刷新”。</li>
+  </ol><h2>第 1 轮调整</h2><ol>
+    <li><b>展开项成块</b>：标题行与编辑区共用一块选中底色，邻近分隔线隐藏。<span>当前编辑区漂在卡片上，分不清属于哪一行。</span></li>
+    <li><b>标签在左、输入在右</b>的两列表单，标签 13px 次要色。<span>当前 12px 标签与 14px 行标题同色，字段之间留白过大。</span></li>
+    <li><b>默认值进占位符</b>：内置服务模型框直接显示“deepseek-flash（默认）”，删去下方说明行。</li>
+    <li><b>已存的 Key 可见</b>：以掩码显示，右侧“显示／清除”；下方一行说明加密范围。<span>当前已保存 Key 时输入框看起来是空的。</span></li>
+    <li><b>保存按改动启用</b>：无改动时按钮为“收起 + 置灰保存”，有改动显示“有未保存的修改”；错误标在对应字段下。</li>
+    <li>输入框 32px 高、深底，与上方下拉同高；按钮 28px，与“添加服务”一致；Enter 保存，Esc 收起。</li>
+  </ol>`;
+}
+
+document.getElementById('failSim').addEventListener('change', ev => { failSim = ev.target.checked; fetchModels(); render(); });
+document.getElementById('modeTog').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  mode = b.dataset.mode; document.querySelectorAll('#modeTog button').forEach(x => x.classList.toggle('on', x === b)); render();
+});
+document.getElementById('langTog').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  ui = b.dataset.ui; document.querySelectorAll('#langTog button').forEach(x => x.classList.toggle('on', x === b));
+  profiles[2].name = t('本机 Ollama', 'Local Ollama'); render();
+});
+render();
+</script>
