@@ -7,10 +7,20 @@ use gpui::{
     div, fill, point, prelude::*, px, relative, rgb, rgba, size, App, Bounds, ClipboardItem,
     Context, Element, ElementId, ElementInputHandler, Entity, EntityInputHandler, EventEmitter,
     FocusHandle, Focusable, GlobalElementId, IntoElement, KeyDownEvent, LayoutId, MouseButton,
-    PaintQuad, Pixels, Point, Render, ShapedLine, SharedString, Style, TextRun, UTF16Selection,
-    UnderlineStyle, WeakEntity, Window,
+    PaintQuad, Pixels, Point, Render, ShapedLine, SharedString, Style, Task, TextRun,
+    UTF16Selection, UnderlineStyle, WeakEntity, Window,
 };
 use std::ops::Range;
+use std::time::Duration;
+
+/// 光标亮灭各半个周期；编辑、移动或重新聚焦时先常亮再重新计时。
+const CARET_BLINK: Duration = Duration::from_millis(530);
+struct CaretBlink {
+    /// 选区、正文长度和组合区；任一变化都视为一次输入动作。
+    key: (Range<usize>, usize, Option<Range<usize>>),
+    visible: bool,
+    _task: Task<()>,
+}
 
 pub(crate) enum TextFieldEvent {
     Changed,
@@ -203,6 +213,8 @@ pub(crate) struct TextField {
     secret: bool,
     /// 仅源码编辑器启用；其它字段继续使用原来的单行输入和绘制合同。
     multiline: Option<MultilineState>,
+    /// 仅在聚焦且窗口激活时存在；失焦即丢弃计时任务，不在后台空转。
+    blink: Option<CaretBlink>,
     _focus_subscriptions: Vec<gpui::Subscription>,
 }
 impl EventEmitter<TextFieldEvent> for TextField {}
@@ -236,6 +248,7 @@ impl TextField {
             bare: false,
             secret: false,
             multiline: None,
+            blink: None,
             _focus_subscriptions: Vec::new(),
         }
     }
@@ -444,6 +457,49 @@ impl TextField {
         self.replace(None, text, false, None, cx);
         window.focus(&self.focus_handle);
         self.watermark_focus_changed(true, cx);
+    }
+    fn caret_visible(&self) -> bool {
+        self.blink.as_ref().is_none_or(|blink| blink.visible)
+    }
+    fn sync_caret_blink(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let active =
+            self.enabled && window.is_window_active() && self.focus_handle.is_focused(window);
+        if !active {
+            self.blink = None;
+            return;
+        }
+        let key = (
+            self.selection.clone(),
+            self.content.len(),
+            self.marked.clone(),
+        );
+        if self.blink.as_ref().is_some_and(|blink| blink.key == key) {
+            return;
+        }
+        let task = cx.spawn_in(window, async move |view, cx| loop {
+            cx.background_executor().timer(CARET_BLINK).await;
+            let blinking = view.update_in(cx, |v, window, cx| {
+                let Some(blink) = v.blink.as_mut() else {
+                    return false;
+                };
+                if !(window.is_window_active() && v.focus_handle.is_focused(window)) {
+                    // 下一次绘制发现失焦后丢弃本任务。
+                    cx.notify();
+                    return false;
+                }
+                blink.visible = !blink.visible;
+                cx.notify();
+                true
+            });
+            if !matches!(blinking, Ok(true)) {
+                break;
+            }
+        });
+        self.blink = Some(CaretBlink {
+            key,
+            visible: true,
+            _task: task,
+        });
     }
     fn caret(&self) -> usize {
         if self.reversed {
@@ -959,9 +1015,11 @@ impl Focusable for TextField {
     }
 }
 impl Render for TextField {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = crate::theme::palette(cx);
         let compact = self.watermark.is_some();
+        self.sync_caret_blink(window, cx);
+        let focused = self.enabled && self.focus_handle.is_focused(window);
         div()
             .flex()
             .w_full()
@@ -973,7 +1031,7 @@ impl Render for TextField {
             .rounded_md()
             .bg(rgb(p.background))
             .border_1()
-            .border_color(rgb(p.border))
+            .border_color(rgb(if focused { p.accent } else { p.border }))
             .text_color(rgb(p.foreground))
             .text_size(px(if compact { 12. } else { 14. }))
             .line_height(px(if compact { 20. } else { 26. }))
@@ -1248,7 +1306,7 @@ impl FieldText {
                 ))
             })
             .collect();
-        let cursor = (focused && v.selection.is_empty()).then(|| {
+        let cursor = (focused && v.selection.is_empty() && v.caret_visible()).then(|| {
             fill(
                 Bounds::new(
                     bounds.origin + point(caret_x - scroll_x, caret_top - scroll_y),
@@ -1408,15 +1466,17 @@ impl Element for FieldText {
                 rgba(0x5796ff66),
             )
         });
-        let cursor = (v.selection.is_empty() && v.focus_handle.is_focused(window)).then(|| {
-            fill(
-                Bounds::new(
-                    point(origin.x + caret, bounds.top()),
-                    size(px(1.5), bounds.size.height),
-                ),
-                rgb(crate::theme::palette(cx).accent),
-            )
-        });
+        let cursor =
+            (v.selection.is_empty() && v.caret_visible() && v.focus_handle.is_focused(window))
+                .then(|| {
+                    fill(
+                        Bounds::new(
+                            point(origin.x + caret, bounds.top()),
+                            size(px(1.5), bounds.size.height),
+                        ),
+                        rgb(crate::theme::palette(cx).accent),
+                    )
+                });
         self.input.update(cx, |v, _| v.scroll_x = scroll);
         FieldPaint {
             single: Some(SingleFieldPaint {
