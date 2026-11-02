@@ -44,6 +44,10 @@ enum Gesture {
         start: Point,
         current: Point,
     },
+    /// 文字工具在空白处按下：单击为自动宽度，拖动时按横向距离设定换行宽度。
+    TextWidth {
+        start: Point,
+    },
     Object {
         id: ObjectId,
         before: Box<Annotation>,
@@ -304,6 +308,8 @@ pub struct Editor {
     group_scope: Vec<u64>,
     group_scope_generation: u64,
     pub text_draft: Option<TextDraft>,
+    /// 草稿宽度随正文变化（单击新建或原本就是自然宽度的文字）。
+    text_auto_width: bool,
     pub lasso_draft: Option<crate::crop_mask::Polygon>,
     gesture: Option<Gesture>,
     preview_revision: u64,
@@ -329,6 +335,7 @@ impl Editor {
             group_scope: Vec::new(),
             group_scope_generation: 0,
             text_draft: None,
+            text_auto_width: false,
             lasso_draft: None,
             gesture: None,
             preview_revision: 0,
@@ -1485,6 +1492,9 @@ impl Editor {
                 });
             } else if self.tool.text() {
                 self.begin_text(None, point);
+                if self.tool == Tool::Text && self.text_draft.is_some() {
+                    self.gesture = Some(Gesture::TextWidth { start: point });
+                }
             } else if self.tool == Tool::Serial {
                 let mut a = Annotation::new(self.tool, point, self.style);
                 a.text = (self
@@ -2082,6 +2092,29 @@ impl Editor {
             Some(Gesture::Marquee { current, .. }) => {
                 *current = point;
             }
+            Some(Gesture::TextWidth { start }) => {
+                let start = *start;
+                if let Some(d) = self.text_draft.as_mut().filter(|d| d.id.is_none()) {
+                    let a = &mut d.annotation;
+                    let dx = point.x - start.x;
+                    if dx.abs() >= 4. {
+                        // 拖出的横向距离即换行宽度；不足一个字宽时按一个字宽。
+                        let width = dx.abs().max(a.style.font_size);
+                        let left = start.x.min(point.x);
+                        a.points[0].x = left;
+                        a.points[1].x = left + width;
+                        self.text_auto_width = false;
+                    } else if !self.text_auto_width {
+                        a.points[0].x = start.x - a.style.text.padding();
+                        self.text_auto_width = true;
+                    }
+                    if self.text_auto_width {
+                        fit_text_width(a);
+                    }
+                    fit_text_bounds(a);
+                    self.preview_revision += 1;
+                }
+            }
             Some(Gesture::Erase { ids }) => {
                 for o in self.document.items() {
                     if o.in_group_scope(&scope)
@@ -2140,6 +2173,9 @@ impl Editor {
                 let center = crate::transform::center(base.local_bounds());
                 base.style = *preview_style;
                 if preview_style.font_size != before.style.font_size {
+                    if text_auto_width(before) {
+                        fit_text_width(&mut base);
+                    }
                     fit_text_bounds(&mut base);
                 }
                 base.preserve_rotation_frame(center);
@@ -2390,7 +2426,8 @@ impl Editor {
                     self.document.invalidate_crop_mask();
                 }
             }
-            None => {}
+            // 宽度已随拖动写进草稿；松手只结束手势，草稿继续接收输入。
+            Some(Gesture::TextWidth { .. }) | None => {}
         }
         self.repair_group_scope();
         true
@@ -3046,16 +3083,24 @@ impl Editor {
             return;
         }
         self.finish_text();
-        let mut a = id
-            .and_then(|id| self.document.get(id))
-            .cloned()
-            .unwrap_or_else(|| Annotation::new(self.tool, point, self.style));
-        if a.points.len() < 2 {
+        let existing = id.and_then(|id| self.document.get(id)).cloned();
+        let new_text = existing.is_none() && self.tool == Tool::Text;
+        let mut a = existing.unwrap_or_else(|| Annotation::new(self.tool, point, self.style));
+        if new_text {
+            // 单击处即光标：首行竖直居中于点击点，框只包住文字，随输入向右长。
+            a.points.push(point);
+            fit_text_width(&mut a);
+            fit_text_bounds(&mut a);
+            let b = a.local_bounds();
+            let padding = a.style.text.padding();
+            a.translate(point.x - padding - b.x, point.y - b.height / 2. - b.y);
+        } else if a.points.len() < 2 {
             a.points.push(Point {
                 x: point.x + 300.,
                 y: point.y + 60.,
             });
         }
+        self.text_auto_width = new_text || (a.tool == Tool::Text && text_auto_width(&a));
         self.text_draft = Some(TextDraft { id, annotation: a });
         self.preview_revision += 1;
     }
@@ -3100,6 +3145,9 @@ impl Editor {
     fn fit_text_height(&mut self) {
         if let Some(d) = &mut self.text_draft {
             let center = crate::transform::center(d.annotation.local_bounds());
+            if self.text_auto_width {
+                fit_text_width(&mut d.annotation);
+            }
             fit_text_bounds(&mut d.annotation);
             d.annotation.preserve_rotation_frame(center);
             self.preview_revision += 1;
@@ -3110,6 +3158,7 @@ impl Editor {
             return;
         }
         if let Some(draft) = self.text_draft.take() {
+            self.end_text_width_gesture();
             if draft.annotation.valid() {
                 if let Some(id) = draft.id {
                     self.document.replace(id, draft.annotation);
@@ -3131,7 +3180,15 @@ impl Editor {
             self.repair_group_scope();
         }
     }
+    /// 草稿结束时连同未松手的定宽手势一起结束，不能挡住后续对象操作。
+    fn end_text_width_gesture(&mut self) {
+        self.text_auto_width = false;
+        if matches!(self.gesture, Some(Gesture::TextWidth { .. })) {
+            self.gesture = None;
+        }
+    }
     pub fn cancel_text(&mut self) -> bool {
+        self.end_text_width_gesture();
         let had = self.text_draft.take().is_some();
         if had {
             self.preview_revision += 1;
@@ -3254,6 +3311,7 @@ impl Editor {
         self.style = style;
         self.update_selected_with_spotlight(
             |a| {
+                let auto_width = text_auto_width(a);
                 if before.color != style.color {
                     a.style.color = style.color;
                 }
@@ -3314,6 +3372,9 @@ impl Editor {
                     || before.text.italic != style.text.italic
                     || before.text.background != style.text.background
                 {
+                    if auto_width {
+                        fit_text_width(a);
+                    }
                     fit_text_bounds(a);
                 }
             },
@@ -3410,6 +3471,35 @@ fn copy_spotlight_layer_style(target: &mut Style, layer: Style) {
     target.color = layer.color;
     target.width = layer.width;
     target.opacity = layer.opacity;
+}
+/// 正文不换行时的宽度（含左右内边距）；排版失败时返回 None。
+fn natural_text_width(a: &Annotation) -> Option<f32> {
+    if a.tool != Tool::Text || a.points.len() < 2 {
+        return None;
+    }
+    let mut wide = a.clone();
+    let left = wide.points[0].x.min(wide.points[1].x);
+    wide.points[0].x = left;
+    wide.points[1].x = left + 1.0e6;
+    let layout = crate::text_layout::TextLayout::new(&wide).ok()?;
+    let content = layout.rows.iter().map(|r| r.width).fold(0., f32::max);
+    // 留 1px 余量，避免逻辑宽度与整行字形宽度的舍入差把最后一个字挤到下一行。
+    Some((content + 1.).ceil() + a.style.text.padding() * 2.)
+}
+/// 框宽等于自然宽度的文字按自动宽度编辑；拖出或调过宽度的文字保持固定宽度换行。
+pub(crate) fn text_auto_width(a: &Annotation) -> bool {
+    natural_text_width(a).is_some_and(|natural| (a.local_bounds().width - natural).abs() <= 2.)
+}
+fn fit_text_width(a: &mut Annotation) {
+    if let Some(width) = natural_text_width(a) {
+        // 左缘不动，只移动右侧那个点。
+        let (left, right) = if a.points[0].x <= a.points[1].x {
+            (0, 1)
+        } else {
+            (1, 0)
+        };
+        a.points[right].x = a.points[left].x + width;
+    }
 }
 fn fit_text_bounds(a: &mut Annotation) {
     if a.tool != Tool::Text || a.points.len() < 2 {
@@ -5225,8 +5315,10 @@ mod edit_behavior_tests {
         let original = e.selected_annotation().unwrap().clone();
         e.adjust_parameter(Parameter::Font, 8, 1, (40, 40), 4.);
         let resized = e.selected_annotation().unwrap();
-        assert_eq!(resized.bounds().width, original.bounds().width);
+        // 单击新建的文字是自动宽度：字号变大时宽高一起长，仍不换行。
+        assert!(resized.bounds().width > original.bounds().width);
         assert!(resized.bounds().height > original.bounds().height);
+        assert!(text_auto_width(resized));
         e.undo();
         assert_eq!(e.document.items()[0].annotation, original);
     }
@@ -5537,5 +5629,113 @@ mod edit_behavior_tests {
         assert_eq!(e.document.items()[0].annotation.segments(), fitted);
         e.redo();
         assert!(!e.document.items()[0].annotation.style.pencil_smooth);
+    }
+}
+
+#[cfg(test)]
+mod text_width_tests {
+    use super::*;
+
+    fn editor() -> Editor {
+        let mut e = Editor::new(Rect::full(800, 600), Some(Rect::full(800, 600)));
+        e.select_tool(Tool::Text);
+        e.style.font_size = 20.;
+        e
+    }
+    fn draft(e: &Editor) -> &Annotation {
+        &e.text_draft.as_ref().unwrap().annotation
+    }
+    fn rows(a: &Annotation) -> usize {
+        crate::text_layout::TextLayout::new(a).unwrap().rows.len()
+    }
+
+    #[test]
+    fn click_starts_auto_width_text_centered_on_the_click_and_growing_with_input() {
+        let mut e = editor();
+        e.pointer_down((200, 150), 4.);
+        e.pointer_up((200, 150));
+        let b = draft(&e).local_bounds();
+        assert!(b.width < 20., "空草稿只留光标宽度：{b:?}");
+        assert!(
+            (b.y + b.height / 2. - 150.).abs() <= 1.,
+            "首行竖直居中于点击点：{b:?}"
+        );
+        assert!((b.x - 200.).abs() <= 1.);
+        e.set_text("短".into());
+        let short = draft(&e).local_bounds().width;
+        e.set_text("一段不会自动换行的较长文字 with words".into());
+        let long = draft(&e).local_bounds();
+        assert!(
+            long.width > short && long.width < 600.,
+            "{short} -> {long:?}"
+        );
+        assert_eq!(rows(draft(&e)), 1);
+        assert_eq!(long.x, b.x, "向右长，左缘不动");
+        e.set_text("两行\n第二行更长一些".into());
+        assert_eq!(rows(draft(&e)), 2);
+        e.finish_text();
+        let id = e.selected.unwrap();
+        assert!(text_auto_width(e.document.get(id).unwrap()));
+    }
+
+    #[test]
+    fn drag_sets_wrap_width_and_long_text_wraps_inside_it() {
+        let mut e = editor();
+        e.pointer_down((100, 200), 4.);
+        e.pointer_move((260, 205));
+        e.pointer_up((260, 205));
+        let b = draft(&e).local_bounds();
+        assert_eq!((b.x, b.width), (100., 160.));
+        e.set_text("这一段文字明显比一百六十像素更宽，所以应该在框内换行".into());
+        let a = draft(&e);
+        assert_eq!(a.local_bounds().width, 160.);
+        assert!(rows(a) > 1);
+        assert!(!text_auto_width(a));
+    }
+
+    #[test]
+    fn short_back_and_forth_drag_stays_auto_width() {
+        let mut e = editor();
+        e.pointer_down((100, 200), 4.);
+        e.pointer_move((180, 200));
+        e.pointer_move((101, 200));
+        e.pointer_up((101, 200));
+        e.set_text("自动宽度".into());
+        assert!(text_auto_width(draft(&e)));
+        assert!(draft(&e).local_bounds().x >= 99.);
+    }
+
+    #[test]
+    fn existing_fixed_width_text_keeps_its_width_when_edited() {
+        let mut e = editor();
+        let mut a = Annotation::new(Tool::Text, Point { x: 50., y: 50. }, e.style);
+        a.points.push(Point { x: 350., y: 110. });
+        a.text = "旧文字".into();
+        let id = e.document.insert(a);
+        e.begin_text(Some(id), Point { x: 60., y: 60. });
+        e.set_text("旧文字加长".into());
+        assert_eq!(draft(&e).local_bounds().width, 300.);
+    }
+
+    #[test]
+    fn font_size_change_refits_auto_width_text() {
+        let mut e = editor();
+        e.pointer_down((100, 100), 4.);
+        e.pointer_up((100, 100));
+        e.set_text("字号".into());
+        e.finish_text();
+        let id = e.selected.unwrap();
+        let before = e.document.get(id).unwrap().local_bounds().width;
+        let mut style = e.style;
+        style.font_size = 40.;
+        e.set_style(style);
+        let a = e.document.get(id).unwrap();
+        assert!(
+            a.local_bounds().width > before * 1.5,
+            "{before} -> {:?}",
+            a.local_bounds()
+        );
+        assert!(text_auto_width(a));
+        assert_eq!(rows(a), 1);
     }
 }

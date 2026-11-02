@@ -1,6 +1,6 @@
 [package]
 name = "rustshot"
-version = "0.4.17"
+version = "0.4.18"
 edition = "2021"
 rust-version = "1.90"
 description = "Windows screenshot, annotation, pin, OCR and screen recording tool built with Rust + GPUI"
@@ -92,6 +92,10 @@ quircs = "=0.10.3"
 qrcode = { version = "=0.14.1", default-features = false }
 # 一维条码只启用读取和字符集支持，避免重复引入图片编解码及原生运行库。
 rxing = { version = "=0.9.3", default-features = false, features = ["decoders", "oned", "encoding_rs"] }
+
+[target.'cfg(windows)'.build-dependencies]
+# 复用 GPUI 已锁定的资源编译器，把托盘 ICO 嵌入各 EXE 供窗口和任务栏使用。
+embed-resource = "=3.0.11"
 
 [profile.release]
 opt-level = "s"

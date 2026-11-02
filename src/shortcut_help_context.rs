@@ -185,7 +185,8 @@ pub(crate) fn help_sections(capture: &str, pin: &str) -> Vec<HelpSection> {
                         row(&[tr!("Shift+滚轮", "Shift+Wheel")], tr!("精细缩放", "Fine zoom")),
                         row(&[tr!("Ctrl+滚轮", "Ctrl+Wheel")], tr!("调透明度", "Opacity")),
                         row(&[middle], tr!("恢复 100%", "Reset to 100%")),
-                        row(&[tr!("双击", "Double-click"), "Tab"], tr!("缩略", "Thumbnail")),
+                        row(&["Tab"], tr!("缩略", "Thumbnail")),
+                        row(&[tr!("双击", "Double-click")], tr!("关闭贴图", "Close pin")),
                         row(&[space], tr!("展开／收起绘制栏", "Open/close the drawing bar")),
                         row(&[right], tr!("菜单（列出全部操作）", "Menu with every action")),
                         row(

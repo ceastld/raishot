@@ -2,7 +2,7 @@
 
 动作只负责命令路由、下载与校验、启动独立 RaiShot。V1/V2 共用 `cea.rustshot` 原生 EXE 包；目标电脑不需要维护工具或额外的 .NET 桥接包。
 
-动作源名称为“**raishot**”。默认点击直接框选，右键提供“区域截图”“启动托盘”“检查程序文件”。支持参数 `region`、`tray`、`verify`，显式参数优先；`verify` 只下载和校验，不启动程序。线上当前为 RaiShot **0.4.16**，见[本版更新](release-notes/0.4.16.md)与[动作分享链接](https://getquicker.net/Sharedaction?code=8cb3e0ee-148d-4879-51f3-08df2d739eae)。
+动作源名称为“**raishot**”。默认点击直接框选，右键提供“区域截图”“启动托盘”“检查程序文件”。支持参数 `region`、`tray`、`verify`，显式参数优先；`verify` 只下载和校验，不启动程序。线上当前为 RaiShot **0.4.17**，见[本版更新](release-notes/0.4.17.md)与[动作分享链接](https://getquicker.net/Sharedaction?code=8cb3e0ee-148d-4879-51f3-08df2d739eae)。
 
 程序包、OCR 与表格模型的来源、下载量、缓存和下载保护见[下载说明](DOWNLOADS.md)。
 

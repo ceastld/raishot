@@ -5435,7 +5435,7 @@ impl Render for PinView {
                     }
                     if e.click_count == 2 {
                         if !v.post_drag_click.suppress_double_click() {
-                            v.perform(PinAction::Thumbnail, w, cx);
+                            v.perform(PinAction::Close, w, cx);
                         }
                     } else if !v.state.locked {
                         let kind = v

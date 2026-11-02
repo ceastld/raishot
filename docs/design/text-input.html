@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文字输入交互</title>
+<style>
+/* 布局：标题与方案切换 → 1000×640 冻结桌面舞台（按宽度缩放，可直接操作）→ 设计要点。配色沿用 GPUI Palette，舞台里的“桌面”两种主题下都保持深色。 */
+:root {
+  --bg: #1d222a; --fg: #d9e2e9; --muted: #8997a6; --border: #3d4651;
+  --hover: #303a45; --selected: #28473d; --accent: #40ce9d; --on-accent: #10231c;
+  --track: #262c35; --page: #0f1317; --card: #171c22; --sel: #6c9ffc;
+  --desk: #0c0e11; --desk-2: #15191e; --desk-3: #1a1f25; --desk-line: #2a3038; --desk-fg: #aab4bf; --desk-hi: #e6edf3;
+  --shadow: rgba(0,0,0,.45);
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --on-accent: #fff; --track: #eef2f5;
+  --page: #e8edf1; --card: #f4f7f9; --shadow: rgba(30,40,50,.18); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #fafcfe; --fg: #374351; --muted: #667482; --border: #dce3e9; --hover: #eaf0f3;
+  --selected: #dcefe7; --accent: #126d4e; --on-accent: #fff; --track: #eef2f5;
+  --page: #e8edf1; --card: #f4f7f9; --shadow: rgba(30,40,50,.18); color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.55 var(--ui); padding: 18px 16px 48px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+h1 { font-size: 18px; font-weight: 600; margin: 0; }
+h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 13px; }
+.tog { display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); }
+.tog button { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.tog button[aria-pressed="true"] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 2px var(--shadow); }
+.opts { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.opts label { display: inline-flex; align-items: center; gap: 6px; }
+.top .tog:first-of-type { margin-left: auto; }
+
+/* 舞台 */
+.stage-box { position: relative; width: 100%; aspect-ratio: 1000 / 640; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 30px var(--shadow); }
+.stage { position: absolute; left: 0; top: 0; width: 1000px; height: 640px; transform-origin: 0 0; background: var(--desk); user-select: none; overflow: hidden; font-family: var(--ui); }
+.desk-win { position: absolute; left: 70px; top: 46px; width: 640px; height: 420px; background: var(--desk-2); border: 1px solid var(--desk-line); border-radius: 8px; color: var(--desk-fg); }
+.desk-bar { height: 34px; border-bottom: 1px solid var(--desk-line); display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 13px; }
+.desk-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--desk-line); display: inline-block; }
+.desk-body { padding: 18px 22px; display: grid; grid-template-columns: 150px 1fr; gap: 18px; font-size: 13px; }
+.desk-nav div { padding: 6px 10px; border-radius: 6px; margin-bottom: 4px; }
+.desk-nav div:first-child { background: var(--desk-3); color: var(--desk-hi); }
+.desk-card { background: var(--desk-3); border: 1px solid var(--desk-line); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+.desk-card b { color: var(--desk-hi); font-weight: 600; display: block; margin-bottom: 6px; }
+.desk-btn { display: inline-block; margin-top: 8px; padding: 5px 14px; border-radius: 6px; background: #2f6fde; color: #fff; font-size: 12px; }
+.desk-side { position: absolute; left: 740px; top: 46px; width: 200px; height: 300px; background: var(--desk-2); border: 1px solid var(--desk-line); border-radius: 8px; padding: 14px; color: var(--desk-fg); font-size: 12.5px; }
+.desk-side div { height: 10px; border-radius: 5px; background: var(--desk-line); margin: 12px 0; }
+/* 选区：外部压暗 */
+.shade { position: absolute; inset: 0; pointer-events: none; box-shadow: 0 0 0 2000px rgba(0,0,0,.42); left: var(--sx); top: var(--sy); width: var(--sw); height: var(--sh); border: 1px solid #1498ff; }
+
+/* 属性栏（简化） */
+.bar { position: absolute; left: 50px; top: 576px; height: 40px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 10px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); box-shadow: 0 6px 18px var(--shadow); font-size: 12px; }
+.bar .tool { width: 32px; height: 30px; border-radius: 6px; display: grid; place-items: center; font-size: 13px; }
+.bar .tool[aria-pressed="true"] { background: var(--selected); color: var(--accent); }
+.bar .sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.sw { width: 18px; height: 18px; border-radius: 50%; margin: 0 2px; border: 1px solid rgba(255,255,255,.2); }
+.sw[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--fg); }
+.num { display: inline-flex; align-items: center; height: 28px; border-radius: 6px; background: var(--track); padding: 0 2px; }
+.num button { width: 22px; height: 24px; border-radius: 4px; }
+.num button:hover, .bar .tool:hover, .chip:hover { background: var(--hover); }
+.num span { min-width: 26px; text-align: center; font-variant-numeric: tabular-nums; }
+.chip { height: 28px; padding: 0 9px; border-radius: 6px; font-size: 12px; }
+.chip[aria-pressed="true"] { background: var(--selected); color: var(--accent); }
+
+/* 文字对象 */
+.txt { position: absolute; padding: 3px 5px; border: 1px dashed transparent; border-radius: 3px; white-space: pre; line-height: 1.32; outline: none; cursor: text; min-width: 2px; caret-color: var(--caret, #6c9ffc); paint-order: stroke fill; }
+.txt.fixed { white-space: pre-wrap; overflow-wrap: anywhere; }
+.txt.hover { border-color: rgba(108,159,252,.45); }
+.txt.sel { border: 1px solid var(--sel); }
+.txt.editing { border: 1px dashed rgba(108,159,252,.85); cursor: text; user-select: text; }
+.txt.editing:empty::before { content: attr(data-hint); color: rgba(230,237,243,.35); pointer-events: none; }
+.txt.old.editing { border: 1px solid var(--sel); }
+.txt.moving { cursor: move; }
+.handle { position: absolute; width: 8px; height: 20px; margin: -10px 0 0 -4px; border-radius: 3px; background: #fff; border: 1px solid var(--sel); cursor: ew-resize; z-index: 5; }
+.handle:hover { background: #dbe7ff; }
+.ghost { position: absolute; border: 1px dashed var(--sel); background: rgba(108,159,252,.08); pointer-events: none; }
+.status { position: absolute; right: 12px; top: 586px; max-width: 440px; font-size: 12px; color: #aab4bf; background: rgba(12,14,17,.8); border: 1px solid #2a3038; padding: 6px 10px; border-radius: 8px; line-height: 1.45; }
+.status kbd { font: 11px/1 "Cascadia Mono", Consolas, monospace; padding: 1px 4px; border-radius: 3px; background: #262c35; border: 1px solid #3d4651; color: #e6edf3; }
+
+/* 说明 */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.card h2 { font-size: 14px; margin: 0 0 8px; }
+.card ul { margin: 0; padding-left: 18px; color: var(--fg); }
+.card li { margin: 3px 0; }
+.card li b { font-weight: 600; }
+.card .muted { color: var(--muted); }
+@media (max-width: 640px) { .top .tog:first-of-type { margin-left: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>文字输入<small>点击即打字，框只包住文字</small></h1>
+    <div class="tog" role="group" aria-label="方案">
+      <button data-mode="new" aria-pressed="true">新方案</button>
+      <button data-mode="old" aria-pressed="false">现状（300×60 框）</button>
+    </div>
+    <button class="chip" id="reset" style="background:var(--hover)">清空</button>
+  </div>
+  <div class="opts" id="opts">
+    <span>试一试：</span>
+    <label><input type="radio" name="enter" value="commit" checked> Enter 完成 · Shift+Enter 换行</label>
+    <label><input type="radio" name="enter" value="newline"> Enter 换行 · Ctrl+Enter 完成</label>
+    <label><input type="checkbox" id="chain" checked> 编辑中点空白：提交并在该处继续写</label>
+  </div>
+
+  <div class="stage-box" id="box">
+    <div class="stage" id="stage">
+      <div class="desk-win">
+        <div class="desk-bar"><i></i><i></i><i></i><span style="margin-left:6px">项目设置</span></div>
+        <div class="desk-body">
+          <div class="desk-nav"><div>常规</div><div>成员</div><div>集成</div><div>账单</div></div>
+          <div>
+            <div class="desk-card"><b>部署分支</b>推送到 main 后自动构建并发布到预览环境。<br><span class="desk-btn">保存更改</span></div>
+            <div class="desk-card"><b>访问令牌</b>令牌只显示一次，请妥善保存。过期时间 90 天。</div>
+            <div class="desk-card"><b>危险操作</b>删除项目会同时删除全部部署记录。</div>
+          </div>
+        </div>
+      </div>
+      <div class="desk-side"><b style="color:#e6edf3">活动</b><div></div><div style="width:70%"></div><div></div><div style="width:55%"></div><div style="width:80%"></div></div>
+      <div class="shade" style="--sx:50px;--sy:30px;--sw:900px;--sh:530px"></div>
+      <div id="layer"></div>
+
+      <div class="bar" id="bar">
+        <button class="tool" data-tool="select" aria-pressed="false" title="选择 V">↖</button>
+        <button class="tool" data-tool="text" aria-pressed="true" title="文字 T">T</button>
+        <span class="sep"></span>
+        <span id="swatches"></span>
+        <span class="sep"></span>
+        <span class="num" title="字号（编辑中 Ctrl+滚轮）"><button id="sizeDown">−</button><span id="sizeVal">20</span><button id="sizeUp">+</button></span>
+        <button class="chip" id="bold" style="font-weight:700">B</button>
+        <button class="chip" id="outline">描边</button>
+        <button class="chip" id="fill">底色</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="card">
+      <h2>新方案的规则</h2>
+      <ul>
+        <li><b>单击</b>：光标出现在点击处（竖直居中于点击点），不再先画 300×60 的框；虚线框只包住文字，随输入向右长，不自动换行。</li>
+        <li><b>拖一下</b>：拖出的宽度就是换行宽度，高度随内容。</li>
+        <li><b>右边缘小柄</b>：拖动改为固定宽度并换行；双击小柄回到自动宽度。</li>
+        <li><b>单击已有文字</b>：直接把光标放到点击位置继续改；按住拖动则移动。选择工具下双击进入编辑。</li>
+        <li><b>Ctrl+滚轮</b>：编辑或选中时调字号，属性栏同步。</li>
+        <li>编辑态与完成态位置、内边距完全一致，提交时文字不跳动；空文字提交即删除。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>保留的合同</h2>
+      <ul>
+        <li>Enter／Ctrl+Enter 完成、Shift+Enter 换行（上方可切换对比“Enter 换行”）。</li>
+        <li>Esc 保留正文并结束；正文已空再按 Backspace 结束并移除。</li>
+        <li>输入法组字期间所有快捷键让行。</li>
+      </ul>
+      <h2 style="margin-top:12px">落地时的性能处理</h2>
+      <ul class="muted">
+        <li>每次按键现在会 <code>TextLayout::new</code> 重排并两次递增 <code>preview_revision</code>，使整层标注预览失效；改为只重排草稿本身，草稿单独绘制，不进入已提交标注的缓存。</li>
+        <li>自动宽度按单行测量即可，不再按 300 宽度做换行排版。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const stage = document.getElementById('stage'), box = document.getElementById('box'), layer = document.getElementById('layer');
+  const statusEl = document.getElementById('status');
+  const COLORS = ['#ff4b5c', '#ffd34d', '#40ce9d', '#5796ff', '#ffffff', '#161b22'];
+  const st = { mode: 'new', tool: 'text', enter: 'commit', chain: true,
+    style: { color: '#ff4b5c', size: 20, bold: false, outline: false, fill: false },
+    items: [], editing: null, selected: null, hover: null, seq: 1 };
+  let scale = 1;
+
+  function fit() { scale = box.clientWidth / 1000; stage.style.transform = `scale(${scale})`; }
+  new ResizeObserver(fit).observe(box); fit();
+  const toStage = e => { const r = stage.getBoundingClientRect(); return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale }; };
+
+  // —— 渲染 ——
+  function applyStyle(el, it) {
+    el.style.left = it.x + 'px'; el.style.top = it.y + 'px';
+    el.style.width = it.width ? it.width + 'px' : '';
+    el.style.minHeight = it.minHeight ? it.minHeight + 'px' : '';
+    el.classList.toggle('fixed', !!it.width);
+    el.style.fontSize = it.size + 'px';
+    el.style.fontWeight = it.bold ? 700 : 400;
+    el.style.color = it.color;
+    el.style.setProperty('--caret', it.color === '#161b22' ? '#6c9ffc' : it.color);
+    el.style.webkitTextStroke = it.outline ? `${Math.max(2, it.size / 7)}px ${it.color === '#ffffff' ? '#161b22' : '#ffffff'}` : '';
+    el.style.background = it.fill ? (it.color === '#ffffff' ? 'rgba(22,27,34,.85)' : 'rgba(255,255,255,.92)') : '';
+  }
+  function render() {
+    for (const it of st.items) {
+      if (!it.el) {
+        it.el = document.createElement('div');
+        it.el.className = 'txt'; it.el.dataset.id = it.id; it.el.dataset.hint = '输入文字';
+        it.el.textContent = it.text; layer.appendChild(it.el);
+      }
+      applyStyle(it.el, it);
+      it.el.classList.toggle('old', it.old);
+      it.el.classList.toggle('editing', st.editing === it);
+      it.el.classList.toggle('sel', st.selected === it && st.editing !== it);
+      it.el.classList.toggle('hover', st.hover === it && st.editing !== it && st.selected !== it);
+    }
+    renderHandle(); renderBar(); renderStatus();
+  }
+  let handle = null;
+  function renderHandle() {
+    const it = st.editing || st.selected;
+    if (!it || it.old) { handle?.remove(); handle = null; return; }
+    if (!handle) {
+      handle = document.createElement('div'); handle.className = 'handle'; handle.title = '拖动设宽度 · 双击回到自动宽度';
+      handle.addEventListener('pointerdown', startWidthDrag);
+      handle.addEventListener('dblclick', e => { const t = st.editing || st.selected; if (t) { t.width = null; render(); focusEnd(t, false); } e.stopPropagation(); });
+      layer.appendChild(handle);
+    }
+    requestAnimationFrame(() => {
+      if (!handle) return;
+      handle.style.left = (it.x + it.el.offsetWidth) + 'px';
+      handle.style.top = (it.y + it.el.offsetHeight / 2) + 'px';
+    });
+  }
+  function renderBar() {
+    const s = (st.editing || st.selected) || st.style;
+    document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === st.tool));
+    document.querySelectorAll('.sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === s.color));
+    document.getElementById('sizeVal').textContent = s.size;
+    for (const k of ['bold', 'outline', 'fill']) document.getElementById(k).setAttribute('aria-pressed', !!s[k]);
+  }
+  function renderStatus() {
+    const k = s => `<kbd>${s}</kbd>`;
+    const done = st.enter === 'commit' ? `${k('Enter')} 完成 · ${k('Shift+Enter')} 换行` : `${k('Ctrl+Enter')} 完成 · ${k('Enter')} 换行`;
+    let html;
+    if (st.editing) html = st.mode === 'old' ? `编辑中 · ${done} · ${k('Esc')} 结束`
+      : `编辑中 · ${done} · ${k('Esc')} 结束 · ${k('Ctrl+滚轮')} 字号 · 拖右边缘小柄设宽度`;
+    else if (st.tool === 'text') html = st.mode === 'old' ? '单击放置文字框（300×60）' : '单击直接打字 · 拖动设定换行宽度 · 单击已有文字继续改';
+    else html = st.selected ? `已选中 · 拖动移动 · 双击编辑 · ${k('Delete')} 删除 · ${k('Ctrl+滚轮')} 字号` : '单击选择文字 · 双击编辑';
+    statusEl.innerHTML = html;
+  }
+
+  // —— 编辑 ——
+  function startEdit(it, caretPoint) {
+    st.editing = it; st.selected = null;
+    it.el.contentEditable = 'plaintext-only';
+    render();
+    it.el.focus();
+    if (caretPoint) placeCaret(caretPoint); else focusEnd(it, true);
+  }
+  function focusEnd(it, collapse) {
+    if (st.editing !== it) return;
+    it.el.focus();
+    const r = document.createRange(); r.selectNodeContents(it.el); r.collapse(false);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+  }
+  function placeCaret({ clientX, clientY }) {
+    let r = null;
+    if (document.caretPositionFromPoint) { const p = document.caretPositionFromPoint(clientX, clientY); if (p) { r = document.createRange(); r.setStart(p.offsetNode, p.offset); } }
+    else if (document.caretRangeFromPoint) r = document.caretRangeFromPoint(clientX, clientY);
+    if (r) { r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+  }
+  function commit() {
+    const it = st.editing; if (!it) return;
+    it.text = it.el.innerText.replace(/\n$/, '');
+    it.el.contentEditable = 'false'; it.el.blur();
+    st.editing = null;
+    if (!it.text.trim()) { remove(it); }
+    else { it.minHeight = null; st.selected = st.mode === 'new' ? null : it; }
+    getSelection().removeAllRanges();
+    render();
+  }
+  function remove(it) { it.el?.remove(); st.items = st.items.filter(x => x !== it); if (st.selected === it) st.selected = null; if (st.hover === it) st.hover = null; }
+  function create(x, y, width) {
+    const s = st.style;
+    const lineH = s.size * 1.32 + 8; // 含上下内边距与边框
+    const it = { id: st.seq++, text: '', ...s, old: st.mode === 'old', width: null, minHeight: null, x, y };
+    if (it.old) { it.width = 300; it.minHeight = 60; }
+    else { it.x = x - 6; it.y = y - lineH / 2; it.width = width ? Math.max(40, width) : null; }
+    st.items.push(it); render(); startEdit(it);
+  }
+
+  // —— 指针 ——
+  let press = null;
+  stage.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('.bar') || e.target.closest('.handle')) return;
+    const p = toStage(e);
+    const hitEl = e.target.closest('.txt');
+    const hit = hitEl && st.items.find(i => String(i.id) === hitEl.dataset.id);
+    if (hit && hit === st.editing) return; // 交给原生光标与拖选
+    e.preventDefault();
+    press = { p, start: p, hit, e: { clientX: e.clientX, clientY: e.clientY }, moved: false, ghost: null, orig: hit && { x: hit.x, y: hit.y } };
+    stage.setPointerCapture(e.pointerId);
+  });
+  stage.addEventListener('pointermove', e => {
+    const p = toStage(e);
+    if (!press) {
+      const el = e.target.closest?.('.txt'); const h = el && st.items.find(i => String(i.id) === el.dataset.id) || null;
+      if (h !== st.hover) { st.hover = h; render(); }
+      stage.style.cursor = st.tool === 'text' ? 'text' : (h ? 'move' : 'default');
+      return;
+    }
+    const dx = p.x - press.start.x, dy = p.y - press.start.y;
+    if (!press.moved && Math.hypot(dx, dy) > 4) press.moved = true;
+    if (!press.moved) return;
+    if (press.hit && st.mode === 'new') {
+      if (st.editing && st.editing !== press.hit) commit();
+      press.hit.x = press.orig.x + dx; press.hit.y = press.orig.y + dy; st.selected = press.hit;
+      press.hit.el.classList.add('moving'); render();
+    } else if (!press.hit && st.tool === 'text' && st.mode === 'new') {
+      if (!press.ghost) { press.ghost = document.createElement('div'); press.ghost.className = 'ghost'; layer.appendChild(press.ghost); }
+      const h = st.style.size * 1.32 + 8, x = Math.min(press.start.x, p.x);
+      Object.assign(press.ghost.style, { left: x + 'px', top: (press.start.y - h / 2) + 'px', width: Math.abs(dx) + 'px', height: h + 'px' });
+    }
+  });
+  stage.addEventListener('pointerup', e => {
+    if (!press) return;
+    const pr = press; press = null;
+    pr.ghost?.remove(); pr.hit?.el.classList.remove('moving');
+    const p = toStage(e);
+    if (pr.hit) {
+      if (pr.moved) return;
+      if (st.tool === 'text' && st.mode === 'new') { if (st.editing) commit(); startEdit(pr.hit, pr.e); return; }
+      if (st.editing) commit();
+      st.selected = pr.hit; render(); return;
+    }
+    // 空白处
+    const wasEditing = !!st.editing;
+    if (wasEditing) commit();
+    if (st.tool !== 'text') { st.selected = null; render(); return; }
+    if (wasEditing && !st.chain) return;
+    if (pr.moved && st.mode === 'new') {
+      create(Math.min(pr.start.x, p.x) + 6, pr.start.y, Math.abs(p.x - pr.start.x));
+    } else create(pr.start.x, pr.start.y);
+  });
+  stage.addEventListener('dblclick', e => {
+    const el = e.target.closest('.txt'); const it = el && st.items.find(i => String(i.id) === el.dataset.id);
+    if (it && st.editing !== it) { startEdit(it, e); }
+  });
+
+  // 拖右边缘设宽度
+  function startWidthDrag(e) {
+    e.preventDefault(); e.stopPropagation();
+    const it = st.editing || st.selected; if (!it) return;
+    const sx = toStage(e).x, w0 = it.el.offsetWidth - 12;
+    const move = ev => { it.width = Math.max(40, w0 + toStage(ev).x - sx); render(); };
+    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); if (st.editing === it) it.el.focus(); };
+    addEventListener('pointermove', move); addEventListener('pointerup', up);
+  }
+
+  // —— 键盘 ——
+  document.addEventListener('keydown', e => {
+    const it = st.editing;
+    if (it) {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === 'Escape') { e.preventDefault(); commit(); return; }
+      if (e.key === 'Enter') {
+        const done = st.enter === 'commit' ? !e.shiftKey : e.ctrlKey;
+        if (done) { e.preventDefault(); commit(); }
+        else if (st.enter === 'newline' && e.ctrlKey) e.preventDefault();
+        return;
+      }
+      if ((e.key === 'Backspace' || e.key === 'Delete') && !it.el.innerText.replace(/\n/g, '')) { e.preventDefault(); commit(); return; }
+      requestAnimationFrame(renderHandle);
+      return;
+    }
+    if (e.target.closest?.('input')) return;
+    if (st.selected && (e.key === 'Delete' || e.key === 'Backspace')) { remove(st.selected); render(); return; }
+    if (st.selected && (e.key === 'F2' || e.key === 'Enter')) { e.preventDefault(); startEdit(st.selected); return; }
+    if (e.key === 't' || e.key === 'T') { st.tool = 'text'; render(); }
+    if (e.key === 'v' || e.key === 'V') { st.tool = 'select'; render(); }
+  });
+  layer.addEventListener('input', () => requestAnimationFrame(renderHandle));
+
+  // Ctrl+滚轮调字号
+  stage.addEventListener('wheel', e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    setStyle('size', Math.min(96, Math.max(10, ((st.editing || st.selected) || st.style).size + (e.deltaY < 0 ? 2 : -2))));
+  }, { passive: false });
+
+  // —— 属性栏 ——
+  function setStyle(k, v) {
+    st.style[k] = v;
+    const it = st.editing || st.selected;
+    if (it) it[k] = v;
+    render();
+    if (st.editing) st.editing.el.focus();
+  }
+  const sws = document.getElementById('swatches');
+  for (const c of COLORS) { const b = document.createElement('button'); b.className = 'sw'; b.dataset.c = c; b.style.background = c; b.title = c; sws.appendChild(b); }
+  document.getElementById('bar').addEventListener('pointerdown', e => e.preventDefault()); // 不夺走编辑焦点
+  document.getElementById('bar').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const cur = (st.editing || st.selected) || st.style;
+    if (b.dataset.tool) { if (st.editing) commit(); st.tool = b.dataset.tool; st.selected = null; render(); }
+    else if (b.dataset.c) setStyle('color', b.dataset.c);
+    else if (b.id === 'sizeUp') setStyle('size', Math.min(96, cur.size + 2));
+    else if (b.id === 'sizeDown') setStyle('size', Math.max(10, cur.size - 2));
+    else if (['bold', 'outline', 'fill'].includes(b.id)) setStyle(b.id, !cur[b.id]);
+  });
+
+  // —— 顶部切换 ——
+  document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+    if (st.editing) commit();
+    st.mode = b.dataset.mode;
+    document.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === b));
+    document.getElementById('opts').style.visibility = st.mode === 'new' ? 'visible' : 'hidden';
+    render();
+  }));
+  document.querySelectorAll('input[name="enter"]').forEach(r => r.addEventListener('change', () => { st.enter = r.value; render(); }));
+  document.getElementById('chain').addEventListener('change', e => { st.chain = e.target.checked; });
+  document.getElementById('reset').addEventListener('click', () => { st.editing = null; for (const it of [...st.items]) remove(it); render(); });
+
+  // 示例
+  const demo = { id: st.seq++, text: '这里改成 dev 分支', ...st.style, color: '#ff4b5c', size: 20, old: false, width: null, minHeight: null, x: 420, y: 150 };
+  st.items.push(demo);
+  render();
+})();
+</script>
+</body>
+</html>

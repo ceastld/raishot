@@ -57,6 +57,19 @@ git push origin vX.Y.Z
 
 标签触发 Release 工作流。它先确认标签版本、Cargo 产品版本一致，且 changelog 中存在对应条目，再并行执行 CI 验证与 Release 构建打包。两边通过后创建 Release 草稿，上传安装包、便携包及各自的校验文件，最后将草稿发布。
 
+## 同步发布 Quicker 动作
+
+GitHub Release 不会自动发布 Quicker 依赖或更新动作；需要另外完成以下步骤。动作源、维护脚本与分享链接见 [Quicker 集成](../quicker/README.md)。
+
+1. 下载本版 Release 的便携 ZIP，核对发布的 SHA256 及包内清单。复用其中三个 EXE 和运行库，以包名 `cea.rustshot`、同一三段版本重新打包，不在本机重新编译 Release。
+2. 使用 `quicker/Publish-Dependency.ps1 -PackageVersion <版本> -PreparedZip <Quicker包路径> -Upload -Public` 上传公开依赖，确认匿名完整回下载的大小与 SHA256 一致；结果未知时先查线上状态，不重复上传。
+3. 同步 `quicker/action/data.json` 与 `program.source.yaml` 的 `package_version`，补充 `quicker/release-notes/<版本>.md`，运行 `quicker/Test-Action.ps1` 与 `quicker/Test-ActionMetadata.ps1`。
+4. 确认本机 V1 与账号 V2 原动作的身份后，分别预检、写回并读回；保留图标、分享关系和用户设置。V2 账号写回后还需客户端同步拉取。
+5. 对 V1 原动作执行 `qkrpc action publish --id <本机动作ID> --preflight --changelog-file <本版说明>`，再用 `qkrpc action update` 的同一 ID 和说明更新原分享。核对公开页版本、更新说明与公开状态；页面介绍只保留功能、使用与升级信息。
+6. 使用原动作的 `verify` 参数检查新依赖确实可下载、完整校验并跳过程序启动。更新 [Quicker 当前版本](../quicker/README.md)；升级运行中的程序前，从旧版托盘正常退出。
+
+仅修改已有分享的更新说明时，可用 `quicker action get --id <V1本机动作ID>` 读取当前远端正文，再用 `quicker action update --id <同一ID> --changelog <说明>` 重存；这里使用本机动作 ID，分享页 ID 不能替代。该命令不读取本机未发布修改，不能用来发布新动作代码。
+
 ## 失败与重跑
 
 先查看失败步骤的日志，再重跑失败的任务。标签和源码相同的失败运行可以重跑；工作流会校验已有同名资产的大小与 SHA-256，一致时复用，不一致时停止。草稿缺少的资产可以补传；已公开版本缺少资产时停止，不能覆盖或补改已发布内容。上传中断留下的草稿只在材料完整且校验通过后发布。

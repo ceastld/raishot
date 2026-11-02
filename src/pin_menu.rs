@@ -582,7 +582,7 @@ impl PinMenu {
                 (tr!("拾取图像颜色", "Pick image color"), "", Color, false),
                 (
                     tr!("缩略收纳 / 展开", "Thumbnail / expand"),
-                    tr!("Tab / 双击", "Tab / dbl-click"),
+                    "Tab",
                     Thumbnail,
                     self.state.thumbnail,
                 ),
@@ -601,7 +601,7 @@ impl PinMenu {
                 ),
                 (
                     tr!("关闭贴图（可恢复）", "Close pin (restorable)"),
-                    "Esc / Ctrl+W",
+                    tr!("双击 / Esc", "Dbl-click / Esc"),
                     Close,
                     false,
                 ),

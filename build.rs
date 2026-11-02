@@ -1,6 +1,15 @@
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=assets/app.rc");
+    println!("cargo:rerun-if-changed=assets/app.ico");
     println!("cargo:rerun-if-env-changed=RUSTSHOT_EAGER_GPU_DLLS");
+    #[cfg(windows)]
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        // GPUI 从 EXE 的编号 1 图标资源设置窗口类；与托盘共用多尺寸 ICO。
+        embed_resource::compile_for_everything("assets/app.rc", embed_resource::NONE)
+            .manifest_required()
+            .expect("无法嵌入应用图标资源");
+    }
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
         && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
         && std::env::var("RUSTSHOT_EAGER_GPU_DLLS").as_deref() != Ok("1")

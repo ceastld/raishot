@@ -5,7 +5,7 @@
 | 场景 | 入口 |
 | --- | --- |
 | 交互与快捷键地图 | [操作地图](interaction-guide.html) |
-| 截图与标注 | [标注工具](annotation-tools.html)、[选区样式](selection-style-bar-v2.html)、[圆角参数](radius-knob.html) |
+| 截图与标注 | [标注工具](annotation-tools.html)、[选区样式](selection-style-bar-v2.html)、[圆角参数](radius-knob.html)、[文字输入](text-input.html) |
 | 长截图 | [采集工具栏](long-capture-toolbar.html)、[长图编辑器](long-editor-v2.html) |
 | OCR 与翻译 | [OCR 面板](ocr-panel.html)、[结果过滤](ocr-result-filter.html)、[图片翻译](image-translate.html)、[翻译设置](translation-settings.html) |
 | 图库与托盘 | [主窗口](main-window.html)、[图库工具](library-tools.html)、[托盘面板](tray-popup.html) |

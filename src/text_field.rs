@@ -4,11 +4,11 @@ use crate::watermark_input::{
     single_line, WatermarkFinishKey, WatermarkInputEvent, WatermarkInputState,
 };
 use gpui::{
-    div, fill, point, prelude::*, px, relative, rgb, rgba, size, App, Bounds, ClipboardItem,
-    Context, Element, ElementId, ElementInputHandler, Entity, EntityInputHandler, EventEmitter,
-    FocusHandle, Focusable, GlobalElementId, IntoElement, KeyDownEvent, LayoutId, MouseButton,
-    PaintQuad, Pixels, Point, Render, ShapedLine, SharedString, Style, Task, TextRun,
-    UTF16Selection, UnderlineStyle, WeakEntity, Window,
+    div, fill, point, prelude::*, px, rgb, rgba, size, App, Bounds, ClipboardItem, Context,
+    Element, ElementId, ElementInputHandler, Entity, EntityInputHandler, EventEmitter, FocusHandle,
+    Focusable, GlobalElementId, IntoElement, KeyDownEvent, LayoutId, MouseButton, PaintQuad,
+    Pixels, Point, Render, ShapedLine, SharedString, Style, Task, TextRun, UTF16Selection,
+    UnderlineStyle, WeakEntity, Window,
 };
 use std::ops::Range;
 use std::time::Duration;
@@ -1020,8 +1020,10 @@ impl Render for TextField {
         let compact = self.watermark.is_some();
         self.sync_caret_blink(window, cx);
         let focused = self.enabled && self.focus_handle.is_focused(window);
+        // 纵向 flex：正文层按交叉轴拉伸取得外框的最终宽度，不依赖百分比解析。
         div()
             .flex()
+            .flex_col()
             .w_full()
             .h(px(if compact { 24. } else { 36. }))
             .px_2()
@@ -1358,12 +1360,15 @@ impl Element for FieldText {
         cx: &mut App,
     ) -> (LayoutId, ()) {
         let mut style = Style::default();
-        style.size.width = relative(1.).into();
-        style.size.height = if self.input.read(cx).multiline.is_some() {
-            relative(1.).into()
+        // 宽度不写百分比：外框在纵向布局里被拉伸时宽度并不“确定”，100% 会解析成 0，
+        // 文字和光标都被内容遮罩裁掉。外框是纵向 flex，这里靠默认的交叉轴拉伸占满宽度。
+        style.min_size.width = px(0.).into();
+        if self.input.read(cx).multiline.is_some() {
+            style.flex_grow = 1.;
+            style.min_size.height = px(0.).into();
         } else {
-            window.line_height().into()
-        };
+            style.size.height = window.line_height().into();
+        }
         (window.request_layout(style, [], cx), ())
     }
     fn prepaint(
