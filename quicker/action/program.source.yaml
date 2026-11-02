@@ -6,7 +6,7 @@ variables:
     isLocked: true
   - key: package_version
     varType: text
-    default: '0.4.17'
+    default: '0.4.18'
     isLocked: true
   - key: launch_mode
     varType: text

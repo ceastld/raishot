@@ -4,7 +4,7 @@ Quicker 动作的程序包由 Quicker 依赖服务分发，不从 GitHub Release
 
 | 资源 | 下载时机与大小 | 实际来源 |
 | --- | --- | --- |
-| Windows 程序包 | 无托盘时启动或手动检查依赖，所需版本缓存缺失才下载；0.4.16 约 27.31 MB | Quicker 查询 `cea.rustshot` 的依赖版本，文件来自 `files.getquicker.net/_packages/cea.rustshot/…` |
+| Windows 程序包 | 无托盘时启动或手动检查依赖，所需版本缓存缺失才下载；0.4.18 约 29.66 MB | Quicker 查询 `cea.rustshot` 的依赖版本，文件来自 `files.getquicker.net/_packages/cea.rustshot/…` |
 | 默认 Tiny 文字识别 | 首次完整识别，合计约 7.30 MB；仅查找文字区域约 1.79 MB | `s3.bitiful.net/quicker-pkgs/rustshot/dependencies/…`，另有 PaddlePaddle 的 Hugging Face 官方模型源与 GitHub Raw 字典／许可备用 |
 | Small 文字识别 | 显式选择后下载；全新缓存约 32.15 MB，已有 Tiny 后新增约 31.11 MB | Bitiful 镜像及官方备用源 |
 | 表格结构模型 | 首次表格识别，额外约 7.77 MB；完整表格识别还需要所选档位的文字识别模型 | 当前只有 `www.modelscope.cn/models/RapidAI/RapidTable/resolve/v2.0.0/slanet-plus.onnx`，没有备用镜像 |
