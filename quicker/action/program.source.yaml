@@ -24,6 +24,9 @@ variables:
   - key: resident_handle
     varType: text
     default: '0'
+  - key: resident_pid
+    varType: text
+    default: '0'
 steps:
   - key: sys:assign
     note: '统一解析动作参数；显式参数优先于默认启动方式。'
@@ -47,6 +50,7 @@ steps:
           stopIfFail: false
         outputs:
           handle: resident_handle
+          pid: resident_pid
   - key: sys:simpleIf
     note: '仅未运行或手动校验时检查依赖；verify 始终检查所需版本。'
     inputs:
@@ -101,6 +105,12 @@ steps:
         inputs:
           condition: '$={launch_args} == "--region"'
         ifSteps:
+          - key: sys:evalexpression
+            note: '发消息前将本次输入的前台权限交给托盘；授权不可用时仍投递，由截图窗口核验焦点。'
+            inputs:
+              expression:
+                file: files/grant-foreground.value.txt
+              stopIfFail: false
           - key: sys:sendMessage
             inputs:
               operation: PostMessage

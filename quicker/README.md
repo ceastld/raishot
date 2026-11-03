@@ -22,7 +22,9 @@ Quicker 依赖发布从已有 Release 产物开始，使用 `Publish-Dependency.
 
 ## 动作流程
 
-动作先查找隐藏托盘：已运行时，`region` 直接 PostMessage，`tray` 直接结束，不访问依赖目录、不查询进程路径、不创建启动进程。未运行或手动 `verify` 时，才使用 V1/V2 共有的 `sys:dependencycheck` 下载并复用 `cea.rustshot` 缓存；未运行时启动 `raishot.exe`，完整清单及 SHA256 校验仅在 `verify` 时执行。动作没有 C# 步骤。默认直接框选，首次启动也会截图；可用 `launch_mode` 或显式 `tray` 参数改为仅启动托盘。
+动作先查找隐藏托盘：已运行时，`region` 先向该窗口所属 PID 授予前台权限，再 PostMessage；`tray` 直接结束，不访问依赖目录、不查询进程路径、不创建启动进程。未运行或手动 `verify` 时，才使用 V1/V2 共有的 `sys:dependencycheck` 下载并复用 `cea.rustshot` 缓存；未运行时启动 `raishot.exe`，完整清单及 SHA256 校验仅在 `verify` 时执行。动作没有 C# 编译步骤。默认直接框选，首次启动也会截图；可用 `launch_mode` 或显式 `tray` 参数改为仅启动托盘。
+
+窗口消息本身不会传递前台权限。授权表达式通过宿主已加载的 `Quicker.3rd` 公开互操作入口调用 `AllowSetForegroundWindow`，仅授权找到的托盘 PID，托盘再授权本次截图工作进程；不向所有进程授权，不模拟输入，不加载额外 DLL。宿主没有该入口或 Windows 拒绝授权时，继续原消息路径，由截图窗口核验实际焦点。此入口已在 V1 1.45.5 实测；V2 源声明同步，但其运行时授权能力仍需单独验证。
 
 RaiShot 使用同一个原生 EXE 包，动作只使用 V1/V2 共有内置步骤；目标电脑只需 Quicker 和包内文件，运行不需要 MCP、RPC 插件或额外 .NET 宿主。`raishot-gpui.exe --region` 保留为手动直接启动入口。动作复用现有托盘，与程序自身的单实例行为一致；升级程序需先正常退出旧托盘，再启动动作。
 

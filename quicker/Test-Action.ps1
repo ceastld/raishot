@@ -71,6 +71,9 @@ $taskResolveBody = Read-ActionExpression 'resolve-command.value.txt' @{
     '{quicker_in_param}' = 'input'
     '{launch_mode}' = 'defaultMode'
 }
+$taskForegroundBody = Read-ActionExpression 'grant-foreground.value.txt' @{
+    '{resident_pid}' = 'residentPid'
+}
 $taskClassName = 'RustShotActionTests_' + [guid]::NewGuid().ToString('N')
 $taskCode = @"
 using System;
@@ -86,6 +89,10 @@ $taskValidateBody
     public static string Resolve(string input, string defaultMode)
     {
 $taskResolveBody
+    }
+    public static bool GrantForeground(string residentPid)
+    {
+$taskForegroundBody
     }
     public static bool Condition(int index, string launchArgs, string residentHandle)
     {
@@ -125,8 +132,16 @@ $taskColdSteps = $taskSource.Data.steps[2].ifSteps
 Assert-Equal 'V1 启动 RaiShot' '$=Path.Combine({package_path}, "raishot.exe")' $taskColdSteps[1].inputs.input
 Assert-Equal 'V2 启动表达式与 V1 一致' 'True' ([string]$taskSource.ProgramYaml.Contains("      input: '" + $taskColdSteps[1].inputs.input + "'"))
 $taskLookup = $taskSource.Data.steps[1].ifSteps[0]
-Assert-Equal '常驻查询不读取进程路径' 'handle' ($taskLookup.outputs.PSObject.Properties.Name -join ',')
+Assert-Equal '常驻查询只读取句柄与所属 PID' 'handle,pid' ($taskLookup.outputs.PSObject.Properties.Name -join ',')
 Assert-Equal '动作不保存常驻路径变量' '0' ([string]@($taskSource.Data.variables | Where-Object key -eq resident_path).Count)
+$taskGrant = $taskSource.Data.steps[3].ifSteps[0].ifSteps[0]
+Assert-Equal '授权失败仍投递截图请求' 'False' ([string]$taskGrant.inputs.stopIfFail)
+Assert-Equal 'V1/V2 使用相同授权表达式' 'True' ([string]$taskSource.ProgramYaml.Contains('file: ' + $taskGrant.inputs.'expression.file'))
+foreach ($taskBadPid in @('', '0', '-1', '4294967295', '4294967296', 'invalid')) {
+    Assert-Equal "无效 PID 不授予前台权限：$taskBadPid" 'False' ([string]$taskExpressionType::GrantForeground($taskBadPid))
+}
+# 测试宿主不含 Quicker.3rd；缺少公开互操作入口应正常返回，不加载额外 DLL。
+Assert-Equal '缺少宿主授权入口时兼容回退' 'False' ([string]$taskExpressionType::GrantForeground('123'))
 $taskYamlConditions = @([regex]::Matches($taskSource.ProgramYaml, "(?m)^ +condition: '([^']*)'\r?$") | ForEach-Object { $_.Groups[1].Value })
 Assert-Equal 'V1/V2 分支条件一致' ($taskConditions -join "`n") ($taskYamlConditions -join "`n")
 
@@ -138,6 +153,9 @@ function Get-LaunchEffects([object[]]$Steps, [string]$LaunchArgs, [string]$Resid
             if ($taskExpressionType::Condition($taskIndex, $LaunchArgs, $ResidentHandle)) {
                 Get-LaunchEffects -Steps $taskStep.ifSteps -LaunchArgs $LaunchArgs -ResidentHandle $ResidentHandle
             }
+        } elseif ($taskStep.key -eq 'sys:evalexpression' -and
+            $taskStep.inputs.'expression.file' -eq 'files/grant-foreground.value.txt') {
+            'grant-foreground'
         } elseif ($taskStep.key -in @('sys:dependencycheck', 'sys:getWindowTitle', 'sys:run', 'sys:sendMessage')) {
             $taskStep.key
         } elseif ($taskStep.key -eq 'sys:assign' -and $taskStep.inputs.PSObject.Properties['input.file'] -and
@@ -149,7 +167,7 @@ function Get-LaunchEffects([object[]]$Steps, [string]$LaunchArgs, [string]$Resid
 foreach ($taskCase in @(
     @('无托盘区域截图下载依赖并启动', '--region', '', 'sys:getWindowTitle,sys:dependencycheck,sys:run'),
     @('无托盘启动托盘下载依赖并启动', '--tray', '0', 'sys:getWindowTitle,sys:dependencycheck,sys:run'),
-    @('常驻区域截图只查询窗口和发消息', '--region', '123', 'sys:getWindowTitle,sys:sendMessage'),
+    @('常驻区域截图先授权再发消息', '--region', '123', 'sys:getWindowTitle,grant-foreground,sys:sendMessage'),
     @('常驻托盘入口不碰依赖且不启动程序', '--tray', '123', 'sys:getWindowTitle'),
     @('无效句柄不拦截冷启动', '--region', '0', 'sys:getWindowTitle,sys:dependencycheck,sys:run'),
     @('null 句柄不拦截冷启动', '--region', $null, 'sys:getWindowTitle,sys:dependencycheck,sys:run'),

@@ -1,0 +1,10 @@
+$=uint pid;
+if (!UInt32.TryParse({resident_pid}, out pid) || pid == 0 || pid == UInt32.MaxValue) { return false; }
+// 使用宿主已加载的公开 Win32 入口，不加载插件或额外 DLL。
+// 不向所有进程授权；目标仅为刚才找到的隐藏托盘所属进程。
+var assembly = AppDomain.CurrentDomain.GetAssemblies()
+    .FirstOrDefault(a => a.GetName().Name == "Quicker.3rd");
+var native = assembly == null ? null : assembly.GetType("ManagedShell.Interop.NativeMethods", false);
+var method = native == null ? null : native.GetMethod("AllowSetForegroundWindow", new[] { typeof(uint) });
+if (method == null) { return false; }
+return (bool)method.Invoke(null, new object[] { pid });

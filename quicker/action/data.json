@@ -6,7 +6,8 @@
     { "key": "launch_args", "default": "" },
     { "key": "package_path", "default": "" },
     { "key": "exe_path", "default": "" },
-    { "key": "resident_handle", "default": "0" }
+    { "key": "resident_handle", "default": "0" },
+    { "key": "resident_pid", "default": "0" }
   ],
   "steps": [
     {
@@ -29,7 +30,7 @@
             "requireTitle": false,
             "stopIfFail": false
           },
-          "outputs": { "handle": "resident_handle" }
+          "outputs": { "handle": "resident_handle", "pid": "resident_pid" }
         }
       ]
     },
@@ -87,6 +88,11 @@
           "key": "sys:simpleIf",
           "inputs": { "condition": "$={launch_args} == \"--region\"" },
           "ifSteps": [
+            {
+              "key": "sys:evalexpression",
+              "note": "发消息前将本次输入的前台权限交给托盘；授权不可用时仍投递，由截图窗口核验焦点。",
+              "inputs": { "expression.file": "files/grant-foreground.value.txt", "stopIfFail": false }
+            },
             {
               "key": "sys:sendMessage",
               "inputs": { "operation": "PostMessage", "hWnd.var": "resident_handle", "wMsg": "32771", "wParam": "0", "lParam": "0", "stopIfFail": true }
